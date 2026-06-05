@@ -20,8 +20,9 @@ packaging
 edge-tts
 musicdl
 gradio_client
-pycryptodomex
 pygame
 python-vlc
 dashscope
 chardet
+pydantic-ai[openai,web-fetch,duckduckgo]
+playwright>=1.52.0

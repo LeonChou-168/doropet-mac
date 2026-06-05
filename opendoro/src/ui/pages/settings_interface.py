@@ -599,28 +599,6 @@ class AISettingsPage(QWidget):
 
         self.sliders["memory_max_count"] = mem_slider
 
-        card.addWidget(StrongBodyLabel("LLM 最大输出长度", self))
-        
-        h_layout = QHBoxLayout()
-        slider = Slider(Qt.Horizontal, self)
-        slider.setRange(1024, 32768)
-        slider.setValue(8192)
-        
-        val_label = CaptionLabel("8192 tokens", self)
-        val_label.setFixedWidth(80)
-        
-        slider.valueChanged.connect(lambda v: val_label.setText(f"{v} tokens"))
-        
-        h_layout.addWidget(slider)
-        h_layout.addWidget(val_label)
-        card.addLayout(h_layout)
-        
-        self.sliders["LLM 最大输出长度"] = slider
-        
-        hint = CaptionLabel("(值越大，AI可生成的内容越长。代码/页面生成建议≥16384)", self)
-        hint.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        card.addWidget(hint)
-        
         layout.addWidget(card)
         layout.addStretch()
 
@@ -698,7 +676,6 @@ class SettingsInterface(ScrollArea):
         self.ai_page.check_expression_response.stateChanged.connect(self.on_expression_response_changed)
         self.ai_page.check_enable_memory.stateChanged.connect(self.on_enable_memory_changed)
         self.ai_page.sliders["memory_max_count"].valueChanged.connect(self.on_memory_max_count_changed)
-        self.ai_page.sliders["LLM 最大输出长度"].valueChanged.connect(self.on_max_tokens_changed)
 
     def set_live2d_widget(self, widget):
         self.live2d_widget = widget
@@ -824,9 +801,6 @@ class SettingsInterface(ScrollArea):
     def on_expression_response_changed(self, checked):
         self.settings.setValue("enable_expression_response", checked)
 
-    def on_max_tokens_changed(self, value):
-        self.settings.setValue("llm_max_tokens", value)
-
     def on_enable_memory_changed(self, checked):
         self.settings.setValue("enable_memory", checked)
 
@@ -871,7 +845,6 @@ class SettingsInterface(ScrollArea):
         hide_pet_on_startup = self.settings.value("hide_pet_on_startup", False, type=bool)
         inject_time = self.settings.value("inject_time", False, type=bool)
         expression_response = self.settings.value("enable_expression_response", True, type=bool)
-        llm_max_tokens = self.settings.value("llm_max_tokens", 8192, type=int)
         show_pet_status = self.settings.value("show_pet_status", True, type=bool)
         system_monitor_enabled = self.settings.value("system_monitor_enabled", True, type=bool)
         cpu_threshold = self.settings.value("cpu_threshold", 70, type=int)
@@ -902,8 +875,6 @@ class SettingsInterface(ScrollArea):
         
         self.ai_page.check_inject_time.setChecked(inject_time)
         self.ai_page.check_expression_response.setChecked(expression_response)
-        self.ai_page.sliders["LLM 最大输出长度"].setValue(llm_max_tokens)
-
         enable_memory = self.settings.value("enable_memory", True, type=bool)
         memory_max_count = self.settings.value("memory_max_count", 10, type=int)
         self.ai_page.check_enable_memory.setChecked(enable_memory)

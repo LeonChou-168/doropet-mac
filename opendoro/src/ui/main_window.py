@@ -23,7 +23,6 @@ from .pages.update_interface import UpdateInterface
 from .pages.pet_status_interface import PetStatusInterface
 from .pages.live2d_config_interface import Live2DConfigInterface
 from .pages.memory_interface import MemoryInterface
-from .dorocity import DoroCityInterface, InventoryManager
 from .music import MusicInterface
 from .galgame import GalgameInterface
 from .pomodoro import PomodoroInterface
@@ -63,18 +62,15 @@ class MainWindow(FluentWindow):
         self.attr_manager = None
         
         self._orange_manager = OrangeManager(self)
-        self._inventory_manager = InventoryManager(self)
         
         self.pomodoro_interface = PomodoroInterface(self)
         self.pet_status_interface = PetStatusInterface(None, self.db, self, self.pomodoro_interface)
         self.music_interface = MusicInterface(self)
         self.galgame_interface = GalgameInterface(self.db, self)
         self.memory_interface = MemoryInterface(self.db, self)
-        self.doro_city_interface = DoroCityInterface(self._orange_manager, None, self)
 
         self.pomodoro_interface.set_orange_manager(self._orange_manager)
         self.pet_status_interface.set_orange_manager(self._orange_manager)
-        self.doro_city_interface.set_inventory_manager(self._inventory_manager)
         
         # 4. 初始化导航栏
         self.init_navigation()
@@ -95,7 +91,6 @@ class MainWindow(FluentWindow):
 
     def init_navigation(self):
         self.addSubInterface(self.pet_status_interface, FIF.HOME, "桌宠状态")
-        self.addSubInterface(self.doro_city_interface, FIF.TILES, "Doro都市")
         self.addSubInterface(self.chat_interface, FIF.CHAT, "AI 聊天")
         self.addSubInterface(self.music_interface, FIF.MUSIC, "音乐播放")
         self.addSubInterface(self.galgame_interface, FIF.GAME, "Galgame")
@@ -231,8 +226,6 @@ class MainWindow(FluentWindow):
                 self.live2d_widget.set_expression_safe("stars")
             except Exception:
                 pass
-        if hasattr(self, 'doro_city_interface'):
-            self.doro_city_interface.refresh_data()
 
     def toggle_theme(self):
         setThemeColor(THEME_COLOR)
@@ -271,9 +264,6 @@ class MainWindow(FluentWindow):
 
         if hasattr(self, 'pomodoro_interface'):
             self.pomodoro_interface.update_theme()
-
-        if hasattr(self, 'doro_city_interface'):
-            self.doro_city_interface.update_theme()
 
         if hasattr(self, 'skills_interface'):
             self.skills_interface.update_theme()
@@ -318,8 +308,6 @@ class MainWindow(FluentWindow):
         
         if hasattr(self, 'pet_status_interface') and self.attr_manager:
             self.pet_status_interface.set_attr_manager(self.attr_manager)
-            if hasattr(self, 'doro_city_interface'):
-                self.doro_city_interface.set_attr_manager(self.attr_manager)
         
         if hasattr(widget, '_startup_checker') and widget._startup_checker:
             widget._startup_checker.set_main_window(self)

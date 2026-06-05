@@ -41,28 +41,22 @@ def init_provider_framework():
 
 
 def init_agent_framework():
-    try:
-        from src.agent.tools import register_all_tools
-        from src.agent.skills.registry import SkillRegistry
-        from src.agent.skills.state import SkillEnabledState, SkillCategory
-        from src.agent.doropet_agent import AgentBridge
-        from src.agent.core.sandbox import SandboxManager
+    """初始化 pydantic-ai Agent 框架。
 
+    预加载 SkillManager 和 SkillEnabledState，确保技能在首次对话时可用。
+    pydantic-ai 的 Agent 实例在每次 LLMWorker 运行时按需创建。
+    """
+    try:
+        from src.agent.skills.state import SkillEnabledState
+        from src.core.skill_manager import SkillManager
+
+        # 加载技能启用状态
         state = SkillEnabledState.get_instance()
         state.load_from_settings()
 
-        bridge = AgentBridge.instance()
-        bridge.init_default_tools()
-        skill_registry = bridge.get_skill_registry()
-        count = skill_registry.discover_skills()
-        logger.info(f"[AgentFW] Initialized: {len(bridge.get_tool_registry().list_tool_names())} tools, {count} skills")
-
-        sandbox = SandboxManager.get_instance()
-        sandbox.update_config(
-            max_execution_time_sec=30.0,
-            max_output_bytes=1024 * 1024,
-        )
-        logger.info("[AgentFW] Sandbox configured")
+        # 预加载技能管理器（触发技能发现）
+        skill_manager = SkillManager()
+        logger.info(f"[AgentFW] pydantic-ai ready: {len(skill_manager.skills)} skills discovered")
     except ImportError as e:
         logger.warning(f"[AgentFW] Not available: {e}")
     except Exception as e:

@@ -1,12 +1,17 @@
+"""
+Agent Skills — 技能管理子模块。
+
+核心组件：
+- state.py: SkillEnabledState — 技能启停状态管理
+- loader.py: SecureSkillLoader, DeclarativeSkill, SkillType
+- validator.py: SkillValidator, SkillValidationResult
+
+注意：registry.py 已废弃，技能执行现在由 pydantic-ai 的工具系统直接处理。
+SkillManager (src/core/skill_manager.py) 是技能管理的主要入口。
+"""
+
 from src.agent.skills.loader import SecureSkillLoader, DeclarativeSkill, SkillType
 from src.agent.skills.validator import SkillValidator, SkillValidationResult
-from src.agent.skills.registry import (
-    SkillRegistry,
-    install_skill_tool_handler,
-    list_skills_tool_handler,
-    get_skill_content_tool_handler,
-    remove_skill_tool_handler,
-)
 
 __all__ = [
     "SecureSkillLoader",
@@ -14,9 +19,4 @@ __all__ = [
     "SkillType",
     "SkillValidator",
     "SkillValidationResult",
-    "SkillRegistry",
-    "install_skill_tool_handler",
-    "list_skills_tool_handler",
-    "get_skill_content_tool_handler",
-    "remove_skill_tool_handler",
 ]

@@ -209,38 +209,12 @@ class PetAttributesManager(QObject):
         if not stored:
             return
 
-        last_save_time = 0.0
-        for attr_data in stored.values():
-            if attr_data.get("last_save_time", 0.0) > last_save_time:
-                last_save_time = attr_data["last_save_time"]
-
-        if last_save_time > 0:
-            current_time = time.time()
-            offline_seconds = current_time - last_save_time
-            offline_minutes = offline_seconds / 60.0
-            
-            if offline_minutes > 1:
-                for attr_name in self.attributes:
-                    attr_data = stored.get(attr_name)
-                    stored_value = attr_data["value"] if attr_data else DEFAULT_VALUES[attr_name]
-                    decay = self._calculate_decay_rate(attr_name) * offline_minutes
-                    self.attributes[attr_name].value = max(
-                        self.attributes[attr_name].min_value, stored_value - decay
-                    )
+        for attr_name in self.attributes:
+            attr_data = stored.get(attr_name)
+            if attr_data:
+                self.attributes[attr_name].value = attr_data["value"]
             else:
-                for attr_name in self.attributes:
-                    attr_data = stored.get(attr_name)
-                    if attr_data:
-                        self.attributes[attr_name].value = attr_data["value"]
-                    else:
-                        self.attributes[attr_name].value = DEFAULT_VALUES[attr_name]
-        else:
-            for attr_name in self.attributes:
-                attr_data = stored.get(attr_name)
-                if attr_data:
-                    self.attributes[attr_name].value = attr_data["value"]
-                else:
-                    self.attributes[attr_name].value = DEFAULT_VALUES[attr_name]
+                self.attributes[attr_name].value = DEFAULT_VALUES[attr_name]
 
     def save_state(self):
         self._save_state()

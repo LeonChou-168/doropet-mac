@@ -1772,6 +1772,7 @@ class ChatInterface(QWidget):
         self.status_bubble = None
         self.streaming_content = ""
         self.streaming_buffer = "" # Buffer for streaming content
+        self._last_user_msg_id = None
         self.selected_images = []
         self.branching_parent_id = None
         self.live2d_widget = None
@@ -2238,15 +2239,7 @@ class ChatInterface(QWidget):
                 logger.warning(f"记忆保存失败：{e}")
 
     def on_model_changed(self, index):
-        if index < 0: return
-        data = self.model_combo.itemData(index)
-        if data:
-            # data: (api_key, base_url, model_name, is_thinking, is_visual, type)
-            # Save user preference
-            settings = QSettings("MyApp", "LLMClient")
-            # data[2] is model_name, data[1] is base_url
-            settings.setValue("last_model_name", data[2])
-            settings.setValue("last_base_url", data[1])
+        pass
 
     def init_tools_menu(self):
         self.tool_actions = {}
@@ -2254,7 +2247,9 @@ class ChatInterface(QWidget):
             "search": True,
             "image": True,
             "coding": True,
-            "file": True
+            "file": True,
+            "memory": True,
+            "browser": False,
         }
         
         settings = QSettings("DoroPet", "Settings")
@@ -2262,6 +2257,8 @@ class ChatInterface(QWidget):
         self.tool_states["image"] = settings.value("tool_image_enabled", True, type=bool)
         self.tool_states["coding"] = settings.value("tool_coding_enabled", True, type=bool)
         self.tool_states["file"] = settings.value("tool_file_enabled", True, type=bool)
+        self.tool_states["memory"] = settings.value("tool_memory_enabled", True, type=bool)
+        self.tool_states["browser"] = settings.value("tool_browser_enabled", False, type=bool)
         
         self.skill_states = {}
         skill_mgr = SkillManager()
@@ -2296,7 +2293,12 @@ class ChatInterface(QWidget):
         action_file.setChecked(self.tool_states["file"])
         action_file.triggered.connect(lambda checked: self.toggle_tool("file", checked))
         menu.addAction(action_file)
-        
+
+        action_browser = QAction("浏览器控制（实验功能）", self, checkable=True)
+        action_browser.setChecked(self.tool_states.get("browser", False))
+        action_browser.triggered.connect(lambda checked: self.toggle_tool("browser", checked))
+        menu.addAction(action_browser)
+
         skill_mgr = SkillManager()
         settings = QSettings("DoroPet", "Settings")
         
@@ -2346,6 +2348,7 @@ class ChatInterface(QWidget):
             if self.tool_states["image"]: tool_names.append("画图")
             if self.tool_states["coding"]: tool_names.append("代码")
             if self.tool_states["file"]: tool_names.append("文件")
+            if self.tool_states.get("browser", False): tool_names.append("浏览器")
             active_skills = [k for k, v in self.skill_states.items() if v]
             if active_skills:
                 tool_names.append(f"{len(active_skills)}个技能")
@@ -2363,19 +2366,13 @@ class ChatInterface(QWidget):
         current_data = self.model_combo.currentData()
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
-        
-        # Load settings for preference
-        settings = QSettings("MyApp", "LLMClient")
-        last_model = settings.value("last_model_name", "")
-        last_base_url = settings.value("last_base_url", "")
-        
+
         # 1. Load LLM Models
         models = self.db.get_models()
         # models: id, name, provider, api_key, base_url, model_name, is_active, is_visual, is_thinking
-        
+
         active_index = 0
         target_index = -1
-        pref_index = -1
         current_count = 0
 
         for i, m in enumerate(models):
@@ -2388,17 +2385,13 @@ class ChatInterface(QWidget):
             if len(m) > 8:
                 is_thinking = m[8]
                 
-            # Add "llm" type flag
-            data = (m[3], m[4], m[5], is_thinking, is_visual, "llm") # api_key, base_url, model_name, is_thinking, is_visual, type
+            # Add "llm" type flag + provider
+            data = (m[3], m[4], m[5], is_thinking, is_visual, "llm", m[2]) # api_key, base_url, model_name, is_thinking, is_visual, type, provider
             self.model_combo.addItem(m[1], userData=data)
             
             if m[6] == 1: # is_active
                 active_index = current_count
-            
-            # Check preference (match model name and base_url)
-            if last_model and last_base_url and m[5] == last_model and m[4] == last_base_url:
-                pref_index = current_count
-            
+
             # Compare basic fields for selection stability
             if current_data and len(current_data) >= 3 and data[:3] == current_data[:3]:
                 target_index = current_count
@@ -2418,10 +2411,6 @@ class ChatInterface(QWidget):
             # Only set active if no LLM was active (priority to LLM)
             if m[6] == 1 and active_index == 0:
                  active_index = current_count
-            
-            # Check preference
-            if last_model and last_base_url and m[5] == last_model and m[3] == last_base_url:
-                pref_index = current_count
 
             if current_data and len(current_data) >= 3 and data[:3] == current_data[:3]:
                 target_index = current_count
@@ -2430,19 +2419,12 @@ class ChatInterface(QWidget):
         
         if target_index != -1:
             self.model_combo.setCurrentIndex(target_index)
-        elif pref_index != -1:
-            self.model_combo.setCurrentIndex(pref_index)
         elif current_count > 0:
             self.model_combo.setCurrentIndex(active_index)
         else:
             # Fallback if no models in DB
             self.model_combo.addItem("Default (OpenAI)")
-            # settings already loaded above
-            api_key = settings.value("api_key", "")
-            base_url = settings.value("base_url", "https://api.openai.com/v1")
-            model = settings.value("model", "gpt-3.5-turbo")
-            # Default fallback data: thinking=0, visual=0, type="llm"
-            self.model_combo.setItemData(0, (api_key, base_url, model, 0, 0, "llm"))
+            self.model_combo.setItemData(0, ("", "", "gpt-3.5-turbo", 0, 0, "llm"))
             
         self.model_combo.blockSignals(False)
 
@@ -3094,13 +3076,41 @@ class ChatInterface(QWidget):
         self._stop_timer.stop()
         self.update_timer.stop()
         
-        if self.streaming_bubble:
+        current_content = (self.streaming_content or "").strip()
+
+        if current_content and self.streaming_bubble:
+            # 有部分正文 → 保存到 DB，让重新生成按钮能正常找到 msg_id
             try:
+                used_model = getattr(self.worker, 'model', None) if hasattr(self, 'worker') else None
+                msg_id = self.db.add_message(
+                    self.worker_session_id, "assistant", current_content,
+                    [], parent_id=None, model=used_model,
+                )
+                self.streaming_bubble.msg_id = msg_id
                 self.streaming_content += "\n\n*[已停止]*"
                 self.streaming_bubble.update_content(self.streaming_content)
+                self.load_chat_history()
+            except Exception as e:
+                logger.warning(f"[Stopped] Failed to save partial message: {e}")
+        else:
+            # 还没有任何正文（或气泡未创建）→ 撤回用户消息到输入框
+            try:
+                if self._last_user_msg_id is not None:
+                    self.db.delete_message(self._last_user_msg_id)
+                    self._last_user_msg_id = None
+                if self._last_user_input:
+                    self.input_text.setPlainText(self._last_user_input)
+                self.load_chat_history()
+            except Exception as e:
+                logger.warning(f"[Stopped] Failed to rollback: {e}")
+
+        if self.streaming_bubble:
+            try:
+                self.streaming_bubble.deleteLater()
             except RuntimeError:
                 pass
             self.streaming_bubble = None
+        self.streaming_content = ""
         
         if self.status_bubble:
             try:
@@ -3168,6 +3178,7 @@ class ChatInterface(QWidget):
         self.scroll_to_bottom()
 
         self._last_user_input = user_input
+        self._last_user_msg_id = msg_id
         self.trigger_llm_generation()
 
     def _on_files_added(self, file_paths: list):
@@ -3282,9 +3293,12 @@ class ChatInterface(QWidget):
         is_thinking = 0
         is_visual = 0
         model_type = "llm"
+        provider_id = ""
         
         if model_data:
-            if len(model_data) >= 6:
+            if len(model_data) >= 7:
+                api_key, base_url, model, is_thinking, is_visual, model_type, provider_id = model_data[:7]
+            elif len(model_data) >= 6:
                 api_key, base_url, model, is_thinking, is_visual, model_type = model_data[:6]
             elif len(model_data) >= 5:
                 api_key, base_url, model, is_thinking, is_visual = model_data[:5]
@@ -3293,11 +3307,8 @@ class ChatInterface(QWidget):
             else:
                 api_key, base_url, model = model_data[:3]
         else:
-            # Fallback to QSettings if combo is empty or failed
-            settings = QSettings("MyApp", "LLMClient")
-            api_key = settings.value("api_key", "")
-            base_url = settings.value("base_url", "https://api.openai.com/v1")
-            model = settings.value("model", "gpt-3.5-turbo")
+            # Fallback if combo is empty
+            api_key, base_url, model = "", "", ""
 
         is_ollama = "ollama" in base_url.lower() or "localhost:11434" in base_url
         
@@ -3529,7 +3540,7 @@ class ChatInterface(QWidget):
             if self.process_vision_fallback(history, model_data, parent_id):
                 return
         
-        self.start_llm_worker(history, model_data, parent_id)
+        self.start_llm_worker(history, model_data, parent_id, provider_id)
 
     def trigger_direct_image_generation(self, api_key, base_url, model):
         """Handle direct image generation without LLM worker"""
@@ -3805,7 +3816,7 @@ class ChatInterface(QWidget):
         # Proceed to main LLM
         self.start_llm_worker(self.vision_history, self.vision_main_model_data, self.vision_parent_id)
 
-    def start_llm_worker(self, history, model_data, parent_id):
+    def start_llm_worker(self, history, model_data, parent_id, provider_id=""):
         # Sanitize history (remove internal _file_path keys)
         clean_history = []
         for msg in history:
@@ -3829,14 +3840,10 @@ class ChatInterface(QWidget):
             else:
                 api_key, base_url, model = model_data[:3]
         else:
-            # Fallback (should be covered in trigger_llm_generation, but good for safety)
-            settings = QSettings("MyApp", "LLMClient")
-            api_key = settings.value("api_key", "")
-            base_url = settings.value("base_url", "https://api.openai.com/v1")
-            model = settings.value("model", "gpt-3.5-turbo")
+            api_key, base_url, model = "", "", ""
 
         self.memory_manager.set_model_config(api_key, base_url, model)
-
+        
         # Determine available expressions
         available_expressions = []
         
@@ -3858,7 +3865,7 @@ class ChatInterface(QWidget):
              if "expression" not in enabled_plugins:
                  enabled_plugins.append("expression")
 
-        self.worker = LLMWorker(api_key, base_url, clean_history, model, self.db, is_thinking=is_thinking, enabled_plugins=enabled_plugins, available_expressions=available_expressions)
+        self.worker = LLMWorker(api_key, base_url, clean_history, model, self.db, is_thinking=is_thinking, enabled_plugins=enabled_plugins, available_expressions=available_expressions, provider_id=provider_id)
         self.worker.chunk_received.connect(self.handle_llm_chunk)
         self.worker.thinking_chunk.connect(self.on_thinking_chunk)
         self.worker.finished.connect(self.handle_llm_response)

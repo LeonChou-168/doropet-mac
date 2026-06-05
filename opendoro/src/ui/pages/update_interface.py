@@ -533,10 +533,36 @@ class AboutWidget(CardWidget):
         
         info_layout.addWidget(StrongBodyLabel("DoroPet", self))
         info_layout.addWidget(BodyLabel(f"版本: v{__version__}", self))
-        info_layout.addWidget(BodyLabel("一款可爱的桌面宠物应用", self))
+        info_layout.addWidget(BodyLabel("开源桌面宠物，陪伴你的每一天", self))
         info_layout.addWidget(CaptionLabel("© 2026 DoroPet Team", self))
         
         layout.addWidget(info_widget)
+        
+        # 作者声明
+        disclaimer_widget = QWidget(self)
+        disclaimer_widget.setObjectName("aboutInfoWidget")
+        disclaimer_layout = QVBoxLayout(disclaimer_widget)
+        disclaimer_layout.setContentsMargins(12, 12, 12, 12)
+        disclaimer_layout.setSpacing(8)
+        
+        disclaimer_title = StrongBodyLabel("作者声明", self)
+        disclaimer_layout.addWidget(disclaimer_title)
+        
+        disclaimer_text = (
+            "本软件所有数据均存储在本地，不会上传至云端"
+            "（AI 功能会与 API 服务商交互，请注意保护个人隐私），"
+            "请放心使用。AI 功能可自由调用各类工具，"
+            "请勿使用本软件进行任何违法违规行为，否则后果自负。"
+        )
+        disclaimer_label = BodyLabel(disclaimer_text, self)
+        disclaimer_label.setWordWrap(True)
+        disclaimer_layout.addWidget(disclaimer_label)
+        
+        footer_text = BodyLabel("本软件完全开源免费，如有小笨蛋花钱购买，不如直接把钱给我！", self)
+        footer_text.setWordWrap(True)
+        disclaimer_layout.addWidget(footer_text)
+        
+        layout.addWidget(disclaimer_widget)
         
         link_layout = QHBoxLayout()
         link_layout.setSpacing(16)
@@ -545,9 +571,21 @@ class AboutWidget(CardWidget):
         gitee_btn.clicked.connect(self.open_gitee)
         link_layout.addWidget(gitee_btn)
         
+        github_btn = PushButton(FIF.GITHUB, "GitHub 仓库", self)
+        github_btn.clicked.connect(self.open_github)
+        link_layout.addWidget(github_btn)
+        
         official_btn = PushButton(FIF.LINK, "官方网站", self)
         official_btn.clicked.connect(self.open_official)
         link_layout.addWidget(official_btn)
+        
+        qq_btn = PushButton(FIF.PEOPLE, "QQ群", self)
+        qq_btn.clicked.connect(self.open_qq_group)
+        link_layout.addWidget(qq_btn)
+        
+        sponsor_btn = PushButton(FIF.HEART, "投喂欧润吉", self)
+        sponsor_btn.clicked.connect(self.open_sponsor)
+        link_layout.addWidget(sponsor_btn)
         
         link_layout.addStretch()
         layout.addLayout(link_layout)
@@ -557,10 +595,25 @@ class AboutWidget(CardWidget):
         from PyQt5.QtCore import QUrl
         QDesktopServices.openUrl(QUrl("https://gitee.com/waterfeet/DoroPet_V3"))
     
+    def open_github(self):
+        from PyQt5.QtGui import QDesktopServices
+        from PyQt5.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl("https://github.com/waterfeet/DoroPet_V3"))
+    
     def open_official(self):
         from PyQt5.QtGui import QDesktopServices
         from PyQt5.QtCore import QUrl
         QDesktopServices.openUrl(QUrl("https://www.waterfeetbot.top/"))
+    
+    def open_qq_group(self):
+        from PyQt5.QtGui import QDesktopServices
+        from PyQt5.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl("https://qm.qq.com/q/oOprHW3Rv4"))
+    
+    def open_sponsor(self):
+        from PyQt5.QtGui import QDesktopServices
+        from PyQt5.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl("https://www.ifdian.net/a/waterfeet"))
 
 class UpdateNotificationDialog(QWidget):
     update_now = pyqtSignal()
