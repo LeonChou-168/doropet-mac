@@ -205,6 +205,10 @@ def create_doro_agent(
     if capabilities is None:
         capabilities = list(ALL_CAPABILITIES)
 
+    # OpenAI 兼容 provider（如 DeepSeek）不支持原生 WebSearchTool
+    if provider_id == "openai-compatible":
+        capabilities = [c for c in capabilities if c != CAPABILITY_WEB_SEARCH]
+
     # 创建工具集
     toolsets = []
 
@@ -269,10 +273,9 @@ def _build_capabilities(capability_names: list[str]) -> list:
         try:
             if name == CAPABILITY_WEB_SEARCH:
                 from pydantic_ai.capabilities import WebSearch
-                # native=False: OpenAI Chat API 不支持原生搜索工具，
-                # 使用本地 DuckDuckGo fallback
-                instances.append(WebSearch(native=False))
-                logger.info(f"[PydanticAgent] Capability added: WebSearch (local fallback)")
+                # 优先原生搜索，不支持则不启用（无 DuckDuckGo 回退）
+                instances.append(WebSearch(local=False))
+                logger.info(f"[PydanticAgent] Capability added: WebSearch (native, no local fallback)")
 
             elif name == CAPABILITY_WEB_FETCH:
                 from pydantic_ai.capabilities import WebFetch
