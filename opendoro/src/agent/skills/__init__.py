@@ -6,7 +6,6 @@ Agent Skills — 技能管理子模块。
 - loader.py: SecureSkillLoader, DeclarativeSkill, SkillType
 - validator.py: SkillValidator, SkillValidationResult
 
-注意：registry.py 已废弃，技能执行现在由 pydantic-ai 的工具系统直接处理。
 SkillManager (src/core/skill_manager.py) 是技能管理的主要入口。
 """
 

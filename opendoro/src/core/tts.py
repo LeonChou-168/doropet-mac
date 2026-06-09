@@ -1,5 +1,7 @@
 import os
 import hashlib
+import re
+import emoji
 import requests
 import json
 import shutil
@@ -28,15 +30,7 @@ except ImportError:
     genai = None
     types = None
 
-def get_user_data_dir():
-    """
-    Get user data directory for DoroPet.
-    On Windows, this is %LOCALAPPDATA%\\DoroPet
-    """
-    local_app_data = os.environ.get('LOCALAPPDATA')
-    if local_app_data:
-        return os.path.join(local_app_data, 'DoroPet')
-    return os.getcwd()
+from src.core.database import get_user_data_dir
 
 class EdgeTTSWorker(QThread):
     finished = pyqtSignal(str)
@@ -413,6 +407,32 @@ class GeminiTTSWorker(QThread):
             self.error.emit(str(e))
 
 
+def _clean_markdown_for_tts(text: str) -> str:
+    """清理 Markdown 格式和 Emoji，生成适合 TTS 朗读的纯文本。"""
+    if not text:
+        return ""
+    t = text
+    t = emoji.replace_emoji(t, '')
+    t = re.sub(r'<thinking>.*?</thinking>', '', t, flags=re.DOTALL)
+    t = re.sub(r'!\[.*?\]\([^)]*\)', '', t)
+    t = re.sub(r'<[^>]+>', ' ', t)
+    t = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', t)
+    t = re.sub(r'```[^`]*```', '', t, flags=re.DOTALL)
+    t = re.sub(r'`([^`]+)`', r'\1', t)
+    t = re.sub(r'^[-*_]{3,}\s*$', '', t, flags=re.MULTILINE)
+    t = re.sub(r'\*\*([^*]+)\*\*', r'\1', t)
+    t = re.sub(r'__([^_]+)__', r'\1', t)
+    t = re.sub(r'\*([^*]+)\*', r'\1', t)
+    t = re.sub(r'_([^_]+)_', r'\1', t)
+    t = re.sub(r'^#{1,6}\s+', '', t, flags=re.MULTILINE)
+    t = re.sub(r'^[\s]*[-*+]\s+', '', t, flags=re.MULTILINE)
+    t = re.sub(r'^[\s]*\d+\.\s+', '', t, flags=re.MULTILINE)
+    t = re.sub(r'\|[^\n]*\|', '', t)
+    t = re.sub(r'\n{3,}', '\n\n', t)
+    t = re.sub(r'^>\s?', '', t, flags=re.MULTILINE)
+    return t.strip()
+
+
 class TTSManager(QObject):
     playback_started = pyqtSignal(int)
     playback_stopped = pyqtSignal(int)
@@ -452,6 +472,10 @@ class TTSManager(QObject):
             self._max_retries = 3
         
     def speak(self, msg_id, text, force_restart=False):
+        text = _clean_markdown_for_tts(text)
+        if not text:
+            return
+
         if self._use_pygame and pygame.mixer.music.get_busy():
             pygame.mixer.music.stop()
             self._pygame_playing = False

@@ -16,6 +16,7 @@ from PyQt5.QtCore import QTimer
 
 from src.core.skill_manager import SkillManager, SkillType
 from src.core.logger import logger
+from src.core.i18n import I18nManager, tr
 
 
 
@@ -113,7 +114,7 @@ class SkillCardWidget(CardWidget):
 
         layout.addLayout(header)
 
-        desc = self.skill_info.get("description", "无描述")
+        desc = self.skill_info.get("description", tr("skills.no_description", default="无描述"))
         if len(desc) > 66:
             desc = desc[:63] + "..."
         theme_colors = self._get_theme_colors()
@@ -126,7 +127,7 @@ class SkillCardWidget(CardWidget):
         footer = QHBoxLayout()
         footer.setSpacing(6)
 
-        source_text = "[内置]" if is_builtin else "[用户]"
+        source_text = tr("skills.builtin", default="[内置]") if is_builtin else tr("skills.user", default="[用户]")
         source_color = "#4CAF50" if is_builtin else "#FF9800"
         source_label = QLabel(source_text)
         source_label.setStyleSheet(f"color: {source_color}; font-size: 10px; font-weight: bold;")
@@ -140,7 +141,7 @@ class SkillCardWidget(CardWidget):
 
         footer.addStretch()
 
-        status_text = "● 已启用" if is_enabled else "○ 已禁用"
+        status_text = tr("skills.enabled", default="● 已启用") if is_enabled else tr("skills.disabled", default="○ 已禁用")
         status_color = "#4CAF50" if is_enabled else "#F44336"
         self.status_label = QLabel(status_text)
         self.status_label.setStyleSheet(f"color: {status_color}; font-size: 10px;")
@@ -156,7 +157,7 @@ class SkillCardWidget(CardWidget):
     def _on_toggle(self, checked):
         name = self.skill_info.get("name", "")
         self.skill_info["is_enabled"] = checked
-        status_text = "● 已启用" if checked else "○ 已禁用"
+        status_text = tr("skills.enabled", default="● 已启用") if checked else tr("skills.disabled", default="○ 已禁用")
         status_color = "#4CAF50" if checked else "#F44336"
         self.status_label.setText(status_text)
         self.status_label.setStyleSheet(f"color: {status_color}; font-size: 10px;")
@@ -170,8 +171,12 @@ class SkillCardWidget(CardWidget):
 
         info = InfoBar.success if checked else InfoBar.warning
         info(
-            title="技能状态更新",
-            content=f"{'启用' if checked else '禁用'} {name} - 将在所有会话中{'生效' if checked else '禁用'}",
+            title=tr("skills.status_updated", default="技能状态更新"),
+            content=tr("skills.toggle_info", default="{action} {name} - 将在所有会话中{effect}").format(
+                action=tr("skills.enable", default="启用") if checked else tr("skills.disable", default="禁用"),
+                name=name,
+                effect=tr("skills.take_effect", default="生效") if checked else tr("skills.disabled_status", default="禁用"),
+            ),
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -258,8 +263,9 @@ class GroupedSkillScrollArea(QScrollArea):
 
             icon = SkillCategory.get_category_icon(cat) if SkillCategory else ""
             count = len(cards)
+            display_cat = tr("skills.uncategorized", default=cat) if cat == "未分类" else cat
             header_color = "#aaa" if isDarkTheme() else "#333"
-            header = QLabel(f"{icon} {cat} ({count})")
+            header = QLabel(f"{icon} {display_cat} ({count})")
             header.setStyleSheet(
                 f"font-size: 13px; font-weight: bold; color: {header_color}; "
                 "padding: 6px 8px; margin-top: 4px;"
@@ -310,10 +316,10 @@ class SkillDetailPanel(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
-        self.header_label = SubtitleLabel("技能详情")
+        self.header_label = SubtitleLabel(tr("skills.detail", default="技能详情"))
         layout.addWidget(self.header_label)
 
-        self.empty_label = BodyLabel("点击卡片或双击查看技能详情", self)
+        self.empty_label = BodyLabel(tr("skills.detail_hint", default="点击卡片或双击查看技能详情"), self)
         self.empty_label.setAlignment(Qt.AlignCenter)
         self._update_empty_label_color()
         layout.addWidget(self.empty_label)
@@ -327,7 +333,7 @@ class SkillDetailPanel(QWidget):
         self.name_label = SubtitleLabel("")
         name_row.addWidget(self.name_label)
 
-        self.enable_switch = SwitchButton("启用")
+        self.enable_switch = SwitchButton(tr("skills.enable", default="启用"))
         self.enable_switch.checkedChanged.connect(self._on_toggle)
         name_row.addWidget(self.enable_switch)
         name_row.addStretch()
@@ -342,7 +348,7 @@ class SkillDetailPanel(QWidget):
         self.desc_label.setWordWrap(True)
         dl.addWidget(self.desc_label)
 
-        dl.addWidget(BodyLabel("完整内容:"))
+        dl.addWidget(BodyLabel(tr("skills.full_content", default="完整内容:")))
 
         self.content_text = TextEdit(self)
         self.content_text.setReadOnly(True)
@@ -350,17 +356,17 @@ class SkillDetailPanel(QWidget):
         dl.addWidget(self.content_text)
 
         btn_row = QHBoxLayout()
-        self.btn_view = PushButton("加载完整内容")
+        self.btn_view = PushButton(tr("skills.load_full", default="加载完整内容"))
         self.btn_view.setIcon(FluentIcon.VIEW)
         self.btn_view.clicked.connect(self._load_full_content)
         btn_row.addWidget(self.btn_view)
 
-        self.btn_execute = PrimaryPushButton("执行技能")
+        self.btn_execute = PrimaryPushButton(tr("skills.execute", default="执行技能"))
         self.btn_execute.setIcon(FluentIcon.PLAY)
         self.btn_execute.clicked.connect(self._execute)
         btn_row.addWidget(self.btn_execute)
 
-        self.btn_remove = PushButton("删除技能")
+        self.btn_remove = PushButton(tr("skills.delete_skill", default="删除技能"))
         self.btn_remove.setIcon(FluentIcon.DELETE)
         self.btn_remove.clicked.connect(self._remove)
         btn_row.addWidget(self.btn_remove)
@@ -393,29 +399,29 @@ class SkillDetailPanel(QWidget):
         skill_type = skill_info.get("type", "unknown")
         is_builtin = skill_info.get("is_builtin", True)
         version = skill_info.get("version", "")
-        type_map = {"document": "文档型", "executable": "可执行型", "hybrid": "混合型"}
-        source_text = "内置" if is_builtin else "用户安装"
-        meta_parts = [f"类型: {type_map.get(skill_type, skill_type)}", f"来源: {source_text}"]
+        type_map = {"document": tr("skills.type_document", default="文档型"), "executable": tr("skills.type_executable", default="可执行型"), "hybrid": tr("skills.type_hybrid", default="混合型")}
+        source_text = tr("skills.builtin_source", default="内置") if is_builtin else tr("skills.user_installed", default="用户安装")
+        meta_parts = [f"{tr('skills.meta_type', default='类型')}: {type_map.get(skill_type, skill_type)}", f"{tr('skills.source_label', default='来源')}: {source_text}"]
         if version and version != "0.0.0":
-            meta_parts.append(f"版本: {version}")
+            meta_parts.append(f"{tr('skills.meta_version', default='版本')}: {version}")
         self.meta_label.setText(" | ".join(meta_parts))
 
-        self.desc_label.setText(skill_info.get("description", "无描述"))
+        self.desc_label.setText(skill_info.get("description", tr("skills.no_description", default="无描述")))
 
         content = skill_info.get("content", "")
         if len(content) > 400:
-            content = content[:400] + "...\n\n[点击下方按钮加载完整内容]"
-        self.content_text.setPlainText(content or "(无额外内容)")
+            content = content[:400] + "...\n\n" + tr("skills.load_full_hint", default="[点击下方按钮加载完整内容]")
+        self.content_text.setPlainText(content or tr("skills.no_extra_content", default="(无额外内容)"))
 
         is_executable = skill_type in ("executable", "hybrid")
         self.btn_execute.setVisible(is_executable)
         self.btn_remove.setVisible(not is_builtin)
         if is_builtin:
-            self.btn_remove.setToolTip("内置技能不可删除")
+            self.btn_remove.setToolTip(tr("skills.cannot_delete_builtin", default="内置技能不可删除"))
 
         if not is_enabled:
-            self.btn_view.setToolTip("技能已禁用，无法加载内容")
-            self.btn_execute.setToolTip("技能已禁用，无法执行")
+            self.btn_view.setToolTip(tr("skills.disabled_cannot_load", default="技能已禁用，无法加载内容"))
+            self.btn_execute.setToolTip(tr("skills.disabled_cannot_execute", default="技能已禁用，无法执行"))
 
     def _on_toggle(self, checked):
         if not self.current_skill:
@@ -442,11 +448,11 @@ class SkillDetailPanel(QWidget):
                 parsed = json.loads(content)
                 if isinstance(parsed, dict) and parsed.get("status") == "error":
                     InfoBar.warning(
-                        title="无法加载",
-                        content=parsed.get("message", "技能已禁用"),
-                        orient=Qt.Horizontal, isClosable=True,
-                        position=InfoBarPosition.TOP, duration=3000, parent=self
-                    )
+                    title=tr("skills.cannot_load", default="无法加载"),
+                    content=parsed.get("message", tr("skills.disabled_status", default="技能已禁用")),
+                    orient=Qt.Horizontal, isClosable=True,
+                    position=InfoBarPosition.TOP, duration=3000, parent=self
+                )
                     return
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -460,13 +466,13 @@ class SkillDetailPanel(QWidget):
         try:
             data = json.loads(result)
             if data.get("status") == "error":
-                InfoBar.error(title="执行失败", content=data.get("message", "未知错误"),
+                InfoBar.error(title=tr("skills.exec_failed", default="执行失败"), content=data.get("message", tr("skills.unknown_error", default="未知错误")),
                               orient=Qt.Horizontal, isClosable=True,
                               position=InfoBarPosition.TOP, duration=4000, parent=self)
                 return
         except Exception:
             pass
-        InfoBar.success(title="执行完成", content=f"技能 {name} 执行完成",
+        InfoBar.success(title=tr("skills.exec_done", default="执行完成"), content=tr("skills.exec_done_content", default="技能 {name} 执行完成").format(name=name),
                         orient=Qt.Horizontal, isClosable=True,
                         position=InfoBarPosition.TOP, duration=2000, parent=self)
 
@@ -477,24 +483,24 @@ class SkillDetailPanel(QWidget):
         if self.current_skill.get("is_builtin"):
             return
 
-        box = MessageBox("确认删除", f"确定要删除技能 '{name}' 吗？", self)
-        box.yesButton.setText("删除")
-        box.cancelButton.setText("取消")
+        box = MessageBox(tr("skills.confirm_delete_title", default="确认删除"), tr("skills.confirm_delete", default="确定要删除技能 '{name}' 吗？").format(name=name), self)
+        box.yesButton.setText(tr("skills.delete_btn", default="删除"))
+        box.cancelButton.setText(tr("general.cancel", default="取消"))
         if box.exec_():
             try:
                 result = self.skill_manager.remove_skill(name)
                 data = json.loads(result)
                 if data.get("status") == "success":
-                    InfoBar.success(title="删除成功", content=f"技能 {name} 已删除",
+                    InfoBar.success(title=tr("skills.delete_success", default="删除成功"), content=tr("skills.deleted_info", default="技能 {name} 已删除").format(name=name),
                                     orient=Qt.Horizontal, isClosable=True,
                                     position=InfoBarPosition.TOP, duration=3000, parent=self)
                     self.skillRemoved.emit(name)
                 else:
-                    InfoBar.error(title="删除失败", content=data.get("message", "未知错误"),
+                    InfoBar.error(title=tr("skills.delete_failed", default="删除失败"), content=data.get("message", tr("skills.unknown_error", default="未知错误")),
                                   orient=Qt.Horizontal, isClosable=True,
                                   position=InfoBarPosition.TOP, duration=3000, parent=self)
             except Exception as e:
-                InfoBar.error(title="删除失败", content=str(e),
+                InfoBar.error(title=tr("skills.delete_failed", default="删除失败"), content=str(e),
                               orient=Qt.Horizontal, isClosable=True,
                               position=InfoBarPosition.TOP, duration=3000, parent=self)
 
@@ -516,10 +522,10 @@ class InstallSkillWidget(CardWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
 
-        layout.addWidget(SubtitleLabel("安装新技能"))
+        layout.addWidget(SubtitleLabel(tr("skills.install", default="安装新技能")))
 
         source_row = QHBoxLayout()
-        source_row.addWidget(BodyLabel("来源:"))
+        source_row.addWidget(BodyLabel(tr("skills.source", default="来源:")))
         self.source_combo = ComboBox()
         self.source_combo.addItems(["GitHub", "GitLab", "ZIP URL", "本地路径"])
         self.source_combo.currentIndexChanged.connect(self._update_help)
@@ -533,9 +539,9 @@ class InstallSkillWidget(CardWidget):
         layout.addWidget(self.source_input)
 
         name_row = QHBoxLayout()
-        name_row.addWidget(BodyLabel("名称 (可选):"))
+        name_row.addWidget(BodyLabel(tr("skills.name_optional", default="名称 (可选):")))
         self.name_input = LineEdit()
-        self.name_input.setPlaceholderText("自定义名称，留空自动检测")
+        self.name_input.setPlaceholderText(tr("skills.name_hint", default="自定义名称，留空自动检测"))
         self.name_input.setClearButtonEnabled(True)
         name_row.addWidget(self.name_input)
         layout.addLayout(name_row)
@@ -546,7 +552,7 @@ class InstallSkillWidget(CardWidget):
         layout.addWidget(self.help_label)
 
         btn_row = QHBoxLayout()
-        self.btn_install = PrimaryPushButton("安装")
+        self.btn_install = PrimaryPushButton(tr("skills.install_btn", default="安装"))
         self.btn_install.setIcon(FluentIcon.DOWNLOAD)
         self.btn_install.clicked.connect(self._install)
 
@@ -564,10 +570,10 @@ class InstallSkillWidget(CardWidget):
 
     def _update_help(self):
         helps = {
-            "GitHub": "格式: owner/repo 或完整URL\n支持分支: owner/repo/tree/branch",
-            "GitLab": "输入 GitLab 仓库的完整 URL",
-            "ZIP URL": "输入技能 ZIP 包的下载链接",
-            "本地路径": "输入包含 SKILL.md 的本地目录路径"
+            "GitHub": tr("skills.install_help_github", default="格式: owner/repo 或完整URL\n支持分支: owner/repo/tree/branch"),
+            "GitLab": tr("skills.install_help_gitlab", default="输入 GitLab 仓库的完整 URL"),
+            "ZIP URL": tr("skills.install_help_zip", default="输入技能 ZIP 包的下载链接"),
+            "本地路径": tr("skills.install_help_local", default="输入包含 SKILL.md 的本地目录路径")
         }
         places = {
             "GitHub": "owner/repo",
@@ -582,7 +588,7 @@ class InstallSkillWidget(CardWidget):
     def _install(self):
         source = self.source_input.text().strip()
         if not source:
-            InfoBar.warning(title="输入错误", content="请输入来源地址",
+            InfoBar.warning(title=tr("skills.input_error", default="输入错误"), content=tr("skills.input_source", default="请输入来源地址"),
                             orient=Qt.Horizontal, isClosable=True,
                             position=InfoBarPosition.TOP, duration=3000, parent=self)
             return
@@ -601,18 +607,18 @@ class InstallSkillWidget(CardWidget):
         try:
             data = json.loads(result)
             if data.get("status") == "success":
-                InfoBar.success(title="安装成功", content=f"技能 {data.get('skill_name', '')} 已安装",
+                InfoBar.success(title=tr("skills.install_success", default="安装成功"), content=tr("skills.installed_info", default="技能 {name} 已安装").format(name=data.get('skill_name', '')),
                                 orient=Qt.Horizontal, isClosable=True,
                                 position=InfoBarPosition.TOP, duration=3000, parent=self)
                 self.source_input.clear()
                 self.name_input.clear()
                 self.installCompleted.emit()
             else:
-                InfoBar.error(title="安装失败", content=data.get("message", "未知错误"),
+                InfoBar.error(title=tr("skills.install_failed", default="安装失败"), content=data.get("message", tr("skills.unknown_error", default="未知错误")),
                               orient=Qt.Horizontal, isClosable=True,
                               position=InfoBarPosition.TOP, duration=5000, parent=self)
         except Exception as e:
-            InfoBar.error(title="安装失败", content=str(e),
+            InfoBar.error(title=tr("skills.install_failed", default="安装失败"), content=str(e),
                           orient=Qt.Horizontal, isClosable=True,
                           position=InfoBarPosition.TOP, duration=5000, parent=self)
 
@@ -645,6 +651,9 @@ class SkillsInterface(QWidget):
         self._filter_category = "全部"
         self._search_text = ""
 
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
+
         try:
             from src.agent.skills.state import SkillEnabledState, SkillCategory
             self._state = SkillEnabledState.get_instance()
@@ -664,7 +673,7 @@ class SkillsInterface(QWidget):
         top_bar.setSpacing(8)
 
         self.search_input = LineEdit()
-        self.search_input.setPlaceholderText("搜索技能名称或描述...")
+        self.search_input.setPlaceholderText(tr("skills.search", default="搜索技能名称或描述..."))
         self.search_input.setClearButtonEnabled(True)
         self.search_input.setFixedWidth(240)
         self.search_input.textChanged.connect(self._on_search)
@@ -673,7 +682,7 @@ class SkillsInterface(QWidget):
         self.category_filter = ComboBox()
         self._category_items = ["全部"]
         self.category_filter.blockSignals(True)
-        self.category_filter.addItem("全部", "全部")
+        self.category_filter.addItem(tr("skills.all", default="全部"), "全部")
         try:
             from src.agent.skills.state import SkillCategory
             SkillCategory.load_categories()
@@ -688,7 +697,7 @@ class SkillsInterface(QWidget):
         self.category_filter.currentIndexChanged.connect(self._on_filter_changed)
         top_bar.addWidget(self.category_filter)
 
-        self.enabled_only_btn = PushButton("仅启用")
+        self.enabled_only_btn = PushButton(tr("skills.only_enabled", default="仅启用"))
         self.enabled_only_btn.setCheckable(True)
         self.enabled_only_btn.clicked.connect(self._toggle_enabled_filter)
         top_bar.addWidget(self.enabled_only_btn)
@@ -696,11 +705,11 @@ class SkillsInterface(QWidget):
         top_bar.addStretch()
 
         self.btn_refresh = ToolButton(FluentIcon.SYNC)
-        self.btn_refresh.setToolTip("刷新列表")
+        self.btn_refresh.setToolTip(tr("skills.refresh_list", default="刷新列表"))
         self.btn_refresh.clicked.connect(self.load_skills)
         top_bar.addWidget(self.btn_refresh)
 
-        self.btn_switch_page = PrimaryPushButton("安装技能")
+        self.btn_switch_page = PrimaryPushButton(tr("skills.install_btn_label", default="安装技能"))
         self.btn_switch_page.setIcon(FluentIcon.DOWNLOAD)
         self.btn_switch_page.clicked.connect(self._show_install)
         top_bar.addWidget(self.btn_switch_page)
@@ -713,12 +722,12 @@ class SkillsInterface(QWidget):
         self._update_stats_label_color()
         stats_row.addWidget(self.stats_label)
 
-        self.btn_batch_enable = PushButton("全部启用")
+        self.btn_batch_enable = PushButton(tr("skills.enable_all", default="全部启用"))
         self.btn_batch_enable.setStyleSheet("font-size: 11px; padding: 2px 10px;")
         self.btn_batch_enable.clicked.connect(lambda: self._batch_toggle(True))
         stats_row.addWidget(self.btn_batch_enable)
 
-        self.btn_batch_disable = PushButton("全部禁用")
+        self.btn_batch_disable = PushButton(tr("skills.disable_all", default="全部禁用"))
         self.btn_batch_disable.setStyleSheet("font-size: 11px; padding: 2px 10px;")
         self.btn_batch_disable.clicked.connect(lambda: self._batch_toggle(False))
         stats_row.addWidget(self.btn_batch_disable)
@@ -742,7 +751,7 @@ class SkillsInterface(QWidget):
         self.install_widget.installCompleted.connect(lambda: (
             self.load_skills(),
             self.stack.setCurrentIndex(0),
-            self.btn_switch_page.setText("安装技能")
+            self.btn_switch_page.setText(tr("skills.install_btn_label", default="安装技能"))
         ))
         ip.addWidget(self.install_widget)
         ip.addStretch()
@@ -772,7 +781,7 @@ class SkillsInterface(QWidget):
 
     def _toggle_enabled_filter(self, checked):
         self._filter_enabled_only = checked
-        self.enabled_only_btn.setText("全部" if checked else "仅启用")
+        self.enabled_only_btn.setText(tr("skills.all", default="全部") if checked else tr("skills.only_enabled", default="仅启用"))
         self._render_cards()
 
     def _batch_toggle(self, enabled):
@@ -784,8 +793,10 @@ class SkillsInterface(QWidget):
                 self._state.set_enabled(name, enabled)
         self._render_cards()
         InfoBar.success(
-            title="批量操作",
-            content=f"已{'启用' if enabled else '禁用'}所有技能",
+            title=tr("skills.batch_ops", default="批量操作"),
+            content=tr("skills.batch_toggle_info", default="已{action}所有技能").format(
+                action=tr("skills.enable", default="启用") if enabled else tr("skills.disable", default="禁用"),
+            ),
             orient=Qt.Horizontal, isClosable=True,
             position=InfoBarPosition.TOP, duration=2000, parent=self
         )
@@ -828,7 +839,7 @@ class SkillsInterface(QWidget):
         enabled_count = sum(1 for s in filtered if s.get("is_enabled", True))
         total_count = len(filtered)
         total_all = len(self._all_skills)
-        self.stats_label.setText(f"显示 {total_count} / 共 {total_all} 个技能  |  已启用 {enabled_count} 个")
+        self.stats_label.setText(tr("skills.stats_filtered", default="显示 {total} / 共 {total_all} 个技能  |  已启用 {enabled} 个").format(total=total_count, total_all=total_all, enabled=enabled_count))
 
         if SkillCategory:
             cat_order = SkillCategory.get_all_categories()
@@ -854,7 +865,7 @@ class SkillsInterface(QWidget):
                 card.toggle_switch.blockSignals(True)
                 card.toggle_switch.setChecked(enabled)
                 card.toggle_switch.blockSignals(False)
-                status_text = "● 已启用" if enabled else "○ 已禁用"
+                status_text = tr("skills.enabled_status", default="● 已启用") if enabled else tr("skills.disabled_status_text", default="○ 已禁用")
                 status_color = "#4CAF50" if enabled else "#F44336"
                 card.status_label.setText(status_text)
                 card.status_label.setStyleSheet(f"color: {status_color}; font-size: 10px;")
@@ -892,12 +903,12 @@ class SkillsInterface(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet("QMenu { padding: 6px; } QMenu::item { padding: 6px 20px; }")
 
-        detail_action = menu.addAction("📋 查看详情")
+        detail_action = menu.addAction("📋 " + tr("skills.view_details", default="查看详情"))
         detail_action.triggered.connect(lambda: self._show_detail_by_name(name))
 
         menu.addSeparator()
 
-        cat_menu = menu.addMenu("📁 移动到分类")
+        cat_menu = menu.addMenu("📁 " + tr("skills.move_category", default="移动到分类"))
         try:
             from src.agent.skills.state import SkillCategory
             current_cat = SkillCategory.categorize(name,
@@ -912,12 +923,12 @@ class SkillsInterface(QWidget):
             pass
 
         toggle_enable = menu.addAction(
-            "🔓 启用" if not self._is_enabled(name) else "🔒 禁用"
+            "🔓 " + tr("skills.enable", default="启用") if not self._is_enabled(name) else "🔒 " + tr("skills.disable", default="禁用")
         )
         toggle_enable.triggered.connect(lambda: self._toggle_skill(name))
 
         menu.addSeparator()
-        info = menu.addAction("ℹ️ 技能信息")
+        info = menu.addAction("ℹ️ " + tr("skills.skill_info", default="技能信息"))
         info.triggered.connect(lambda: self._show_skill_info(name))
 
         menu.exec_(pos)
@@ -946,7 +957,7 @@ class SkillsInterface(QWidget):
             SkillCategory.set_category(name, category)
             SkillCategory.save_category(name, category)
             self._render_cards()
-            InfoBar.success(title="分类已更新", content=f"{name} → {category}",
+            InfoBar.success(title=tr("skills.category_updated", default="分类已更新"), content=f"{name} → {category}",
                             orient=Qt.Horizontal, isClosable=True,
                             position=InfoBarPosition.TOP, duration=2000, parent=self)
         except ImportError:
@@ -967,14 +978,14 @@ class SkillsInterface(QWidget):
             if s.get("name") == name:
                 import textwrap
                 info_text = textwrap.dedent(f"""
-                名称: {s.get('name', '')}
-                类型: {s.get('type', '')}
-                版本: {s.get('version', 'N/A')}
-                来源: {'内置' if s.get('is_builtin', True) else '用户安装'}
-                状态: {'已启用' if s.get('is_enabled', True) else '已禁用'}
-                路径: {s.get('path', '')}
+                {tr('skills.info_name', default='名称')}: {s.get('name', '')}
+                {tr('skills.info_type', default='类型')}: {s.get('type', '')}
+                {tr('skills.info_version', default='版本')}: {s.get('version', 'N/A')}
+                {tr('skills.info_source', default='来源')}: {tr('skills.builtin_source', default='内置') if s.get('is_builtin', True) else tr('skills.user_installed', default='用户安装')}
+                {tr('skills.info_status', default='状态')}: {tr('skills.enabled', default='已启用') if s.get('is_enabled', True) else tr('skills.disabled', default='已禁用')}
+                {tr('skills.info_path', default='路径')}: {s.get('path', '')}
                 """).strip()
-                msg = MessageBox("技能信息", info_text, self)
+                msg = MessageBox(tr("skills.skill_info", default="技能信息"), info_text, self)
                 msg.cancelButton.hide()
                 msg.exec_()
                 return
@@ -984,7 +995,7 @@ class SkillsInterface(QWidget):
 
     def _update_stats(self):
         enabled = sum(1 for s in self._all_skills if s.get("is_enabled", True))
-        self.stats_label.setText(f"共 {len(self._all_skills)} 个技能  |  已启用 {enabled} 个")
+        self.stats_label.setText(tr("skills.stats_total", default="共 {total} 个技能  |  已启用 {enabled} 个").format(total=len(self._all_skills), enabled=enabled))
 
     def _update_stats_label_color(self):
         color = "#aaa" if isDarkTheme() else "#999"
@@ -995,10 +1006,28 @@ class SkillsInterface(QWidget):
         self._render_cards()
         self.detail_panel._update_empty_label_color()
 
+    def refresh_ui(self):
+        self.search_input.setPlaceholderText(tr("skills.search", default="搜索技能名称或描述..."))
+        self.btn_refresh.setToolTip(tr("skills.refresh_list", default="刷新列表"))
+        self.btn_batch_enable.setText(tr("skills.enable_all", default="全部启用"))
+        self.btn_batch_disable.setText(tr("skills.disable_all", default="全部禁用"))
+        if self._filter_enabled_only:
+            self.enabled_only_btn.setText(tr("skills.all", default="全部"))
+        else:
+            self.enabled_only_btn.setText(tr("skills.only_enabled", default="仅启用"))
+        if self.stack.currentIndex() == 0:
+            self.btn_switch_page.setText(tr("skills.install_btn_label", default="安装技能"))
+        else:
+            self.btn_switch_page.setText(tr("skills.back", default="返回列表"))
+        self.detail_panel.header_label.setText(tr("skills.detail", default="技能详情"))
+        self.detail_panel.empty_label.setText(tr("skills.detail_hint", default="点击卡片或双击查看技能详情"))
+        self._update_stats()
+        self._render_cards()
+
     def _show_install(self):
         if self.stack.currentIndex() == 0:
             self.stack.setCurrentIndex(1)
-            self.btn_switch_page.setText("返回列表")
+            self.btn_switch_page.setText(tr("skills.back", default="返回列表"))
         else:
             self.stack.setCurrentIndex(0)
-            self.btn_switch_page.setText("安装技能")
+            self.btn_switch_page.setText(tr("skills.install_btn_label", default="安装技能"))

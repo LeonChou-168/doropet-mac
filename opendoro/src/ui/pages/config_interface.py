@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QMessageBox,
                              QListWidget as QtListWidget, QDialogButtonBox,
                              QApplication, QSizePolicy, QFrame)
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QFontMetrics
 from qfluentwidgets import (ScrollArea, ComboBox, LineEdit, StrongBodyLabel,
                             TitleLabel, PushButton, FluentIcon, ListWidget,
                             BodyLabel, PrimaryPushButton, isDarkTheme,
@@ -28,6 +28,7 @@ from src.provider.register import (
 )
 from src.provider.entities import ProviderType, ProviderConfig
 from src.provider.manager import ProviderManager
+from src.core.i18n import I18nManager, tr
 
 
 # ---------------------------------------------------------------------------
@@ -453,16 +454,18 @@ class CollapsibleCard(CardWidget):
 
 
 class ModelSelectDialog(QDialog):
-    def __init__(self, items: list, title: str = "选择模型", parent=None):
+    def __init__(self, items: list, title: str = None, parent=None):
         super().__init__(parent)
+        if title is None:
+            title = tr("config.select_model_title", default="选择模型")
         self.setWindowTitle(title)
         self.setMinimumWidth(400)
         self.setMinimumHeight(500)
         self.selected_model = None
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("从列表中选择:"))
+        layout.addWidget(QLabel(tr("config.select_from_list", default="从列表中选择:")))
         self.search_input = LineEdit(self)
-        self.search_input.setPlaceholderText("搜索...")
+        self.search_input.setPlaceholderText(tr("config.search_placeholder", default="搜索..."))
         self.search_input.textChanged.connect(self.filter_models)
         layout.addWidget(self.search_input)
         self.model_list = QtListWidget(self)
@@ -492,7 +495,7 @@ class QuickAddDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("快速添加 LLM 配置")
+        self.setWindowTitle(tr("config.quick_add_title", default="快速添加 LLM 配置"))
         self.setMinimumWidth(520)
         self.selected_provider = None
         self.api_key = ""
@@ -502,8 +505,8 @@ class QuickAddDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
 
-        layout.addWidget(SubtitleLabel("选择 AI 平台", self))
-        hint = CaptionLabel("选择平台后，只需填入 API 密钥即可完成配置", self)
+        layout.addWidget(SubtitleLabel(tr("config.select_ai_platform", default="选择 AI 平台"), self))
+        hint = CaptionLabel(tr("config.quick_add_desc", default="选择平台后，只需填入 API 密钥即可完成配置"), self)
         hint.setStyleSheet("color: gray;")
         layout.addWidget(hint)
 
@@ -527,14 +530,14 @@ class QuickAddDialog(QDialog):
         api_layout = QVBoxLayout(self.api_section)
         api_layout.setContentsMargins(0, 0, 0, 0)
         api_layout.setSpacing(8)
-        self.api_label = BodyLabel("API 密钥", self)
+        self.api_label = BodyLabel(tr("config.api_key_label", default="API 密钥"), self)
         api_layout.addWidget(self.api_label)
         self.api_input = LineEdit(self)
         self.api_input.setEchoMode(QLineEdit.Password)
-        self.api_input.setPlaceholderText("粘贴您的 API Key...")
+        self.api_input.setPlaceholderText(tr("config.api_key_placeholder", default="粘贴您的 API Key..."))
         api_layout.addWidget(self.api_input)
         self.help_link = HyperlinkLabel(self)
-        self.help_link.setText("如何获取?")
+        self.help_link.setText(tr("config.how_to_get", default="如何获取?"))
         api_layout.addWidget(self.help_link)
         self.api_section.setVisible(False)
         layout.addWidget(self.api_section)
@@ -544,9 +547,9 @@ class QuickAddDialog(QDialog):
         name_layout = QVBoxLayout(self.name_section)
         name_layout.setContentsMargins(0, 0, 0, 0)
         name_layout.setSpacing(8)
-        name_layout.addWidget(BodyLabel("配置名称 (可选)", self))
+        name_layout.addWidget(BodyLabel(tr("config.config_name_optional", default="配置名称 (可选)"), self))
         self.name_input = LineEdit(self)
-        self.name_input.setPlaceholderText("默认使用平台名称")
+        self.name_input.setPlaceholderText(tr("config.default_platform_name", default="默认使用平台名称"))
         name_layout.addWidget(self.name_input)
         self.name_section.setVisible(False)
         layout.addWidget(self.name_section)
@@ -563,7 +566,7 @@ class QuickAddDialog(QDialog):
             btn.setStyleSheet("QPushButton { background-color: #0078d4; color: white; }" if p == provider else "")
         self.api_section.setVisible(True)
         self.name_section.setVisible(True)
-        self.api_label.setText(f"{provider['name']} API 密钥")
+        self.api_label.setText(tr("config.api_key_for_provider", default="{provider} API 密钥").format(provider=provider['name']))
         if provider.get("api_key_url"):
             self.help_link.setUrl(provider["api_key_url"])
             self.help_link.setVisible(True)
@@ -573,13 +576,13 @@ class QuickAddDialog(QDialog):
 
     def accept(self):
         if not self.selected_provider:
-            InfoBar.warning("提示", "请先选择一个 AI 平台", duration=2000, parent=self)
+            InfoBar.warning(tr("general.tip"), tr("config.select_ai_platform_hint", default="请先选择一个 AI 平台"), duration=2000, parent=self)
             return
         self.api_key = self.api_input.text().strip()
         self.config_name = self.name_input.text().strip()
         pi = self.selected_provider
         if not self.api_key and not pi["id"].startswith("ollama"):
-            InfoBar.warning("提示", "请输入 API 密钥", duration=2000, parent=self)
+            InfoBar.warning(tr("general.tip"), tr("config.enter_api_key", default="请输入 API 密钥"), duration=2000, parent=self)
             return
         super().accept()
 
@@ -595,6 +598,9 @@ class ConfigInterface(QWidget):
         self.setObjectName("ModelConfigInterface")
         self.current_model_id = None
         self.current_mode = "LLM"
+
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
 
         self.init_ui()
         self.load_models()
@@ -625,21 +631,23 @@ class ConfigInterface(QWidget):
     def _init_left_panel(self, parent_layout):
         self.left_panel = QWidget()
         self.left_panel.setObjectName("left_panel")
-        self.left_panel.setFixedWidth(260)
+        self.left_panel.setMinimumWidth(260)
+        self.left_panel.setMaximumWidth(340)
         left_layout = QVBoxLayout(self.left_panel)
         left_layout.setContentsMargins(16, 20, 16, 20)
         left_layout.setSpacing(12)
 
         self.pivot = SegmentedWidget(self.left_panel)
-        self.pivot.addItem("LLM", "对话模型")
-        self.pivot.addItem("TTS", "语音合成")
-        self.pivot.addItem("IMAGE", "图像生成")
+        self.pivot.addItem("LLM", tr("config.chat_model.short", default=tr("config.chat_model")))
+        self.pivot.addItem("TTS", tr("config.tts.short", default=tr("config.tts")))
+        self.pivot.addItem("IMAGE", tr("config.image_gen.short", default=tr("config.image_gen")))
         self.pivot.setCurrentItem("LLM")
         self.pivot.currentItemChanged.connect(self.switch_mode)
+        self._update_pivot_nav()
         left_layout.addWidget(self.pivot)
 
         list_header = QHBoxLayout()
-        list_header.addWidget(StrongBodyLabel("配置列表", self.left_panel))
+        list_header.addWidget(StrongBodyLabel(tr("config.config_list"), self.left_panel))
         list_header.addStretch()
         left_layout.addLayout(list_header)
 
@@ -650,16 +658,35 @@ class ConfigInterface(QWidget):
 
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
-        self.quick_add_btn = PushButton(FluentIcon.ADD_TO, "快速添加", self.left_panel)
+        self.quick_add_btn = PushButton(FluentIcon.ADD_TO, tr("config.quick_add"), self.left_panel)
         self.quick_add_btn.setFixedHeight(32)
         self.quick_add_btn.clicked.connect(self.quick_add_model)
         btn_layout.addWidget(self.quick_add_btn, 1)
-        self.add_btn = PushButton(FluentIcon.ADD, "手动添加", self.left_panel)
+        self.add_btn = PushButton(FluentIcon.ADD, tr("config.manual_add"), self.left_panel)
         self.add_btn.setFixedHeight(32)
         self.add_btn.clicked.connect(self.create_new_model)
         btn_layout.addWidget(self.add_btn)
         left_layout.addLayout(btn_layout)
         parent_layout.addWidget(self.left_panel)
+
+    def _update_pivot_nav(self):
+        nav_items = {
+            "LLM": (tr("config.chat_model.short", default=tr("config.chat_model")), tr("config.chat_model")),
+            "TTS": (tr("config.tts.short", default=tr("config.tts")), tr("config.tts")),
+            "IMAGE": (tr("config.image_gen.short", default=tr("config.image_gen")), tr("config.image_gen")),
+        }
+        metrics = QFontMetrics(self.pivot.font())
+        item_widths = []
+        for key, (label, full_text) in nav_items.items():
+            item = self.pivot.items.get(key)
+            if not item:
+                continue
+            item.setText(label)
+            item.setToolTip(full_text)
+            item_widths.append(metrics.horizontalAdvance(label) + 44)
+        target_width = min(340, max(260, sum(item_widths) + 48))
+        self.left_panel.setFixedWidth(target_width)
+        self.pivot.setFixedWidth(target_width - 32)
 
     def _init_right_panel(self, parent_layout):
         right_panel = ScrollArea(self)
@@ -673,7 +700,7 @@ class ConfigInterface(QWidget):
         right_layout.setSpacing(16)
 
         header_layout = QHBoxLayout()
-        self.page_title = TitleLabel("模型配置", self.edit_widget)
+        self.page_title = TitleLabel(tr("config.title"), self.edit_widget)
         header_layout.addWidget(self.page_title)
         header_layout.addStretch()
         self.status_label = CaptionLabel("", self.edit_widget)
@@ -693,11 +720,11 @@ class ConfigInterface(QWidget):
     # ---------- LLM 基础配置卡 ----------
 
     def _create_basic_card(self) -> SettingCard:
-        self.basic_card = SettingCard("基础配置", FluentIcon.SETTING, self)
+        self.basic_card = SettingCard(tr("config.basic_config"), FluentIcon.SETTING, self)
 
         # 配置名称
-        self.name_field = FormField("配置名称", LineEdit(self), "为这个配置起一个容易识别的名字", parent=self)
-        self.name_field.widget.setPlaceholderText("例如: 我的 DeepSeek")
+        self.name_field = FormField(tr("config.config_name"), LineEdit(self), tr("config.config_name_hint"), parent=self)
+        self.name_field.widget.setPlaceholderText(tr("config.config_name_placeholder"))
         self.basic_card.add_field(self.name_field)
 
         # AI 平台
@@ -716,11 +743,11 @@ class ConfigInterface(QWidget):
         provider_layout.addWidget(self.provider_desc_label)
 
         self.provider_help_link = HyperlinkLabel(provider_widget)
-        self.provider_help_link.setText("获取 API 密钥 →")
+        self.provider_help_link.setText(tr("config.get_api_key"))
         self.provider_help_link.setVisible(False)
         provider_layout.addWidget(self.provider_help_link)
 
-        self.provider_field = FormField("AI 平台", provider_widget, "选择您要使用的 AI 服务", parent=self)
+        self.provider_field = FormField(tr("config.ai_platform"), provider_widget, tr("config.ai_platform_hint"), parent=self)
         self.basic_card.add_field(self.provider_field)
 
         # 快捷填充（仅 OpenAI 兼容模式显示）
@@ -728,15 +755,15 @@ class ConfigInterface(QWidget):
         qf_layout = QHBoxLayout(self.quick_fill_widget)
         qf_layout.setContentsMargins(0, 0, 0, 0)
         qf_layout.setSpacing(6)
-        qf_label = CaptionLabel("快捷填充:", self.quick_fill_widget)
+        qf_label = CaptionLabel(tr("config.quick_fill"), self.quick_fill_widget)
         qf_label.setStyleSheet("color: gray;")
         qf_layout.addWidget(qf_label)
 
         self.quick_fill_combo = ComboBox(self.quick_fill_widget)
         self.quick_fill_combo.setFixedWidth(150)
-        self.quick_fill_combo.addItem("选择服务商...", userData=None)
+        self.quick_fill_combo.addItem(tr("config.select_provider"), userData=None)
         for key, info in QUICK_FILL_PROVIDERS.items():
-            self.quick_fill_combo.addItem(f"{key} - {info['desc']}", userData=key)
+            self.quick_fill_combo.addItem(f"{key} - {tr(f'config.quick_fill.{key}', default=info['desc'])}", userData=key)
         self.quick_fill_combo.currentIndexChanged.connect(self._on_quick_fill)
         qf_layout.addWidget(self.quick_fill_combo)
         qf_layout.addStretch()
@@ -749,14 +776,14 @@ class ConfigInterface(QWidget):
         model_layout.setContentsMargins(0, 0, 0, 0)
         model_layout.setSpacing(8)
         self.model_id_input = LineEdit(model_widget)
-        self.model_id_input.setPlaceholderText("例如: gpt-4o, deepseek-chat, gemini-1.5-flash")
+        self.model_id_input.setPlaceholderText(tr("config.model_name_placeholder"))
         model_layout.addWidget(self.model_id_input, 1)
-        self.fetch_models_btn = PushButton(FluentIcon.SEARCH, "搜索", model_widget)
+        self.fetch_models_btn = PushButton(FluentIcon.SEARCH, tr("config.search_models"), model_widget)
         self.fetch_models_btn.setFixedHeight(32)
-        self.fetch_models_btn.setToolTip("从平台获取可用模型列表")
+        self.fetch_models_btn.setToolTip(tr("config.fetch_models"))
         self.fetch_models_btn.clicked.connect(self.fetch_models_from_provider)
         model_layout.addWidget(self.fetch_models_btn)
-        self.model_field = FormField("模型名称", model_widget, "填入 pydantic-ai 兼容的模型 ID", parent=self)
+        self.model_field = FormField(tr("config.model_name"), model_widget, tr("config.model_name_hint"), parent=self)
         self.basic_card.add_field(self.model_field)
 
         # ===== TTS 专用字段 =====
@@ -765,26 +792,26 @@ class ConfigInterface(QWidget):
         voice_layout.setContentsMargins(0, 0, 0, 0)
         voice_layout.setSpacing(8)
         self.voice_input = LineEdit(voice_widget)
-        self.voice_input.setPlaceholderText("例如: zh-CN-XiaoxiaoNeural")
+        self.voice_input.setPlaceholderText(tr("config.voice_placeholder"))
         voice_layout.addWidget(self.voice_input, 1)
-        self.fetch_voices_btn = PushButton(FluentIcon.SEARCH, "获取语音列表", voice_widget)
+        self.fetch_voices_btn = PushButton(FluentIcon.SEARCH, tr("config.get_voices"), voice_widget)
         self.fetch_voices_btn.setFixedHeight(32)
         self.fetch_voices_btn.clicked.connect(self.fetch_voices_from_provider)
         voice_layout.addWidget(self.fetch_voices_btn)
-        self.voice_field = FormField("语音包", voice_widget, "选择 TTS 语音包名称", parent=self)
+        self.voice_field = FormField(tr("config.voice_package"), voice_widget, tr("config.voice_package_hint"), parent=self)
         self.basic_card.add_field(self.voice_field)
 
-        self.api_name_field = FormField("API端点", LineEdit(self), "Gradio TTS 的 API 端点名称", parent=self)
-        self.api_name_field.widget.setPlaceholderText("例如: /predict")
+        self.api_name_field = FormField(tr("config.api_endpoint"), LineEdit(self), tr("config.api_endpoint_hint"), parent=self)
+        self.api_name_field.widget.setPlaceholderText(tr("config.api_endpoint_placeholder"))
         self.api_name_field.widget.setText("/tts_request")
         self.basic_card.add_field(self.api_name_field)
 
-        self.prompt_audio_field = FormField("参考音频路径", LineEdit(self), "SoVITS TTS 参考音频文件路径", parent=self)
-        self.prompt_audio_field.widget.setPlaceholderText("例如: C:/audio/reference.wav")
+        self.prompt_audio_field = FormField(tr("config.ref_audio_path"), LineEdit(self), tr("config.ref_audio_path_hint"), parent=self)
+        self.prompt_audio_field.widget.setPlaceholderText(tr("config.ref_audio_path_placeholder"))
         self.basic_card.add_field(self.prompt_audio_field)
 
-        self.prompt_text_field = FormField("参考音频文本", LineEdit(self), "参考音频对应的文本内容", parent=self)
-        self.prompt_text_field.widget.setPlaceholderText("例如: 你好，这是一个测试。")
+        self.prompt_text_field = FormField(tr("config.ref_audio_text"), LineEdit(self), tr("config.ref_audio_text_hint"), parent=self)
+        self.prompt_text_field.widget.setPlaceholderText(tr("config.ref_audio_text_placeholder"))
         self.basic_card.add_field(self.prompt_text_field)
 
         return self.basic_card
@@ -792,8 +819,8 @@ class ConfigInterface(QWidget):
     # ---------- 认证卡 ----------
 
     def _create_auth_card(self) -> SettingCard:
-        self.auth_card = SettingCard("认证信息", FluentIcon.FINGERPRINT, self)
-        self.api_key_field = FormField("API 密钥", LineEdit(self), "从 AI 平台获取的访问密钥", parent=self)
+        self.auth_card = SettingCard(tr("config.auth_info"), FluentIcon.FINGERPRINT, self)
+        self.api_key_field = FormField(tr("config.api_key"), LineEdit(self), tr("config.api_key_hint"), parent=self)
         self.api_key_field.widget.setEchoMode(QLineEdit.Password)
         self.api_key_field.widget.setPlaceholderText("sk-...")
         self.auth_card.add_field(self.api_key_field)
@@ -802,27 +829,27 @@ class ConfigInterface(QWidget):
     # ---------- 高级卡 ----------
 
     def _create_advanced_card(self) -> CollapsibleCard:
-        self.advanced_card = CollapsibleCard("高级选项", FluentIcon.SETTING, collapsed=True, parent=self)
+        self.advanced_card = CollapsibleCard(tr("config.advanced"), FluentIcon.SETTING, collapsed=True, parent=self)
 
-        self.base_url_field = FormField("接口地址 (Base URL)", LineEdit(self),
-                                         "API 的基础地址。OpenAI 兼容模式下必填，用于指定 DeepSeek/Ollama 等服务的地址。",
+        self.base_url_field = FormField(tr("config.base_url"), LineEdit(self),
+                                         tr("config.base_url_hint"),
                                          parent=self)
-        self.base_url_field.widget.setPlaceholderText("例如: https://api.deepseek.com/v1")
+        self.base_url_field.widget.setPlaceholderText(tr("config.base_url_placeholder"))
         self.advanced_card.add_widget(self.base_url_field)
 
-        self.proxy_field = FormField("网络代理", LineEdit(self), "如需代理访问，填写代理地址", parent=self)
-        self.proxy_field.widget.setPlaceholderText("例如: http://127.0.0.1:7890 (可选)")
+        self.proxy_field = FormField(tr("config.proxy"), LineEdit(self), tr("config.proxy_hint"), parent=self)
+        self.proxy_field.widget.setPlaceholderText(tr("config.proxy_placeholder"))
         self.advanced_card.add_widget(self.proxy_field)
 
         options_widget = QWidget(self)
         options_layout = QHBoxLayout(options_widget)
         options_layout.setContentsMargins(0, 0, 0, 0)
         options_layout.setSpacing(16)
-        self.chk_visual = CheckBox("视觉模型", options_widget)
-        self.chk_visual.setToolTip("勾选后表示该模型支持图片识别（不影响 pydantic-ai 调用）")
+        self.chk_visual = CheckBox(tr("config.vision_model"), options_widget)
+        self.chk_visual.setToolTip(tr("config.vision_model_desc"))
         options_layout.addWidget(self.chk_visual)
-        self.chk_thinking = CheckBox("思考模型", options_widget)
-        self.chk_thinking.setToolTip("勾选后表示该模型支持思考链（如 DeepSeek-R1），前端将显示思考过程")
+        self.chk_thinking = CheckBox(tr("config.thinking_model"), options_widget)
+        self.chk_thinking.setToolTip(tr("config.thinking_model_desc"))
         options_layout.addWidget(self.chk_thinking)
         options_layout.addStretch()
         self.advanced_card.add_widget(options_widget)
@@ -834,18 +861,18 @@ class ConfigInterface(QWidget):
     def _create_action_buttons(self, layout: QVBoxLayout):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(12)
-        self.save_btn = PrimaryPushButton(FluentIcon.SAVE, "保存配置", self.edit_widget)
+        self.save_btn = PrimaryPushButton(FluentIcon.SAVE, tr("config.save_config"), self.edit_widget)
         self.save_btn.setFixedHeight(36)
         self.save_btn.clicked.connect(self.save_model)
         btn_layout.addWidget(self.save_btn)
-        self.use_btn = PushButton(FluentIcon.ACCEPT, "启用此配置", self.edit_widget)
+        self.use_btn = PushButton(FluentIcon.ACCEPT, tr("config.enable_config"), self.edit_widget)
         self.use_btn.setFixedHeight(36)
-        self.use_btn.setToolTip("设为当前使用的配置")
+        self.use_btn.setToolTip(tr("config.enable_desc"))
         self.use_btn.clicked.connect(self.set_active_model_handler)
         btn_layout.addWidget(self.use_btn)
         btn_layout.addStretch()
-        self.delete_btn = PushButton(FluentIcon.DELETE, "删除配置", self.edit_widget)
-        self.delete_btn.setToolTip("删除此配置")
+        self.delete_btn = PushButton(FluentIcon.DELETE, tr("config.delete_config"), self.edit_widget)
+        self.delete_btn.setToolTip(tr("config.delete_desc"))
         self.delete_btn.clicked.connect(self.delete_model)
         btn_layout.addWidget(self.delete_btn)
         layout.addLayout(btn_layout)
@@ -858,7 +885,7 @@ class ConfigInterface(QWidget):
 
         if self.current_mode == "LLM":
             for p in PYDANTIC_LLM_PROVIDERS:
-                self.provider_combo.addItem(p["name"], userData=p["id"])
+                self.provider_combo.addItem(tr(f"config.provider.{p['id']}.name", default=p["name"]), userData=p["id"])
         elif self.current_mode == "TTS":
             providers = get_all_providers_by_type(ProviderType.TEXT_TO_SPEECH)
             for pm in providers:
@@ -896,8 +923,99 @@ class ConfigInterface(QWidget):
         self._refresh_provider_combo()
         self.load_models()
         self.update_form_visibility()
-        mode_titles = {"LLM": "对话模型配置", "TTS": "语音合成配置", "IMAGE": "图像生成配置"}
-        self.page_title.setText(mode_titles.get(item_key, "模型配置"))
+        mode_titles = {"LLM": tr("config.chat_model_config", default="对话模型配置"), 
+                       "TTS": tr("config.tts_config", default="语音合成配置"), 
+                       "IMAGE": tr("config.image_gen_config", default="图像生成配置")}
+        self.page_title.setText(mode_titles.get(item_key, tr("config.title")))
+
+    def refresh_ui(self, lang_code: str = None):
+        """语言切换时刷新所有 UI 文本。"""
+        # 更新分段导航按钮文本
+        self._update_pivot_nav()
+
+        # 左侧面板
+        self._update_list_header()
+        self.quick_add_btn.setText(tr("config.quick_add"))
+        self.add_btn.setText(tr("config.manual_add"))
+
+        # 右侧标题
+        mode_titles = {"LLM": tr("config.chat_model_config", default="对话模型配置"),
+                       "TTS": tr("config.tts_config", default="语音合成配置"),
+                       "IMAGE": tr("config.image_gen_config", default="图像生成配置")}
+        self.page_title.setText(mode_titles.get(self.current_mode, tr("config.title")))
+
+        # 基本配置卡
+        self.basic_card.title_label.setText(tr("config.basic_config"))
+        self.name_field.label.setText(tr("config.config_name"))
+        self.name_field.widget.setPlaceholderText(tr("config.config_name_placeholder"))
+        self.provider_field.label.setText(tr("config.ai_platform"))
+        self.provider_help_link.setText(tr("config.get_api_key"))
+        self.model_field.label.setText(tr("config.model_name"))
+        self.model_id_input.setPlaceholderText(tr("config.model_name_placeholder"))
+        self.fetch_models_btn.setText(tr("config.search_models"))
+        self.fetch_models_btn.setToolTip(tr("config.fetch_models"))
+        self.voice_field.label.setText(tr("config.voice_package"))
+        self.voice_input.setPlaceholderText(tr("config.voice_placeholder"))
+        self.fetch_voices_btn.setText(tr("config.get_voices"))
+        self.api_name_field.label.setText(tr("config.api_endpoint"))
+        self.api_name_field.widget.setPlaceholderText(tr("config.api_endpoint_placeholder"))
+        self.prompt_audio_field.label.setText(tr("config.ref_audio_path"))
+        self.prompt_audio_field.widget.setPlaceholderText(tr("config.ref_audio_path_placeholder"))
+        self.prompt_text_field.label.setText(tr("config.ref_audio_text"))
+        self.prompt_text_field.widget.setPlaceholderText(tr("config.ref_audio_text_placeholder"))
+
+        # 快捷填充
+        self.quick_fill_combo.blockSignals(True)
+        self.quick_fill_combo.clear()
+        self.quick_fill_combo.addItem(tr("config.select_provider"), userData=None)
+        for key, info in QUICK_FILL_PROVIDERS.items():
+            self.quick_fill_combo.addItem(f"{key} - {tr(f'config.quick_fill.{key}', default=info['desc'])}", userData=key)
+        self.quick_fill_combo.setCurrentIndex(0)
+        self.quick_fill_combo.blockSignals(False)
+
+        # 刷新 provider 下拉框（LLM 模式）
+        saved_provider_id = self.provider_combo.currentData()
+        self._refresh_provider_combo()
+        for i in range(self.provider_combo.count()):
+            if self.provider_combo.itemData(i) == saved_provider_id:
+                self.provider_combo.setCurrentIndex(i)
+                break
+
+        # 认证卡
+        self.auth_card.title_label.setText(tr("config.auth_info"))
+        self.api_key_field.label.setText(tr("config.api_key"))
+
+        # 高级卡
+        self.advanced_card.title_label.setText(tr("config.advanced"))
+        self.base_url_field.label.setText(tr("config.base_url"))
+        self.base_url_field.widget.setPlaceholderText(tr("config.base_url_placeholder"))
+        self.proxy_field.label.setText(tr("config.proxy"))
+        self.proxy_field.widget.setPlaceholderText(tr("config.proxy_placeholder"))
+        self.chk_visual.setText(tr("config.vision_model"))
+        self.chk_visual.setToolTip(tr("config.vision_model_desc"))
+        self.chk_thinking.setText(tr("config.thinking_model"))
+        self.chk_thinking.setToolTip(tr("config.thinking_model_desc"))
+
+        # 操作按钮
+        self.save_btn.setText(tr("config.save_config"))
+        self.use_btn.setText(tr("config.enable_config"))
+        self.use_btn.setToolTip(tr("config.enable_desc"))
+        self.delete_btn.setText(tr("config.delete_config"))
+        self.delete_btn.setToolTip(tr("config.delete_desc"))
+
+        # 状态标签
+        if self.current_model_id:
+            self.status_label.setText(tr("config.editing"))
+        else:
+            self.status_label.setText(tr("config.new_config"))
+
+    def _update_list_header(self):
+        """更新模型列表头标签。"""
+        headers = self.left_panel.findChildren(StrongBodyLabel)
+        for lbl in headers:
+            if lbl.parent() is self.left_panel:
+                lbl.setText(tr("config.config_list"))
+                break
 
     def update_form_visibility(self):
         is_llm = (self.current_mode == "LLM")
@@ -946,7 +1064,7 @@ class ConfigInterface(QWidget):
         self.edit_widget.setEnabled(True)
         model_id = item.data(Qt.UserRole)
         self.current_model_id = model_id
-        self.status_label.setText("编辑中")
+        self.status_label.setText(tr("config.editing"))
 
         target = None
         if self.current_mode == "TTS":
@@ -1028,7 +1146,7 @@ class ConfigInterface(QWidget):
         pi = self._get_llm_provider_info(provider_id)
 
         # 描述
-        self.provider_desc_label.setText(pi.get("desc", ""))
+        self.provider_desc_label.setText(tr(f"config.provider.{provider_id}.desc", default=pi.get("desc", "")))
 
         # 帮助链接
         if pi.get("api_key_url"):
@@ -1051,8 +1169,8 @@ class ConfigInterface(QWidget):
 
         # API Key 提示
         self.api_key_input.setPlaceholderText(
-            "本地无需密钥" if "ollama" in provider_id else
-            f"输入 {pi['name']} 的 API Key..."
+            tr("config.local_no_key") if "ollama" in provider_id else
+            tr("config.enter_api_key")
         )
 
     def _on_quick_fill(self, index):
@@ -1072,7 +1190,7 @@ class ConfigInterface(QWidget):
         self.advanced_card.set_collapsed(False)
 
         InfoBar.success(
-            f"已填充 {key}",
+            tr("config.filled", default="已填充").format(name=key),
             f"Base URL → {info['base_url']}\nModel → {info['default_model']}",
             duration=3000,
             parent=self
@@ -1089,7 +1207,7 @@ class ConfigInterface(QWidget):
         self.model_list.clearSelection()
         self.edit_widget.setEnabled(True)
         self.current_model_id = None
-        self.status_label.setText("新建配置")
+        self.status_label.setText(tr("config.new_config"))
         self.name_input.clear()
         self.provider_combo.setCurrentIndex(0)
         self.api_key_input.clear()
@@ -1130,8 +1248,10 @@ class ConfigInterface(QWidget):
         self.model_id_input.setText(provider.get("default_model", ""))
         self.edit_widget.setEnabled(True)
         self.current_model_id = None
-        self.status_label.setText("新建配置")
-        InfoBar.success("快速配置", f"已填充 {provider['name']} 的默认配置，请检查后保存", duration=3000, parent=self)
+        self.status_label.setText(tr("config.new_config"))
+        InfoBar.success(tr("config.quick_add_title"), 
+                        tr("config.quick_add_filled_msg", default="已填充 {name} 的默认配置，请检查后保存").format(name=provider['name']),
+                        duration=3000, parent=self)
 
     def _quick_add_tts_or_image(self):
         """TTS / IMAGE 的快速添加逻辑 — 复用 QuickAddDialog 但传入 provider 列表。"""
@@ -1167,7 +1287,7 @@ class ConfigInterface(QWidget):
             self.model_id_input.setText(provider.get("default_model", ""))
             self.edit_widget.setEnabled(True)
             self.current_model_id = None
-            self.status_label.setText("新建配置")
+            self.status_label.setText(tr("config.new_config"))
 
     # ---------- 获取模型列表 ----------
 
@@ -1176,14 +1296,14 @@ class ConfigInterface(QWidget):
             base_url = self.base_url_input.text().strip()
             api_key = self.api_key_input.text().strip()
             if not base_url:
-                InfoBar.warning("提示", "请先填写接口地址 (Base URL)", duration=2000, parent=self)
+                InfoBar.warning(tr("general.tip"), tr("config.fill_base_url_first"), duration=2000, parent=self)
                 return
             if not api_key:
-                InfoBar.warning("提示", "请先填写 API 密钥", duration=2000, parent=self)
+                InfoBar.warning(tr("general.tip"), tr("config.fill_api_key_first"), duration=2000, parent=self)
                 return
 
             self.fetch_models_btn.setEnabled(False)
-            self.fetch_models_btn.setToolTip("获取中...")
+            self.fetch_models_btn.setToolTip(tr("config.models_fetching"))
             QApplication.processEvents()
 
             try:
@@ -1192,17 +1312,21 @@ class ConfigInterface(QWidget):
                 models_resp = client.models.list()
                 models = sorted([m.id for m in models_resp.data])
                 if models:
-                    dialog = ModelSelectDialog(models, "选择模型", self)
+                    dialog = ModelSelectDialog(models, tr("config.select_model_title"), self)
                     if dialog.exec_() == QDialog.Accepted and dialog.selected_model:
                         self.model_id_input.setText(dialog.selected_model)
-                        InfoBar.success("成功", f"已选择: {dialog.selected_model}", duration=2000, parent=self)
+                        InfoBar.success(tr("general.success"),
+                                        tr("config.models_fetched", default="已选择: {name}").format(name=dialog.selected_model),
+                                        duration=2000, parent=self)
                 else:
-                    InfoBar.warning("提示", "未能获取到模型列表", duration=2000, parent=self)
+                    InfoBar.warning(tr("general.tip"), tr("config.no_models"), duration=2000, parent=self)
             except Exception as e:
-                InfoBar.error("错误", f"获取失败: {e}", duration=3000, parent=self)
+                InfoBar.error(tr("general.error"),
+                              tr("config.fetch_models_failed", default="获取失败: {error}").format(error=e),
+                              duration=3000, parent=self)
             finally:
                 self.fetch_models_btn.setEnabled(True)
-                self.fetch_models_btn.setToolTip("从平台获取可用模型列表")
+                self.fetch_models_btn.setToolTip(tr("config.fetch_models"))
             return
 
         # TTS / IMAGE: 旧逻辑
@@ -1211,11 +1335,11 @@ class ConfigInterface(QWidget):
     def _fetch_models_legacy_provider(self):
         provider_type = self.provider_combo.currentData()
         if not provider_type:
-            InfoBar.warning("提示", "请先选择一个 AI 平台", duration=2000, parent=self)
+            InfoBar.warning(tr("general.tip"), tr("config.select_ai_platform_hint", default="请先选择一个 AI 平台"), duration=2000, parent=self)
             return
         metadata = get_provider_metadata(provider_type)
         if not metadata or not metadata.cls_type:
-            InfoBar.error("错误", "无法获取服务商信息", duration=2000, parent=self)
+            InfoBar.error(tr("general.error"), tr("config.cannot_get_provider_info", default="无法获取服务商信息"), duration=2000, parent=self)
             return
         config = ProviderConfig(
             id="temp_fetch", name="temp", type=provider_type,
@@ -1231,13 +1355,13 @@ class ConfigInterface(QWidget):
             provider = metadata.cls_type(config)
             models = provider.get_models()
             if models:
-                dialog = ModelSelectDialog(models, "选择模型", self)
+                dialog = ModelSelectDialog(models, tr("config.select_model", default="选择模型"), self)
                 if dialog.exec_() == QDialog.Accepted and dialog.selected_model:
                     self.model_id_input.setText(dialog.selected_model)
             else:
-                InfoBar.warning("提示", "未能获取到模型列表", duration=3000, parent=self)
+                InfoBar.warning(tr("general.tip"), tr("config.no_models_found", default="未能获取到模型列表"), duration=3000, parent=self)
         except Exception as e:
-            InfoBar.error("错误", f"获取失败: {e}", duration=3000, parent=self)
+            InfoBar.error(tr("general.error"), tr("config.fetch_failed", default="获取失败: {error}").format(error=e), duration=3000, parent=self)
         finally:
             if provider:
                 try: provider.close()
@@ -1247,11 +1371,11 @@ class ConfigInterface(QWidget):
     def fetch_voices_from_provider(self):
         provider_type = self.provider_combo.currentData()
         if not provider_type:
-            InfoBar.warning("提示", "请先选择一个语音服务商", duration=2000, parent=self)
+            InfoBar.warning(tr("general.tip"), tr("config.select_voice_provider_hint", default="请先选择一个语音服务商"), duration=2000, parent=self)
             return
         metadata = get_provider_metadata(provider_type)
         if not metadata or not metadata.cls_type:
-            InfoBar.error("错误", "无法获取服务商信息", duration=2000, parent=self)
+            InfoBar.error(tr("general.error"), tr("config.cannot_get_provider_info", default="无法获取服务商信息"), duration=2000, parent=self)
             return
         config = ProviderConfig(
             id="temp_fetch", name="temp", type=provider_type, provider_type="text_to_speech",
@@ -1266,13 +1390,13 @@ class ConfigInterface(QWidget):
             voices_data = provider.get_voices()
             voices = [v.get("id", v.get("name", str(v))) if isinstance(v, dict) else str(v) for v in voices_data]
             if voices:
-                dialog = ModelSelectDialog(voices, "选择语音", self)
+                dialog = ModelSelectDialog(voices, tr("config.select_voice", default="选择语音"), self)
                 if dialog.exec_() == QDialog.Accepted and dialog.selected_model:
                     self.voice_input.setText(dialog.selected_model)
             else:
-                InfoBar.warning("提示", "未能获取到语音列表", duration=3000, parent=self)
+                InfoBar.warning(tr("general.tip"), tr("config.no_voices_found", default="未能获取到语音列表"), duration=3000, parent=self)
         except Exception as e:
-            InfoBar.error("错误", f"获取失败: {e}", duration=3000, parent=self)
+            InfoBar.error(tr("general.error"), tr("config.fetch_failed", default="获取失败: {error}").format(error=e), duration=3000, parent=self)
         finally:
             if provider:
                 try: provider.close()
@@ -1282,7 +1406,7 @@ class ConfigInterface(QWidget):
     # ---------- 保存 / 删除 / 启用 ----------
 
     def save_model(self):
-        name = self.name_input.text().strip() or "未命名配置"
+        name = self.name_input.text().strip() or tr("config.unnamed", default="未命名配置")
         provider = self.provider_combo.currentData() or ""
         api_key = self.api_key_input.text().strip()
         base_url = self.base_url_input.text().strip()
@@ -1313,8 +1437,8 @@ class ConfigInterface(QWidget):
 
         self._reload_provider_manager()
         self._refresh_model_list_keep_selection()
-        self.status_label.setText("已保存")
-        InfoBar.success("保存成功", f"配置 \"{name}\" 已保存", duration=2000, parent=self)
+        self.status_label.setText(tr("config.saved", default="已保存"))
+        InfoBar.success(tr("config.save_success", default="保存成功"), tr("config.save_success_msg", default="配置 \"{name}\" 已保存").format(name=name), duration=2000, parent=self)
 
     def _reload_provider_manager(self):
         try:
@@ -1344,10 +1468,10 @@ class ConfigInterface(QWidget):
 
     def delete_model(self):
         if not self.current_model_id: return
-        name = self.name_input.text().strip() or "此配置"
-        box = MessageBox("确认删除", f"确定要删除 \"{name}\" 吗？", self)
-        box.yesButton.setText("删除")
-        box.cancelButton.setText("取消")
+        name = self.name_input.text().strip() or tr("config.this_config", default="此配置")
+        box = MessageBox(tr("general.confirm_delete", default="确认删除"), tr("config.confirm_delete_msg", default="确定要删除 \"{name}\" 吗？").format(name=name), self)
+        box.yesButton.setText(tr("general.delete", default="删除"))
+        box.cancelButton.setText(tr("general.cancel", default="取消"))
         if not box.exec_(): return
         if self.current_mode == "TTS":
             self.db.delete_tts_model(self.current_model_id)
@@ -1357,20 +1481,20 @@ class ConfigInterface(QWidget):
             self.db.delete_model(self.current_model_id)
         self.create_new_model()
         self.load_models()
-        InfoBar.success("已删除", f"配置 \"{name}\" 已删除", duration=2000, parent=self)
+        InfoBar.success(tr("config.deleted", default="已删除"), tr("config.deleted_msg", default="配置 \"{name}\" 已删除").format(name=name), duration=2000, parent=self)
 
     def set_active_model_handler(self):
         if not self.current_model_id: return
-        name = self.name_input.text().strip() or "未命名配置"
+        name = self.name_input.text().strip() or tr("config.unnamed", default="未命名配置")
         if self.current_mode == "TTS":
             self.db.set_active_tts_model(self.current_model_id)
-            InfoBar.success("已启用", f"\"{name}\" 设为默认语音配置", duration=2500, parent=self)
+            InfoBar.success(tr("config.enabled", default="已启用"), tr("config.enabled_tts_msg", default="\"{name}\" 设为默认语音配置").format(name=name), duration=2500, parent=self)
         elif self.current_mode == "IMAGE":
             self.db.set_active_image_model(self.current_model_id)
-            InfoBar.success("已启用", f"\"{name}\" 设为默认绘图配置", duration=2500, parent=self)
+            InfoBar.success(tr("config.enabled", default="已启用"), tr("config.enabled_image_msg", default="\"{name}\" 设为默认绘图配置").format(name=name), duration=2500, parent=self)
         else:
             self.db.set_active_model(self.current_model_id)
-            InfoBar.success("已启用", f"\"{name}\" 设为默认对话模型", duration=2500, parent=self)
+            InfoBar.success(tr("config.enabled", default="已启用"), tr("config.enabled_llm_msg", default="\"{name}\" 设为默认对话模型").format(name=name), duration=2500, parent=self)
         self._reload_provider_manager()
         self.load_models()
 
@@ -1383,7 +1507,7 @@ class QuickAddLegacyDialog(QDialog):
 
     def __init__(self, providers: list, mode: str, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("快速添加配置")
+        self.setWindowTitle(tr("config.quick_add_title", default="快速添加配置"))
         self.setMinimumWidth(500)
         self.selected_provider = None
         self.api_key = ""
@@ -1395,8 +1519,8 @@ class QuickAddLegacyDialog(QDialog):
     def _init_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
-        layout.addWidget(SubtitleLabel("选择 AI 平台", self))
-        hint = CaptionLabel("选择平台后，只需填入 API 密钥即可完成配置", self)
+        layout.addWidget(SubtitleLabel(tr("config.select_ai_platform", default="选择 AI 平台"), self))
+        hint = CaptionLabel(tr("config.quick_add_desc", default="选择平台后，只需填入 API 密钥即可完成配置"), self)
         hint.setStyleSheet("color: gray;")
         layout.addWidget(hint)
 
@@ -1417,14 +1541,14 @@ class QuickAddLegacyDialog(QDialog):
         api_layout = QVBoxLayout(self.api_section)
         api_layout.setContentsMargins(0, 0, 0, 0)
         api_layout.setSpacing(8)
-        self.api_label = BodyLabel("API 密钥", self)
+        self.api_label = BodyLabel(tr("config.api_key_label", default="API 密钥"), self)
         api_layout.addWidget(self.api_label)
         self.api_input = LineEdit(self)
         self.api_input.setEchoMode(QLineEdit.Password)
-        self.api_input.setPlaceholderText("粘贴您的 API Key...")
+        self.api_input.setPlaceholderText(tr("config.api_key_placeholder", default="粘贴您的 API Key..."))
         api_layout.addWidget(self.api_input)
         self.help_link = HyperlinkLabel(self)
-        self.help_link.setText("如何获取?")
+        self.help_link.setText(tr("config.how_to_get", default="如何获取?"))
         api_layout.addWidget(self.help_link)
         self.api_section.setVisible(False)
         layout.addWidget(self.api_section)
@@ -1433,9 +1557,9 @@ class QuickAddLegacyDialog(QDialog):
         name_layout = QVBoxLayout(self.name_section)
         name_layout.setContentsMargins(0, 0, 0, 0)
         name_layout.setSpacing(8)
-        name_layout.addWidget(BodyLabel("配置名称 (可选)", self))
+        name_layout.addWidget(BodyLabel(tr("config.config_name_optional", default="配置名称 (可选)"), self))
         self.name_input = LineEdit(self)
-        self.name_input.setPlaceholderText("默认使用平台名称")
+        self.name_input.setPlaceholderText(tr("config.default_platform_name", default="默认使用平台名称"))
         name_layout.addWidget(self.name_input)
         self.name_section.setVisible(False)
         layout.addWidget(self.name_section)
@@ -1452,7 +1576,7 @@ class QuickAddLegacyDialog(QDialog):
             btn.setStyleSheet("QPushButton { background-color: #0078d4; color: white; }" if p == provider else "")
         self.api_section.setVisible(True)
         self.name_section.setVisible(True)
-        self.api_label.setText(f"{provider['name']} API 密钥")
+        self.api_label.setText(tr("config.api_key_for_provider", default="{provider} API 密钥").format(provider=provider['name']))
         if provider.get("api_key_url"):
             self.help_link.setUrl(provider["api_key_url"])
             self.help_link.setVisible(True)
@@ -1462,11 +1586,11 @@ class QuickAddLegacyDialog(QDialog):
 
     def accept(self):
         if not self.selected_provider:
-            InfoBar.warning("提示", "请先选择一个平台", duration=2000, parent=self)
+            InfoBar.warning(tr("general.tip"), tr("config.select_platform_hint", default="请先选择一个平台"), duration=2000, parent=self)
             return
         self.api_key = self.api_input.text().strip()
         self.config_name = self.name_input.text().strip()
         if not self.api_key:
-            InfoBar.warning("提示", "请输入 API 密钥", duration=2000, parent=self)
+            InfoBar.warning(tr("general.tip"), tr("config.enter_api_key", default="请输入 API 密钥"), duration=2000, parent=self)
             return
         super().accept()

@@ -1,8 +1,9 @@
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QSpacerItem, QSizePolicy
 from PyQt5.QtCore import Qt
+from src.core.i18n import I18nManager, tr
 
 class TitleBar(QWidget):
-    def __init__(self, parent=None, title="主菜单"):
+    def __init__(self, parent=None, title=tr("titlebar.main_menu")):
         super().__init__(parent)
         self.setFixedHeight(40)
         self.parent_window = parent
@@ -19,7 +20,7 @@ class TitleBar(QWidget):
         layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
         
         # 切换主题按钮
-        self.theme_btn = QPushButton("切换主题")
+        self.theme_btn = QPushButton(tr("titlebar.toggle_theme"))
         self.theme_btn.setFixedSize(80, 25)
         self.theme_btn.clicked.connect(self.parent_window.toggle_theme)
         layout.addWidget(self.theme_btn)

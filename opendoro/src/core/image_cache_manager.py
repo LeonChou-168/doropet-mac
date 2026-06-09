@@ -10,7 +10,10 @@ class ImageCacheManager:
     _instance = None
     _initialized = False
 
-    CACHE_DIR_NAME = "cached_images"
+    CACHE_DIR_NAME = os.path.join(
+        os.getenv('LOCALAPPDATA', os.path.expanduser('~')),
+        "DoroPet", "cache", "images"
+    )
     MAX_CACHE_SIZE_MB = 500
     MAX_CACHE_AGE_DAYS = 7
     CLEANUP_THRESHOLD_RATIO = 0.8
@@ -24,7 +27,7 @@ class ImageCacheManager:
         if ImageCacheManager._initialized:
             return
 
-        self._cache_dir = os.path.join(os.getcwd(), self.CACHE_DIR_NAME)
+        self._cache_dir = self.CACHE_DIR_NAME
         self._memory_cache: Dict[str, str] = {}
         self._ensure_cache_dir()
         ImageCacheManager._initialized = True

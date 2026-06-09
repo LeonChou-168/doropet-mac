@@ -5,6 +5,7 @@ from qfluentwidgets import (
     FluentIcon, isDarkTheme
 )
 from src.core.logger import logger
+from src.core.i18n import I18nManager, tr
 
 
 class TopConfigPanel(QFrame):
@@ -22,6 +23,8 @@ class TopConfigPanel(QFrame):
         self._models = []
         self._current_model_id = None
         self.init_ui()
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
     
     def init_ui(self):
         self.setFixedHeight(60)
@@ -30,40 +33,40 @@ class TopConfigPanel(QFrame):
         main_layout.setContentsMargins(16, 8, 16, 8)
         main_layout.setSpacing(12)
         
-        self.protagonist_btn = PushButton(FluentIcon.PEOPLE, "主角配置", self)
+        self.protagonist_btn = PushButton(FluentIcon.PEOPLE, tr("galgame.top_panel.protagonist", default="主角配置"), self)
         self.protagonist_btn.clicked.connect(self.protagonist_clicked)
         main_layout.addWidget(self.protagonist_btn)
         
-        self.characters_btn = PushButton(FluentIcon.SPEAKERS, "角色配置", self)
+        self.characters_btn = PushButton(FluentIcon.SPEAKERS, tr("galgame.top_panel.characters", default="角色配置"), self)
         self.characters_btn.clicked.connect(self.characters_clicked)
         main_layout.addWidget(self.characters_btn)
         
-        self.world_btn = PushButton(FluentIcon.GLOBE, "世界观", self)
+        self.world_btn = PushButton(FluentIcon.GLOBE, tr("galgame.top_panel.world", default="世界观"), self)
         self.world_btn.clicked.connect(self.world_clicked)
         main_layout.addWidget(self.world_btn)
         
         main_layout.addStretch()
         
-        self.smart_generate_btn = PushButton(FluentIcon.ROBOT, "✨ 智能生成", self)
+        self.smart_generate_btn = PushButton(FluentIcon.ROBOT, tr("galgame.top_panel.smart_generate", default="✨ 智能生成"), self)
         self.smart_generate_btn.clicked.connect(self.smart_generate_clicked)
         main_layout.addWidget(self.smart_generate_btn)
         
         main_layout.addStretch()
         
         self.font_settings_btn = ToolButton(FluentIcon.FONT_SIZE, self)
-        self.font_settings_btn.setToolTip("字体设置")
+        self.font_settings_btn.setToolTip(tr("galgame.top_panel.font_settings_tip", default="字体设置"))
         self.font_settings_btn.clicked.connect(self.font_settings_clicked)
         main_layout.addWidget(self.font_settings_btn)
         
-        model_label = QLabel("模型:", self)
-        main_layout.addWidget(model_label)
+        self.model_label = QLabel(tr("galgame.top_panel.model_label", default="模型:"), self)
+        main_layout.addWidget(self.model_label)
         
         self.model_combo = ComboBox(self)
         self.model_combo.setFixedWidth(150)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
         main_layout.addWidget(self.model_combo)
         
-        self.start_btn = PrimaryPushButton(FluentIcon.PLAY, "开始游戏", self)
+        self.start_btn = PrimaryPushButton(FluentIcon.PLAY, tr("galgame.top_panel.start_game", default="开始游戏"), self)
         self.start_btn.clicked.connect(self.start_clicked)
         main_layout.addWidget(self.start_btn)
         
@@ -119,9 +122,21 @@ class TopConfigPanel(QFrame):
     def set_start_enabled(self, enabled: bool):
         self.start_btn.setEnabled(enabled)
         if enabled:
-            self.start_btn.setText("开始游戏")
+            self.start_btn.setText(tr("galgame.top_panel.start_game", default="开始游戏"))
         else:
-            self.start_btn.setText("生成中...")
+            self.start_btn.setText(tr("galgame.top_panel.generating", default="生成中..."))
+    
+    def refresh_ui(self, lang_code: str = None):
+        self.protagonist_btn.setText(tr("galgame.top_panel.protagonist", default="主角配置"))
+        self.characters_btn.setText(tr("galgame.top_panel.characters", default="角色配置"))
+        self.world_btn.setText(tr("galgame.top_panel.world", default="世界观"))
+        self.smart_generate_btn.setText(tr("galgame.top_panel.smart_generate", default="✨ 智能生成"))
+        self.font_settings_btn.setToolTip(tr("galgame.top_panel.font_settings_tip", default="字体设置"))
+        self.model_label.setText(tr("galgame.top_panel.model_label", default="模型:"))
+        if self.start_btn.isEnabled():
+            self.start_btn.setText(tr("galgame.top_panel.start_game", default="开始游戏"))
+        else:
+            self.start_btn.setText(tr("galgame.top_panel.generating", default="生成中..."))
     
     def update_theme(self):
         is_dark = isDarkTheme()

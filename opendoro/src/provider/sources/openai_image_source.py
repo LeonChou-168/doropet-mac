@@ -1,6 +1,6 @@
 import os
 import base64
-import tempfile
+from datetime import datetime
 from typing import Optional, List, Dict
 from openai import OpenAI
 import httpx
@@ -96,9 +96,19 @@ class ProviderOpenAIImage(ImageProvider):
         
         return ImageResponse()
     
+    def _image_save_dir(self) -> str:
+        """图片保存目录：%LOCALAPPDATA%/DoroPet/generated_images/"""
+        appdata = os.getenv('LOCALAPPDATA')
+        if appdata:
+            save_dir = os.path.join(appdata, "DoroPet", "generated_images")
+        else:
+            save_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "DoroPet", "generated_images")
+        os.makedirs(save_dir, exist_ok=True)
+        return save_dir
+
     def _save_base64_image(self, b64_data: str) -> str:
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
-            output_path = tmp_file.name
+        filename = f"gen_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        output_path = os.path.join(self._image_save_dir(), filename)
         
         image_data = base64.b64decode(b64_data)
         with open(output_path, "wb") as f:
@@ -108,9 +118,8 @@ class ProviderOpenAIImage(ImageProvider):
     
     def _download_image(self, url: str) -> str:
         import urllib.request
-        
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
-            output_path = tmp_file.name
+        filename = f"gen_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        output_path = os.path.join(self._image_save_dir(), filename)
         
         urllib.request.urlretrieve(url, output_path)
         return output_path

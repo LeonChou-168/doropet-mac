@@ -12,6 +12,7 @@ from qfluentwidgets import (
 )
 from src.core.live2d_model_manager import Live2DModelManager, Live2DModelInfo
 from src.resource_utils import resource_path
+from src.core.i18n import I18nManager, tr
 
 
 class ModelCard(CardWidget):
@@ -112,12 +113,15 @@ class ModelSelectorDialog(MessageBoxBase):
         self.current_model_path = current_model_path
         self.selected_model_path = current_model_path
         self.model_manager = Live2DModelManager()
+
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
         
         self._init_ui()
         self._load_models()
     
     def _init_ui(self):
-        self.titleLabel = SubtitleLabel("选择 Live2D 模型", self)
+        self.titleLabel = SubtitleLabel(tr("widget.model_selector.title", default="选择 Live2D 模型"), self)
         self.viewLayout.addWidget(self.titleLabel)
         
         self.content_widget = QWidget()
@@ -125,7 +129,7 @@ class ModelSelectorDialog(MessageBoxBase):
         content_layout.setContentsMargins(0, 10, 0, 0)
         content_layout.setSpacing(10)
         
-        self.info_label = BodyLabel("点击选择模型，双击确认选择")
+        self.info_label = BodyLabel(tr("widget.model_selector.click_hint", default="点击选择模型，双击确认选择"))
         content_layout.addWidget(self.info_label)
         
         self.scroll_area = QScrollArea()
@@ -154,11 +158,11 @@ class ModelSelectorDialog(MessageBoxBase):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
         
-        self.refresh_btn = PushButton(FluentIcon.SYNC, "刷新模型列表")
+        self.refresh_btn = PushButton(FluentIcon.SYNC, tr("widget.model_selector.refresh", default="刷新模型列表"))
         self.refresh_btn.clicked.connect(self._refresh_models)
         btn_layout.addWidget(self.refresh_btn)
         
-        self.import_btn = PushButton(FluentIcon.FOLDER, "从本地导入...")
+        self.import_btn = PushButton(FluentIcon.FOLDER, tr("widget.model_selector.import", default="从本地导入..."))
         self.import_btn.clicked.connect(self._import_model)
         btn_layout.addWidget(self.import_btn)
         
@@ -167,8 +171,8 @@ class ModelSelectorDialog(MessageBoxBase):
         
         self.viewLayout.addWidget(self.content_widget)
         
-        self.yesButton.setText("确认选择")
-        self.cancelButton.setText("取消")
+        self.yesButton.setText(tr("widget.model_selector.confirm", default="确认选择"))
+        self.cancelButton.setText(tr("widget.model_selector.cancel", default="取消"))
         
         self.widget.setMinimumWidth(580)
     
@@ -181,7 +185,7 @@ class ModelSelectorDialog(MessageBoxBase):
         models = self.model_manager.get_all_models()
         
         if not models:
-            empty_label = BodyLabel("未找到任何 Live2D 模型\n请将模型文件夹放入 models 目录")
+            empty_label = BodyLabel(tr("widget.model_selector.no_models", default="未找到任何 Live2D 模型\n请将模型文件夹放入 models 目录"))
             empty_label.setAlignment(Qt.AlignCenter)
             empty_label.setStyleSheet("color: #888; padding: 50px;")
             self.cards_layout.addWidget(empty_label, 0, 0)
@@ -221,9 +225,9 @@ class ModelSelectorDialog(MessageBoxBase):
     def _import_model(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择 Live2D 模型配置文件",
+            tr("widget.model_selector.file_dialog_title", default="选择 Live2D 模型配置文件"),
             "",
-            "Live2D 模型文件 (*.model3.json);;所有文件 (*.*)"
+            tr("widget.model_selector.file_dialog_filter", default="Live2D 模型文件 (*.model3.json);;所有文件 (*.*)")
         )
         
         if file_path:
@@ -234,7 +238,7 @@ class ModelSelectorDialog(MessageBoxBase):
                 self.accept()
             else:
                 from qfluentwidgets import MessageBox
-                MessageBox("模型验证失败", message, self).exec_()
+                MessageBox(tr("widget.model_selector.validation_failed", default="模型验证失败"), message, self).exec_()
     
     def validate(self):
         self.model_selected.emit(self.selected_model_path)
@@ -242,3 +246,12 @@ class ModelSelectorDialog(MessageBoxBase):
     
     def get_selected_model_path(self) -> str:
         return self.selected_model_path
+
+    def refresh_ui(self, lang_code: str = None):
+        """语言切换时刷新 UI 文本。"""
+        self.titleLabel.setText(tr("widget.model_selector.title", default="选择 Live2D 模型"))
+        self.info_label.setText(tr("widget.model_selector.click_hint", default="点击选择模型，双击确认选择"))
+        self.refresh_btn.setText(tr("widget.model_selector.refresh", default="刷新模型列表"))
+        self.import_btn.setText(tr("widget.model_selector.import", default="从本地导入..."))
+        self.yesButton.setText(tr("widget.model_selector.confirm", default="确认选择"))
+        self.cancelButton.setText(tr("widget.model_selector.cancel", default="取消"))

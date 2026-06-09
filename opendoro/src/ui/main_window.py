@@ -32,6 +32,7 @@ from src.core.logger import logger
 from src.core.font_scale_utils import apply_font_scale
 from src.core.app_theme import THEME_COLOR
 from src.core.orange_manager import OrangeManager
+from src.core.i18n import I18nManager, tr
 
 class MainWindow(FluentWindow):
     def __init__(self, version_manager=None):
@@ -90,18 +91,18 @@ class MainWindow(FluentWindow):
         self.init_window()
 
     def init_navigation(self):
-        self.addSubInterface(self.pet_status_interface, FIF.HOME, "桌宠状态")
-        self.addSubInterface(self.chat_interface, FIF.CHAT, "AI 聊天")
-        self.addSubInterface(self.music_interface, FIF.MUSIC, "音乐播放")
-        self.addSubInterface(self.galgame_interface, FIF.GAME, "Galgame")
-        self.addSubInterface(self.config_interface, FIF.ROBOT, "模型配置")
-        self.addSubInterface(self.voice_config_interface, FIF.MICROPHONE, "语音设置")
-        self.addSubInterface(self.live2d_config_interface, FIF.PHOTO, "Live2D模型")
-        self.addSubInterface(self.prompt_interface, FIF.PEOPLE, "角色扮演")
-        self.addSubInterface(self.memory_interface, FIF.SAVE, "记忆管理")
-        self.addSubInterface(self.plugin_interface, FIF.BOOK_SHELF, "插件管理")
-        self.addSubInterface(self.skills_interface, FIF.PALETTE, "技能管理")
-        self.addSubInterface(self.log_interface, FIF.COMMAND_PROMPT, "运行日志")
+        self.addSubInterface(self.pet_status_interface, FIF.HOME, tr("nav.pet_status"))
+        self.addSubInterface(self.chat_interface, FIF.CHAT, tr("nav.ai_chat"))
+        self.addSubInterface(self.music_interface, FIF.MUSIC, tr("nav.music"))
+        self.addSubInterface(self.galgame_interface, FIF.GAME, tr("nav.galgame"))
+        self.addSubInterface(self.config_interface, FIF.ROBOT, tr("nav.model_config"))
+        self.addSubInterface(self.voice_config_interface, FIF.MICROPHONE, tr("nav.voice_config"))
+        self.addSubInterface(self.live2d_config_interface, FIF.PHOTO, tr("nav.live2d_config"))
+        self.addSubInterface(self.prompt_interface, FIF.PEOPLE, tr("nav.role_play"))
+        self.addSubInterface(self.memory_interface, FIF.SAVE, tr("nav.memory"))
+        self.addSubInterface(self.plugin_interface, FIF.BOOK_SHELF, tr("nav.plugin"))
+        self.addSubInterface(self.skills_interface, FIF.PALETTE, tr("nav.skills"))
+        self.addSubInterface(self.log_interface, FIF.COMMAND_PROMPT, tr("nav.logs"))
         
         # Connect signals
         self.voice_config_interface.settingsChanged.connect(self.chat_interface.update_voice_ui_visibility)
@@ -117,8 +118,12 @@ class MainWindow(FluentWindow):
         self.navigationInterface.setCurrentItem(self.pet_status_interface.objectName())
         
         # 添加设置到底部
-        self.addSubInterface(self.update_interface, FIF.UPDATE, "软件更新", NavigationItemPosition.BOTTOM)
-        self.addSubInterface(self.settings_interface, FIF.SETTING, "通用设置", NavigationItemPosition.BOTTOM)
+        self.addSubInterface(self.update_interface, FIF.UPDATE, tr("nav.update"), NavigationItemPosition.BOTTOM)
+        self.addSubInterface(self.settings_interface, FIF.SETTING, tr("nav.settings"), NavigationItemPosition.BOTTOM)
+
+        # 监听语言切换，刷新导航栏
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self._refresh_navigation_labels)
 
     def init_window(self):
         icon_path = resource_path("data/icons/app.png")
@@ -133,11 +138,11 @@ class MainWindow(FluentWindow):
         # 1. 创建按钮
         self.pin_btn = TransparentToolButton(FIF.PIN, self)
         self.pin_btn.setCheckable(True)
-        self.pin_btn.setToolTip("置顶窗口")
+        self.pin_btn.setToolTip(tr("titlebar.pin"))
         self.pin_btn.clicked.connect(self.toggle_pinning)
 
         self.theme_btn = TransparentToolButton(FIF.CONSTRACT, self)
-        self.theme_btn.setToolTip("切换主题")
+        self.theme_btn.setToolTip(tr("titlebar.toggle_theme"))
         self.theme_btn.clicked.connect(self.toggle_theme)
 
         # 2. 添加到标题栏布局
@@ -148,6 +153,30 @@ class MainWindow(FluentWindow):
         
         # 添加间距
         self.titleBar.layout().insertSpacing(self.titleBar.layout().count() - 3, 10)
+
+    def _refresh_navigation_labels(self, lang_code: str):
+        """语言切换时刷新导航栏标签和标题栏提示。"""
+        nav_items = [
+            (self.pet_status_interface, "nav.pet_status"),
+            (self.chat_interface, "nav.ai_chat"),
+            (self.music_interface, "nav.music"),
+            (self.galgame_interface, "nav.galgame"),
+            (self.config_interface, "nav.model_config"),
+            (self.voice_config_interface, "nav.voice_config"),
+            (self.live2d_config_interface, "nav.live2d_config"),
+            (self.prompt_interface, "nav.role_play"),
+            (self.memory_interface, "nav.memory"),
+            (self.plugin_interface, "nav.plugin"),
+            (self.skills_interface, "nav.skills"),
+            (self.log_interface, "nav.logs"),
+            (self.update_interface, "nav.update"),
+            (self.settings_interface, "nav.settings"),
+        ]
+        for widget, key in nav_items:
+            self.navigationInterface.widget(widget.objectName()).setText(tr(key))
+        # 刷新标题栏提示
+        self.pin_btn.setToolTip(tr("titlebar.pin") if not self.pin_btn.isChecked() else tr("titlebar.unpin"))
+        self.theme_btn.setToolTip(tr("titlebar.toggle_theme"))
 
     def toggle_pinning(self):
         hwnd = int(self.winId())
@@ -169,11 +198,11 @@ class MainWindow(FluentWindow):
         if self.pin_btn.isChecked():
             # Set Always on Top
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
-            self.pin_btn.setToolTip("取消置顶")
+            self.pin_btn.setToolTip(tr("titlebar.unpin"))
         else:
             # Remove Always on Top
             SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags)
-            self.pin_btn.setToolTip("置顶窗口")
+            self.pin_btn.setToolTip(tr("titlebar.pin"))
 
     def _switch_to_chat(self):
         self.switchTo(self.chat_interface)
@@ -183,12 +212,12 @@ class MainWindow(FluentWindow):
 
     def _on_doro_focus_started(self):
         if hasattr(self, 'live2d_widget') and self.live2d_widget:
-            self.live2d_widget.talk("加油！我不打扰你~", 3000)
+            self.live2d_widget.talk(tr("pet.encourage"), 3000)
 
     def _on_doro_pomodoro_completed(self, focus_minutes: int = 0):
         if hasattr(self, 'live2d_widget') and self.live2d_widget:
             orange_count = self._orange_manager.balance if self._orange_manager else 0
-            self.live2d_widget.talk(f"太棒了！一个欧润吉钟完成！🍊×{orange_count}", 4000)
+            self.live2d_widget.talk(tr("pet.pomodoro_done").format(orange_count=orange_count), 4000)
             try:
                 self.live2d_widget.set_expression_safe("stars")
             except Exception:
@@ -196,7 +225,7 @@ class MainWindow(FluentWindow):
 
     def _on_doro_focus_interrupted(self):
         if hasattr(self, 'live2d_widget') and self.live2d_widget:
-            self.live2d_widget.talk("咦？分心了吗？没关系，重新开始~", 3500)
+            self.live2d_widget.talk(tr("pet.distracted"), 3500)
             try:
                 self.live2d_widget.set_expression_safe("question")
             except Exception:
@@ -205,7 +234,7 @@ class MainWindow(FluentWindow):
     def _on_doro_streak_warning(self, minutes: int):
         if hasattr(self, 'live2d_widget') and self.live2d_widget:
             hours = minutes / 60
-            self.live2d_widget.talk(f"你已经连续专注 {hours:.0f} 小时了，休息一下吧~", 4000)
+            self.live2d_widget.talk(tr("pet.streak_warning").format(hours=hours), 4000)
             try:
                 self.live2d_widget.set_expression_safe("bag")
             except Exception:
@@ -213,7 +242,7 @@ class MainWindow(FluentWindow):
 
     def _on_doro_idle_reminder(self):
         if hasattr(self, 'live2d_widget') and self.live2d_widget:
-            self.live2d_widget.talk("今天还没有开始专注哦，一起努力吧！", 4000)
+            self.live2d_widget.talk(tr("pet.idle_reminder"), 4000)
             try:
                 self.live2d_widget.set_expression_safe("exclamation")
             except Exception:
@@ -221,7 +250,7 @@ class MainWindow(FluentWindow):
 
     def _on_doro_level_changed(self, level: int, title: str):
         if hasattr(self, 'live2d_widget') and self.live2d_widget:
-            self.live2d_widget.talk(f"我升级啦！现在是 Lv.{level} {title}！🍊", 5000)
+            self.live2d_widget.talk(tr("pet.level_up").format(level=level, title=title), 5000)
             try:
                 self.live2d_widget.set_expression_safe("stars")
             except Exception:

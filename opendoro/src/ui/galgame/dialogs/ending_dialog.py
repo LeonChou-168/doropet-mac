@@ -11,15 +11,17 @@ from qfluentwidgets import (
 )
 
 from ..models import GameEnding
+from src.core.i18n import I18nManager, tr
 
 
 class EndingDialog(QDialog):
     def __init__(self, ending: GameEnding, parent=None):
         super().__init__(parent)
         self.ending = ending
-        self.setWindowTitle("游戏结局")
+        self.setWindowTitle(tr("galgame.ending_dialog.title", default="游戏结局"))
         self.setMinimumSize(600, 500)
         self.init_ui()
+        I18nManager.get_instance().languageChanged.connect(self.refresh_ui)
     
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -77,12 +79,24 @@ class EndingDialog(QDialog):
         stats_layout.setContentsMargins(16, 12, 16, 12)
         stats_layout.setSpacing(24)
         
-        stats_layout.addWidget(self._create_stat_item("最终好感度", str(self.ending.final_affection)))
-        stats_layout.addWidget(self._create_stat_item("总章节", str(self.ending.total_chapters)))
-        stats_layout.addWidget(self._create_stat_item("游玩时长", self.ending.play_time))
+        stats_layout.addWidget(self._create_stat_item(
+            tr("galgame.ending_dialog.final_affection", default="最终好感度"),
+            str(self.ending.final_affection)
+        ))
+        stats_layout.addWidget(self._create_stat_item(
+            tr("galgame.ending_dialog.total_chapters", default="总章节"),
+            str(self.ending.total_chapters)
+        ))
+        stats_layout.addWidget(self._create_stat_item(
+            tr("galgame.ending_dialog.play_time", default="游玩时长"),
+            self.ending.play_time
+        ))
         
         if self.ending.character_name:
-            stats_layout.addWidget(self._create_stat_item("结局角色", self.ending.character_name))
+            stats_layout.addWidget(self._create_stat_item(
+                tr("galgame.ending_dialog.ending_character", default="结局角色"),
+                self.ending.character_name
+            ))
         
         stats_layout.addStretch()
         layout.addWidget(stats_frame)
@@ -91,13 +105,13 @@ class EndingDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         
-        continue_btn = PushButton("继续游戏", self)
-        continue_btn.clicked.connect(self._on_continue)
-        btn_layout.addWidget(continue_btn)
+        self.continue_btn = PushButton(tr("galgame.ending_dialog.continue_game", default="继续游戏"), self)
+        self.continue_btn.clicked.connect(self._on_continue)
+        btn_layout.addWidget(self.continue_btn)
         
-        new_game_btn = PrimaryPushButton("开始新游戏", self)
-        new_game_btn.clicked.connect(self._on_new_game)
-        btn_layout.addWidget(new_game_btn)
+        self.new_game_btn = PrimaryPushButton(tr("galgame.ending_dialog.new_game", default="开始新游戏"), self)
+        self.new_game_btn.clicked.connect(self._on_new_game)
+        btn_layout.addWidget(self.new_game_btn)
         
         layout.addLayout(btn_layout)
         
@@ -135,6 +149,43 @@ class EndingDialog(QDialog):
     
     def should_start_new_game(self) -> bool:
         return self._new_game_clicked
+    
+    def refresh_ui(self):
+        self.setWindowTitle(tr("galgame.ending_dialog.title", default="游戏结局"))
+        self.continue_btn.setText(tr("galgame.ending_dialog.continue_game", default="继续游戏"))
+        self.new_game_btn.setText(tr("galgame.ending_dialog.new_game", default="开始新游戏"))
+        # Rebuild stats items since they're recreated
+        self._rebuild_stats()
+    
+    def _rebuild_stats(self):
+        stats_frame = self.findChild(QFrame, "statsFrame")
+        if stats_frame:
+            # Remove old stat items
+            stats_layout = stats_frame.layout()
+            while stats_layout.count():
+                item = stats_layout.takeAt(0)
+                if item and item.widget():
+                    item.widget().deleteLater()
+            
+            # Re-add stat items
+            stats_layout.addWidget(self._create_stat_item(
+                tr("galgame.ending_dialog.final_affection", default="最终好感度"),
+                str(self.ending.final_affection)
+            ))
+            stats_layout.addWidget(self._create_stat_item(
+                tr("galgame.ending_dialog.total_chapters", default="总章节"),
+                str(self.ending.total_chapters)
+            ))
+            stats_layout.addWidget(self._create_stat_item(
+                tr("galgame.ending_dialog.play_time", default="游玩时长"),
+                self.ending.play_time
+            ))
+            if self.ending.character_name:
+                stats_layout.addWidget(self._create_stat_item(
+                    tr("galgame.ending_dialog.ending_character", default="结局角色"),
+                    self.ending.character_name
+                ))
+            stats_layout.addStretch()
     
     def update_theme(self):
         is_dark = isDarkTheme()
@@ -180,38 +231,41 @@ class EndingListDialog(QDialog):
     def __init__(self, endings, parent=None):
         super().__init__(parent)
         self.endings = endings
-        self.setWindowTitle("结局记录")
+        self.setWindowTitle(tr("galgame.ending_dialog.list_title", default="结局记录"))
         self.setMinimumSize(500, 400)
         self.init_ui()
+        I18nManager.get_instance().languageChanged.connect(self.refresh_ui)
     
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
         
-        title = TitleLabel("🏆 结局记录", self)
-        layout.addWidget(title)
+        self.title = TitleLabel(tr("galgame.ending_dialog.list_title", default="🏆 结局记录"), self)
+        layout.addWidget(self.title)
         
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         
         container = QWidget()
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(8)
+        self.container_layout = QVBoxLayout(container)
+        self.container_layout.setContentsMargins(0, 0, 0, 0)
+        self.container_layout.setSpacing(8)
         
+        self._ending_cards = []
         for ending in self.endings:
             card = self._create_ending_card(ending)
-            container_layout.addWidget(card)
+            self.container_layout.addWidget(card)
+            self._ending_cards.append(card)
         
-        container_layout.addStretch()
+        self.container_layout.addStretch()
         scroll.setWidget(container)
         layout.addWidget(scroll)
         
-        close_btn = PushButton("关闭", self)
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn, alignment=Qt.AlignRight)
+        self.close_btn = PushButton(tr("galgame.ending_dialog.close", default="关闭"), self)
+        self.close_btn.clicked.connect(self.accept)
+        layout.addWidget(self.close_btn, alignment=Qt.AlignRight)
         
         self.update_theme()
     
@@ -246,10 +300,35 @@ class EndingListDialog(QDialog):
         
         layout.addLayout(info_layout, 1)
         
-        stats_label = CaptionLabel(f"好感度: {ending.final_affection} | 章节: {ending.total_chapters}", self)
+        stats_label = CaptionLabel(
+            tr("galgame.ending_dialog.stats_format", default="好感度: {affection} | 章节: {chapters}").format(
+                affection=ending.final_affection, chapters=ending.total_chapters
+            ),
+            self
+        )
         layout.addWidget(stats_label)
         
         return card
+    
+    def refresh_ui(self):
+        self.setWindowTitle(tr("galgame.ending_dialog.list_title", default="结局记录"))
+        self.title.setText(tr("galgame.ending_dialog.list_title", default="🏆 结局记录"))
+        self.close_btn.setText(tr("galgame.ending_dialog.close", default="关闭"))
+        
+        # Rebuild ending card stats labels
+        self._rebuild_cards()
+    
+    def _rebuild_cards(self):
+        # Remove old cards
+        for card in self._ending_cards:
+            self.container_layout.removeWidget(card)
+            card.deleteLater()
+        
+        self._ending_cards = []
+        for ending in self.endings:
+            card = self._create_ending_card(ending)
+            self.container_layout.insertWidget(self.container_layout.count() - 1, card)
+            self._ending_cards.append(card)
     
     def update_theme(self):
         is_dark = isDarkTheme()

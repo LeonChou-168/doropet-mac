@@ -42,6 +42,8 @@ class DoroDeps:
     generated_images: list = field(default_factory=list)
     db: Any = None  # ChatDatabase instance
     memory_manager: Any = None  # MemoryManager instance
+    available_images: list[str] = field(default_factory=list)
+    vision_model_data: Any = None
 
 
 # ---------------------------------------------------------------------------
@@ -205,8 +207,11 @@ def create_doro_agent(
     if capabilities is None:
         capabilities = list(ALL_CAPABILITIES)
 
-    # OpenAI 兼容 provider（如 DeepSeek）不支持原生 WebSearchTool
-    if provider_id == "openai-compatible":
+    # 仅以下官方 provider 支持原生 WebSearchTool：
+    # OpenAI / Anthropic / Groq / Google (Gemini)
+    # 注意：openai-compatible 及其他 provider 均使用 OpenAIChatModel，不支持
+    WEB_SEARCH_PROVIDERS = {"openai", "anthropic", "groq", "gemini"}
+    if provider_id not in WEB_SEARCH_PROVIDERS:
         capabilities = [c for c in capabilities if c != CAPABILITY_WEB_SEARCH]
 
     # 创建工具集

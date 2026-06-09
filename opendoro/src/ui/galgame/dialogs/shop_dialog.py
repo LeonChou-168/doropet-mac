@@ -11,6 +11,7 @@ from qfluentwidgets import (
 
 from ..models import GameItem, GameState
 from ..database import GalgameDatabase
+from src.core.i18n import I18nManager, tr
 
 
 class ShopDialog(QDialog):
@@ -20,116 +21,117 @@ class ShopDialog(QDialog):
         self._current_state = current_state
         self._items = []
         self._purchased_items = []
-        self.setWindowTitle("商店")
+        self.setWindowTitle(tr("galgame.dialog.shop.title", default="商店"))
         self.setMinimumSize(500, 450)
         self.init_ui()
         self._load_items()
-    
+        I18nManager.get_instance().languageChanged.connect(self.refresh_ui)
+
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
-        
+
         header_layout = QHBoxLayout()
-        
-        title = TitleLabel("商店", self)
-        header_layout.addWidget(title)
-        
+
+        self.title_label = TitleLabel(tr("galgame.dialog.shop.title", default="商店"), self)
+        header_layout.addWidget(self.title_label)
+
         header_layout.addStretch()
-        
-        self.currency_label = BodyLabel(f"💰 当前金币: {self._current_state.currency}", self)
+
+        self.currency_label = BodyLabel(f"💰 {tr('galgame.dialog.shop.current_gold', default='当前金币:')} {self._current_state.currency}", self)
         header_layout.addWidget(self.currency_label)
-        
+
         layout.addLayout(header_layout)
-        
+
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        
+
         self.items_container = QWidget()
         self.items_layout = QVBoxLayout(self.items_container)
         self.items_layout.setContentsMargins(0, 0, 0, 0)
         self.items_layout.setSpacing(8)
-        
+
         scroll.setWidget(self.items_container)
         layout.addWidget(scroll)
-        
+
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        
-        close_btn = PushButton("关闭", self)
-        close_btn.clicked.connect(self.accept)
-        btn_layout.addWidget(close_btn)
-        
+
+        self.close_btn = PushButton(tr("galgame.dialog.shop.close", default="关闭"), self)
+        self.close_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(self.close_btn)
+
         layout.addLayout(btn_layout)
-        
+
         self.update_theme()
-    
+
     def _load_items(self):
         self._items = self._db.get_items()
-        
+
         for item in self._items:
             card = self._create_item_card(item)
             self.items_layout.addWidget(card)
-        
+
         self.items_layout.addStretch()
-    
+
     def _create_item_card(self, item: GameItem) -> QFrame:
         card = QFrame()
         card.setObjectName("itemCard")
-        
+
         layout = QHBoxLayout(card)
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(12)
-        
+
         info_layout = QVBoxLayout()
         info_layout.setSpacing(4)
-        
+
         name_label = BodyLabel(item.name, card)
         name_label.setObjectName("itemName")
         font = name_label.font()
         font.setBold(True)
         name_label.setFont(font)
         info_layout.addWidget(name_label)
-        
+
         desc_label = BodyLabel(item.description, card)
         desc_label.setObjectName("itemDesc")
         info_layout.addWidget(desc_label)
-        
+
         layout.addLayout(info_layout)
         layout.addStretch()
-        
+
         price_label = BodyLabel(f"💰 {item.price}", card)
         price_label.setObjectName("itemPrice")
         layout.addWidget(price_label)
-        
-        buy_btn = PrimaryPushButton("购买", card)
+
+        buy_btn = PrimaryPushButton(tr("galgame.dialog.shop.buy", default="购买"), card)
         buy_btn.setProperty("item_id", item.id)
         buy_btn.setProperty("item_price", item.price)
         buy_btn.setProperty("item_name", item.name)
         buy_btn.clicked.connect(self._buy_item)
-        
+
         if self._current_state.currency < item.price:
             buy_btn.setEnabled(False)
-            buy_btn.setText("金币不足")
-        
+            buy_btn.setText(tr("galgame.dialog.shop.insufficient_gold", default="金币不足"))
+
         layout.addWidget(buy_btn)
-        
+
         return card
-    
+
     def _buy_item(self):
         btn = self.sender()
         if not btn:
             return
-        
+
         item_id = btn.property("item_id")
         item_price = btn.property("item_price")
         item_name = btn.property("item_name")
-        
+
         if self._current_state.currency >= item_price:
             self._current_state.currency -= item_price
             self._purchased_items.append(item_id)
-            
+
             item_data = None
             for item in self._items:
                 if item.id == item_id:
@@ -143,41 +145,57 @@ class ShopDialog(QDialog):
                         'icon': item.icon
                     }
                     break
-            
+
             if item_data:
                 self._current_state.inventory.append(item_data)
-            
-            self.currency_label.setText(f"💰 当前金币: {self._current_state.currency}")
-            
+
+            self.currency_label.setText(f"💰 {tr('galgame.dialog.shop.current_gold', default='当前金币:')} {self._current_state.currency}")
+
             btn.setEnabled(False)
-            btn.setText("已购买")
-            
+            btn.setText(tr("galgame.dialog.shop.purchased", default="已购买"))
+
             self._update_buttons()
-    
+
     def _update_buttons(self):
         for i in range(self.items_layout.count()):
             card = self.items_layout.itemAt(i).widget()
             if card and isinstance(card, QFrame):
                 for child in card.findChildren(PushButton):
-                    if child.text() == "购买":
-                        price = child.property("item_price")
+                    price = child.property("item_price")
+                    if price is not None and child.text() != tr("galgame.dialog.shop.purchased", default="已购买"):
                         if self._current_state.currency < price:
                             child.setEnabled(False)
-                            child.setText("金币不足")
-    
+                            child.setText(tr("galgame.dialog.shop.insufficient_gold", default="金币不足"))
+
     def get_purchased_items(self) -> List[int]:
         return self._purchased_items
-    
+
     def get_updated_state(self) -> GameState:
         return self._current_state
-    
+
+    def refresh_ui(self):
+        self.setWindowTitle(tr("galgame.dialog.shop.title", default="商店"))
+        self.title_label.setText(tr("galgame.dialog.shop.title", default="商店"))
+        self.currency_label.setText(f"💰 {tr('galgame.dialog.shop.current_gold', default='当前金币:')} {self._current_state.currency}")
+        self.close_btn.setText(tr("galgame.dialog.shop.close", default="关闭"))
+
+        # Refresh item card buttons
+        for i in range(self.items_layout.count()):
+            card = self.items_layout.itemAt(i).widget()
+            if card and isinstance(card, QFrame):
+                for child in card.findChildren(PrimaryPushButton):
+                    child.setText(tr("galgame.dialog.shop.buy", default="购买"))
+                    if self._current_state.currency < child.property("item_price"):
+                        child.setEnabled(False)
+                        child.setText(tr("galgame.dialog.shop.insufficient_gold", default="金币不足"))
+
     def update_theme(self):
         is_dark = isDarkTheme()
         bg_color = "#2d2d2d" if is_dark else "#ffffff"
         card_bg = "#3d3d3d" if is_dark else "#f8f8f8"
         text_color = "#e0e0e0" if is_dark else "#333333"
         border_color = "#404040" if is_dark else "#e0e0e0"
-        
+
         self.setStyleSheet(f"""
             QDialog {{
                 background-color: {bg_color};

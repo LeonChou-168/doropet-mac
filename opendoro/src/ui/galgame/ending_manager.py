@@ -4,6 +4,7 @@ from .models import GameState, AffectionState, GameEnding, EndingType, EndingCon
 from .database import GalgameDatabase
 from src.provider.manager import ProviderManager
 from src.core.logger import logger
+from src.core.i18n import tr
 
 
 class EndingManager:
@@ -16,23 +17,23 @@ class EndingManager:
         return [
             EndingCondition(
                 ending_type="perfect",
-                condition_name="完美结局",
-                condition_description="与某位角色达成完美结局，好感度达到100且专一"
+                condition_name=tr("galgame.ending.condition.perfect.name", default="完美结局"),
+                condition_description=tr("galgame.ending.condition.perfect.desc", default="与某位角色达成完美结局，好感度达到100且专一")
             ),
             EndingCondition(
                 ending_type="harem",
-                condition_name="后宫结局",
-                condition_description="与多位角色保持亲密关系，好感度达到100"
+                condition_name=tr("galgame.ending.condition.harem.name", default="后宫结局"),
+                condition_description=tr("galgame.ending.condition.harem.desc", default="与多位角色保持亲密关系，好感度达到100")
             ),
             EndingCondition(
                 ending_type="normal",
-                condition_name="普通结局",
-                condition_description="游戏超过10章，最高好感度达到70以上"
+                condition_name=tr("galgame.ending.condition.normal.name", default="普通结局"),
+                condition_description=tr("galgame.ending.condition.normal.desc", default="游戏超过10章，最高好感度达到70以上")
             ),
             EndingCondition(
                 ending_type="lonely",
-                condition_name="孤独结局",
-                condition_description="游戏超过10章，最高好感度低于70"
+                condition_name=tr("galgame.ending.condition.lonely.name", default="孤独结局"),
+                condition_description=tr("galgame.ending.condition.lonely.desc", default="游戏超过10章，最高好感度低于70")
             ),
         ]
     
@@ -76,40 +77,40 @@ class EndingManager:
     ) -> GameEnding:
         ending_titles = {
             "perfect": {
-                "prefix": "💕 完美结局：",
+                "prefix": tr("galgame.ending.prefix.perfect", default="💕 完美结局："),
                 "titles": [
-                    "永恒的誓言",
-                    "命中注定的相遇",
-                    "幸福的终点",
-                    "爱的告白",
-                    "携手共度余生"
+                    tr("galgame.ending.title.perfect.0", default="永恒的誓言"),
+                    tr("galgame.ending.title.perfect.1", default="命中注定的相遇"),
+                    tr("galgame.ending.title.perfect.2", default="幸福的终点"),
+                    tr("galgame.ending.title.perfect.3", default="爱的告白"),
+                    tr("galgame.ending.title.perfect.4", default="携手共度余生")
                 ]
             },
             "harem": {
-                "prefix": "🌸 后宫结局：",
+                "prefix": tr("galgame.ending.prefix.harem", default="🌸 后宫结局："),
                 "titles": [
-                    "众星捧月",
-                    "幸福的烦恼",
-                    "难以抉择的心",
-                    "被爱包围的日子"
+                    tr("galgame.ending.title.harem.0", default="众星捧月"),
+                    tr("galgame.ending.title.harem.1", default="幸福的烦恼"),
+                    tr("galgame.ending.title.harem.2", default="难以抉择的心"),
+                    tr("galgame.ending.title.harem.3", default="被爱包围的日子")
                 ]
             },
             "normal": {
-                "prefix": "📖 普通结局：",
+                "prefix": tr("galgame.ending.prefix.normal", default="📖 普通结局："),
                 "titles": [
-                    "未完的故事",
-                    "新的开始",
-                    "继续前行",
-                    "平凡的日子"
+                    tr("galgame.ending.title.normal.0", default="未完的故事"),
+                    tr("galgame.ending.title.normal.1", default="新的开始"),
+                    tr("galgame.ending.title.normal.2", default="继续前行"),
+                    tr("galgame.ending.title.normal.3", default="平凡的日子")
                 ]
             },
             "lonely": {
-                "prefix": "💔 孤独结局：",
+                "prefix": tr("galgame.ending.prefix.lonely", default="💔 孤独结局："),
                 "titles": [
-                    "独自一人",
-                    "错过的缘分",
-                    "孤独的旅程",
-                    "无人相伴"
+                    tr("galgame.ending.title.lonely.0", default="独自一人"),
+                    tr("galgame.ending.title.lonely.1", default="错过的缘分"),
+                    tr("galgame.ending.title.lonely.2", default="孤独的旅程"),
+                    tr("galgame.ending.title.lonely.3", default="无人相伴")
                 ]
             }
         }
@@ -212,8 +213,7 @@ class EndingManager:
         return ending_prompts.get(ending_type, ending_prompts["normal"])
     
     def _get_default_ending_story(self, ending_type: str, character_name: str) -> str:
-        default_stories = {
-            "perfect": f"""
+        perfect_story = tr("galgame.ending.story.perfect", default="""
 时光荏苒，经历了无数的冒险与挑战，你与{character_name}终于走到了一起。
 
 在那个特别的日子里，{character_name}微笑着对你说："谢谢你一直以来的陪伴，我愿意与你一起，走过未来的每一天。"
@@ -221,8 +221,9 @@ class EndingManager:
 阳光洒在你们的身上，温暖而美好。这是属于你们的完美结局，也是新故事的开始。
 
 💕 **恭喜达成完美结局！**
-""",
-            "harem": f"""
+""")
+        
+        harem_story = tr("galgame.ending.story.harem", default="""
 在这个充满可能性的世界里，你与{character_name}都建立了深厚的感情。
 
 虽然这样的状况让你有些困扰，但每个人都在用自己的方式关心着你。或许，这就是所谓的"幸福的烦恼"吧。
@@ -230,44 +231,58 @@ class EndingManager:
 未来的路还很长，你会如何选择呢？
 
 🌸 **达成后宫结局**
-""",
-            "normal": """
+""")
+        
+        normal_story = tr("galgame.ending.story.normal", default="""
 故事似乎还没有结束。虽然你与角色们的关系还在发展中，但这正是生活的常态。
 
 每一天都是新的开始，每一次相遇都可能改变命运。也许在未来的某一天，你会找到真正属于自己的幸福。
 
 📖 **达成普通结局**
-""",
-            "lonely": """
+""")
+        
+        lonely_story = tr("galgame.ending.story.lonely", default="""
 独自走在熟悉的街道上，你开始思考：是不是应该更主动地去了解身边的人？
 
 孤独并不可怕，可怕的是放弃改变的机会。也许，下一个转角，就会有新的相遇在等着你。
 
 💔 **达成孤独结局**
-"""
+""")
+        
+        default_stories = {
+            "perfect": perfect_story.format(character_name=character_name),
+            "harem": harem_story.format(character_name=character_name) if character_name else harem_story,
+            "normal": normal_story,
+            "lonely": lonely_story
         }
         
         return default_stories.get(ending_type, default_stories["normal"])
     
     def _get_ending_description(self, ending_type: str, character_name: str) -> str:
+        perfect_desc = tr("galgame.ending.description.perfect", default="与{character_name}达成了完美结局，两人携手共度余生。")
+        harem_desc = tr("galgame.ending.description.harem", default="与多位角色保持了亲密的关系，享受着被爱包围的幸福。")
+        normal_desc = tr("galgame.ending.description.normal", default="故事暂时告一段落，但未来还有无限可能。")
+        lonely_desc = tr("galgame.ending.description.lonely", default="未能与任何角色建立深厚的关系，需要重新审视自己。")
+        fallback_desc = tr("galgame.ending.description.fallback", default="故事结束。")
+        
         descriptions = {
-            "perfect": f"与{character_name}达成了完美结局，两人携手共度余生。",
-            "harem": "与多位角色保持了亲密的关系，享受着被爱包围的幸福。",
-            "normal": "故事暂时告一段落，但未来还有无限可能。",
-            "lonely": "未能与任何角色建立深厚的关系，需要重新审视自己。"
+            "perfect": perfect_desc.format(character_name=character_name) if character_name else perfect_desc,
+            "harem": harem_desc,
+            "normal": normal_desc,
+            "lonely": lonely_desc
         }
-        return descriptions.get(ending_type, "故事结束。")
+        return descriptions.get(ending_type, fallback_desc)
     
     def _calculate_play_time(self, state: GameState) -> str:
         total_messages = len(state.messages)
         estimated_minutes = total_messages * 2
         
         if estimated_minutes < 60:
-            return f"{estimated_minutes}分钟"
+            return tr("galgame.ending.play_time.minutes", default="{}分钟").format(estimated_minutes)
         else:
             hours = estimated_minutes // 60
             minutes = estimated_minutes % 60
-            return f"{hours}小时{minutes}分钟"
+            return tr("galgame.ending.play_time.hours_minutes", default="{}小时{}分钟").format(hours, minutes)
     
     def save_ending(self, ending: GameEnding, save_id: int = 0) -> int:
         ending.save_id = save_id

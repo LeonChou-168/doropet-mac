@@ -3,6 +3,7 @@ from PyQt5.QtCore import Qt, QPoint, pyqtSignal, QPropertyAnimation, QEasingCurv
 from PyQt5.QtGui import QPixmap
 from qfluentwidgets import TransparentToolButton, FluentIcon as FIF, isDarkTheme
 
+from src.core.i18n import I18nManager, tr
 from src.services.global_music_player import GlobalMusicPlayer
 from src.ui.music.network_manager import NetworkManager
 
@@ -115,6 +116,9 @@ class HoverVolumeWidget(QWidget):
         super().__init__(parent)
         self.setFixedSize(70, 20)
 
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -122,7 +126,7 @@ class HoverVolumeWidget(QWidget):
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(0, 100)
         self.slider.setValue(100)
-        self.slider.setToolTip("音量")
+        self.slider.setToolTip(tr("music.mini_window.volume", default="音量"))
         self.slider.valueChanged.connect(self._on_slider_changed)
         layout.addWidget(self.slider)
 
@@ -133,6 +137,10 @@ class HoverVolumeWidget(QWidget):
         self.slider.blockSignals(True)
         self.slider.setValue(value)
         self.slider.blockSignals(False)
+
+    def refresh_ui(self, lang_code: str = None):
+        """语言切换时刷新 UI 文本。"""
+        self.slider.setToolTip(tr("music.mini_window.volume", default="音量"))
 
 
 class MiniMusicWindow(QWidget):
@@ -151,6 +159,9 @@ class MiniMusicWindow(QWidget):
         self._cover_url = ""
         self._expanded = False
         self._expand_anim = None
+
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
 
         self._init_window()
         self._init_ui()
@@ -191,7 +202,7 @@ class MiniMusicWindow(QWidget):
         top_row.setContentsMargins(0, 0, 0, 0)
         top_row.setSpacing(4)
 
-        self.track_label = QLabel("未加载音乐")
+        self.track_label = QLabel(tr("music.mini_window.no_track", default="未加载音乐"))
         self.track_label.setObjectName("trackNameLabel")
         self.track_label.setMaximumWidth(120)
         top_row.addWidget(self.track_label)
@@ -201,7 +212,7 @@ class MiniMusicWindow(QWidget):
         self.close_btn = TransparentToolButton(FIF.CLOSE, self)
         self.close_btn.setFixedSize(16, 16)
         self.close_btn.setIconSize(self.close_btn.size())
-        self.close_btn.setToolTip("关闭小窗")
+        self.close_btn.setToolTip(tr("music.mini_window.close", default="关闭小窗"))
         self.close_btn.clicked.connect(self.hide)
         top_row.addWidget(self.close_btn)
 
@@ -220,21 +231,21 @@ class MiniMusicWindow(QWidget):
         self.prev_btn = TransparentToolButton(FIF.CARE_LEFT_SOLID, self)
         self.prev_btn.setFixedSize(16, 16)
         self.prev_btn.setIconSize(self.prev_btn.size())
-        self.prev_btn.setToolTip("上一首")
+        self.prev_btn.setToolTip(tr("music.mini_window.previous", default="上一首"))
         self.prev_btn.clicked.connect(self._play_previous)
         controls.addWidget(self.prev_btn)
 
         self.play_btn = TransparentToolButton(FIF.PLAY, self)
         self.play_btn.setFixedSize(18, 18)
         self.play_btn.setIconSize(self.play_btn.size())
-        self.play_btn.setToolTip("播放")
+        self.play_btn.setToolTip(tr("music.mini_window.play", default="播放"))
         self.play_btn.clicked.connect(self._toggle_play)
         controls.addWidget(self.play_btn)
 
         self.next_btn = TransparentToolButton(FIF.CARE_RIGHT_SOLID, self)
         self.next_btn.setFixedSize(16, 16)
         self.next_btn.setIconSize(self.next_btn.size())
-        self.next_btn.setToolTip("下一首")
+        self.next_btn.setToolTip(tr("music.mini_window.next", default="下一首"))
         self.next_btn.clicked.connect(self._play_next)
         controls.addWidget(self.next_btn)
 
@@ -263,10 +274,10 @@ class MiniMusicWindow(QWidget):
     def _on_state_changed(self, is_playing):
         if is_playing:
             self.play_btn.setIcon(FIF.PAUSE)
-            self.play_btn.setToolTip("暂停")
+            self.play_btn.setToolTip(tr("music.mini_window.pause", default="暂停"))
         else:
             self.play_btn.setIcon(FIF.PLAY)
-            self.play_btn.setToolTip("播放")
+            self.play_btn.setToolTip(tr("music.mini_window.play", default="播放"))
 
     def _on_position_changed(self, position):
         self._current_position = position
@@ -283,7 +294,7 @@ class MiniMusicWindow(QWidget):
             self.track_label.setText(short_name)
             self._load_cover(song.img_url)
         else:
-            self.track_label.setText("未加载音乐")
+            self.track_label.setText(tr("music.mini_window.no_track", default="未加载音乐"))
             self._set_default_cover()
 
     def _load_cover(self, img_url):
@@ -340,6 +351,18 @@ class MiniMusicWindow(QWidget):
     def update_theme(self):
         is_dark = isDarkTheme()
         self.setStyleSheet(_DARK_QSS if is_dark else _LIGHT_QSS)
+
+    def refresh_ui(self, lang_code: str = None):
+        """语言切换时刷新 UI 文本。"""
+        self.volume_widget.slider.setToolTip(tr("music.mini_window.volume", default="音量"))
+        self.track_label.setText(tr("music.mini_window.no_track", default="未加载音乐"))
+        self.close_btn.setToolTip(tr("music.mini_window.close", default="关闭小窗"))
+        self.prev_btn.setToolTip(tr("music.mini_window.previous", default="上一首"))
+        self.next_btn.setToolTip(tr("music.mini_window.next", default="下一首"))
+        if self.play_btn.icon() == FIF.PAUSE:
+            self.play_btn.setToolTip(tr("music.mini_window.pause", default="暂停"))
+        else:
+            self.play_btn.setToolTip(tr("music.mini_window.play", default="播放"))
 
     def showEvent(self, event):
         self.update_theme()

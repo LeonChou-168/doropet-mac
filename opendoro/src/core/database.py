@@ -320,6 +320,17 @@ class ConfigDatabase(BaseDatabase):
                             model_name TEXT,
                             is_active INTEGER DEFAULT 0
                           )''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS live2d_config (
+                            id INTEGER PRIMARY KEY CHECK (id = 1),
+                            model_path TEXT NOT NULL DEFAULT '',
+                            scale INTEGER NOT NULL DEFAULT 100,
+                            aspect_ratio_index INTEGER NOT NULL DEFAULT 0,
+                            custom_width INTEGER NOT NULL DEFAULT 550,
+                            custom_height INTEGER NOT NULL DEFAULT 500
+                          )''')
+        cursor.execute(
+            "INSERT OR IGNORE INTO live2d_config (id) VALUES (1)"
+        )
         self.conn.commit()
         
         cursor.execute("SELECT count(*) FROM voice_settings")
@@ -458,6 +469,36 @@ class ConfigDatabase(BaseDatabase):
         cursor = self.conn.cursor()
         cursor.execute("UPDATE voice_settings SET is_enabled=?, wake_word=?, kws_model_path=?, asr_model_path=? WHERE id=1",
                        (is_enabled, wake_word, kws_model_path, asr_model_path))
+        self.conn.commit()
+
+    # Live2D Config Methods
+    def get_live2d_config(self):
+        """获取 Live2D 模型配置，返回 dict 或 None。"""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT model_path, scale, aspect_ratio_index, custom_width, custom_height "
+            "FROM live2d_config WHERE id = 1"
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "model_path": row[0],
+            "scale": row[1],
+            "aspect_ratio_index": row[2],
+            "custom_width": row[3],
+            "custom_height": row[4],
+        }
+
+    def save_live2d_config(self, model_path="", scale=100,
+                           aspect_ratio_index=0, custom_width=550, custom_height=500):
+        """保存 Live2D 模型配置。"""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE live2d_config SET model_path=?, scale=?, aspect_ratio_index=?, "
+            "custom_width=?, custom_height=? WHERE id=1",
+            (model_path, scale, aspect_ratio_index, custom_width, custom_height)
+        )
         self.conn.commit()
 
     # Image Model Methods
@@ -1007,6 +1048,9 @@ class ChatDatabase:
         self._cache = db_manager.cache
         self.conn = self._chat.conn
 
+    def close(self):
+        pass  # 包装类，由 DatabaseManager 统一管理生命周期
+
     # Chat methods
     def create_session(self, *args, **kwargs): return self._chat.create_session(*args, **kwargs)
     def get_sessions(self): return self._chat.get_sessions()
@@ -1040,6 +1084,10 @@ class ChatDatabase:
     # Config methods - Voice settings
     def get_voice_settings(self): return self._config.get_voice_settings()
     def update_voice_settings(self, *args, **kwargs): return self._config.update_voice_settings(*args, **kwargs)
+
+    # Config methods - Live2D
+    def get_live2d_config(self): return self._config.get_live2d_config()
+    def save_live2d_config(self, *args, **kwargs): return self._config.save_live2d_config(*args, **kwargs)
 
     # Config methods - Image models
     def add_image_model(self, *args, **kwargs): return self._config.add_image_model(*args, **kwargs)

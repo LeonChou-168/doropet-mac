@@ -1,6 +1,7 @@
 from PyQt5.QtCore import Qt, QRectF
 from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QConicalGradient, QPainterPath
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
+from src.core.i18n import tr
 
 
 class TimerRing(QWidget):
@@ -8,7 +9,7 @@ class TimerRing(QWidget):
         super().__init__(parent)
         self._remaining = 0
         self._total = 1
-        self._label_text = "就绪"
+        self._label_text = tr("pomodoro.ready")
         self.setMinimumSize(200, 200)
 
     def set_time(self, remaining: int, total: int, label: str = ""):
@@ -79,7 +80,7 @@ class DigitalTimer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._remaining = 0
-        self._label_text = "就绪"
+        self._label_text = tr("pomodoro.ready")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
@@ -88,7 +89,7 @@ class DigitalTimer(QWidget):
         self.time_label.setAlignment(Qt.AlignCenter)
         self.time_label.setStyleSheet("font-size: 48px; font-weight: bold; color: #333;")
 
-        self.status_label = QLabel("就绪")
+        self.status_label = QLabel(tr("pomodoro.ready"))
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setStyleSheet("font-size: 14px; color: #888;")
 

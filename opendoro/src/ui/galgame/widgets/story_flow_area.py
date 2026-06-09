@@ -39,6 +39,10 @@ class StoryFlowArea(ScrollArea):
         self.setWidget(self.container)
         self.update_theme()
     
+    def refresh_ui(self, lang_code: str = None):
+        """语言切换时刷新 UI。消息卡片内容为动态生成，无需刷新。"""
+        pass
+    
     def set_font_sizes(self, story_size: int, title_size: int):
         self._story_font_size = story_size
         self._title_font_size = title_size

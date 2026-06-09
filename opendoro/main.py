@@ -10,6 +10,7 @@ check_and_exit_on_failure()
 from src.live2dview import Live2DWidget
 from src.resource_utils import resource_path
 from src.core.logger import setup_logger
+from src.core.i18n import I18nManager, tr
 from src.splash_screen import SplashScreen
 from src.provider.manager import ProviderManager
 from src.core.database import DatabaseManager
@@ -117,7 +118,7 @@ def setup_tray_icon(app, widget):
     pet_menu.addAction(action_toggle)
     
     # 锁定/解锁
-    action_lock = QAction("锁定/解锁", app)
+    action_lock = QAction(tr("tray.lock_unlock"), app)
     action_lock.setCheckable(True)
     action_lock.setChecked(False)
     def toggle_lock(checked):
@@ -133,10 +134,10 @@ def setup_tray_icon(app, widget):
     tray_menu.addMenu(pet_menu)
     
     # === 界面管理区 ===
-    view_menu = QMenu("🖥️ 界面管理", tray_menu)
+    view_menu = QMenu(tr("tray.view_management"), tray_menu)
     
     # 打开主界面
-    action_settings = QAction("打开主界面", app)
+    action_settings = QAction(tr("tray.open_main"), app)
     action_settings.triggered.connect(widget.open_main_window)
     view_menu.addAction(action_settings)
     
@@ -146,7 +147,7 @@ def setup_tray_icon(app, widget):
     
     # === 系统区 ===
     # 退出程序
-    action_quit = QAction("❌ 退出", app)
+    action_quit = QAction(tr("tray.quit"), app)
     action_quit.triggered.connect(app.quit)
     tray_menu.addAction(action_quit)
     
@@ -226,6 +227,11 @@ def main():
 
     logger.info("Application started.")
 
+    # 初始化多语言模块
+    i18n = I18nManager.get_instance()
+    i18n.initialize()
+    logger.info(f"Language: {i18n.current_language}")
+
     icon_path = resource_path("data/icons/app.png")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
@@ -239,10 +245,10 @@ def main():
 
     app.setQuitOnLastWindowClosed(False)
 
-    splash.set_status("正在初始化 Provider 框架...")
+    splash.set_status(tr("splash.loading_provider"))
     init_provider_framework()
 
-    splash.set_status("正在初始化 Agent 框架...")
+    splash.set_status(tr("splash.loading_agent"))
     init_agent_framework()
 
     qss_path = resource_path("themes/light.qss")
@@ -290,7 +296,7 @@ def main():
     tray_icon = setup_tray_icon(app, w)
 
     if not hide_pet_on_startup:
-        w.talk("欢迎回来！")
+        w.talk(tr("pet.welcome_back"))
 
     splash.close_splash()
     logger.info("Splash screen closed")

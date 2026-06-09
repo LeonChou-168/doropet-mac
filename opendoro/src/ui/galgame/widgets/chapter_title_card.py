@@ -2,6 +2,8 @@ from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel
 from PyQt5.QtCore import Qt
 from qfluentwidgets import isDarkTheme
 
+from src.core.i18n import I18nManager, tr
+
 
 class ChapterTitleCard(QFrame):
     def __init__(self, chapter_number: int, chapter_name: str, parent=None):
@@ -11,17 +13,15 @@ class ChapterTitleCard(QFrame):
         self._font_size = 16
         self.setObjectName("chapterTitleCard")
         self.init_ui()
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
     
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(4)
         
-        title_text = f"第{self._chapter_number}章"
-        if self._chapter_name:
-            title_text += f" · {self._chapter_name}"
-        else:
-            title_text += " · 无题"
+        title_text = self._build_title_text()
         
         self.title_label = QLabel(title_text, self)
         self.title_label.setObjectName("chapterTitleLabel")
@@ -29,6 +29,17 @@ class ChapterTitleCard(QFrame):
         layout.addWidget(self.title_label)
         
         self.update_theme()
+    
+    def _build_title_text(self) -> str:
+        chapter_prefix = tr("galgame.status_bar.chapter", default="第{}章").format(self._chapter_number)
+        if self._chapter_name:
+            title_text = f"{chapter_prefix} · {self._chapter_name}"
+        else:
+            title_text = f"{chapter_prefix} · {tr('galgame.chapter.untitled', default='无题')}"
+        return title_text
+    
+    def refresh_ui(self, lang_code: str = None):
+        self.title_label.setText(self._build_title_text())
     
     def set_font_size(self, size: int):
         self._font_size = size

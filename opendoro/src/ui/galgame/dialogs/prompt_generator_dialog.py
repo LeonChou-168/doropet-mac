@@ -16,6 +16,7 @@ from ..prompt_generator import (
     GENRE_CATEGORIES, WRITING_STYLES, PromptGenerator
 )
 from ..models import Protagonist, Character, WorldSetting
+from src.core.i18n import I18nManager, tr
 
 
 class GenreCard(CardWidget):
@@ -135,40 +136,44 @@ class PromptGeneratorDialog(QDialog):
         self._prompt_generator = PromptGenerator(provider_manager)
         self._generation_worker = None
         
-        self.setWindowTitle("✨ 智能生成配置")
+        self.setWindowTitle(tr("galgame.prompt_generator.title", default="✨ 智能生成配置"))
         self.setMinimumSize(700, 750)
         self.init_ui()
+        I18nManager.get_instance().languageChanged.connect(self.refresh_ui)
     
     def init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(24, 24, 24, 24)
         main_layout.setSpacing(16)
         
-        title = TitleLabel("✨ 智能生成 Galgame 配置", self)
-        main_layout.addWidget(title)
+        self.title = TitleLabel(tr("galgame.prompt_generator.main_title", default="✨ 智能生成 Galgame 配置"), self)
+        main_layout.addWidget(self.title)
         
-        main_layout.addWidget(StrongBodyLabel("📚 选择题材分类", self))
+        self.genre_label = StrongBodyLabel(tr("galgame.prompt_generator.genre_label", default="📚 选择题材分类"), self)
+        main_layout.addWidget(self.genre_label)
         self.genre_scroll = self._create_genre_selection()
         main_layout.addWidget(self.genre_scroll)
         
-        main_layout.addWidget(StrongBodyLabel("✒️ 选择写作风格", self))
+        self.style_label = StrongBodyLabel(tr("galgame.prompt_generator.style_label", default="✒️ 选择写作风格"), self)
+        main_layout.addWidget(self.style_label)
         self.style_scroll = self._create_style_selection()
         main_layout.addWidget(self.style_scroll)
         
-        main_layout.addWidget(BodyLabel("💡 额外要求（可选）", self))
+        self.requirements_label = BodyLabel(tr("galgame.prompt_generator.requirements_label", default="💡 额外要求（可选）"), self)
+        main_layout.addWidget(self.requirements_label)
         self.requirements_input = PlainTextEdit(self)
-        self.requirements_input.setPlaceholderText("例如：主角应该是女性，包含魔法战斗，有3个角色...")
+        self.requirements_input.setPlaceholderText(tr("galgame.prompt_generator.requirements_placeholder", default="例如：主角应该是女性，包含魔法战斗，有3个角色..."))
         self.requirements_input.setMaximumHeight(60)
         main_layout.addWidget(self.requirements_input)
         
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         
-        cancel_btn = PushButton("取消", self)
-        cancel_btn.clicked.connect(self.reject)
-        btn_layout.addWidget(cancel_btn)
+        self.cancel_btn = PushButton(tr("galgame.prompt_generator.cancel", default="取消"), self)
+        self.cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(self.cancel_btn)
         
-        self.generate_btn = PrimaryPushButton("✨ 开始生成", self)
+        self.generate_btn = PrimaryPushButton(tr("galgame.prompt_generator.generate", default="✨ 开始生成"), self)
         self.generate_btn.clicked.connect(self._start_generation)
         btn_layout.addWidget(self.generate_btn)
         
@@ -186,11 +191,11 @@ class PromptGeneratorDialog(QDialog):
         self.preview_actions_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(self.preview_actions_widget)
         
-        self.regenerate_btn = PushButton("🔄 重新生成", self)
+        self.regenerate_btn = PushButton(tr("galgame.prompt_generator.regenerate", default="🔄 重新生成"), self)
         self.regenerate_btn.clicked.connect(self._reset_to_generation)
         self.preview_actions_layout.addWidget(self.regenerate_btn)
         
-        self.apply_btn = PrimaryPushButton("✓ 应用配置", self)
+        self.apply_btn = PrimaryPushButton(tr("galgame.prompt_generator.apply", default="✓ 应用配置"), self)
         self.apply_btn.clicked.connect(self._apply_config)
         self.preview_actions_layout.addWidget(self.apply_btn)
         
@@ -264,15 +269,23 @@ class PromptGeneratorDialog(QDialog):
     
     def _start_generation(self):
         if not self._selected_genre:
-            InfoBar.warning("提示", "请选择题材分类", parent=self, duration=2000)
+            InfoBar.warning(
+                tr("galgame.prompt_generator.hint_title", default="提示"),
+                tr("galgame.prompt_generator.hint_select_genre", default="请选择题材分类"),
+                parent=self, duration=2000
+            )
             return
         
         if not self._selected_style:
-            InfoBar.warning("提示", "请选择写作风格", parent=self, duration=2000)
+            InfoBar.warning(
+                tr("galgame.prompt_generator.hint_title", default="提示"),
+                tr("galgame.prompt_generator.hint_select_style", default="请选择写作风格"),
+                parent=self, duration=2000
+            )
             return
         
         self.generate_btn.setEnabled(False)
-        self.generate_btn.setText("⏳ 生成中...")
+        self.generate_btn.setText(tr("galgame.prompt_generator.generating", default="⏳ 生成中..."))
         
         self.progress_bar = ProgressBar(self)
         self.layout().insertWidget(self.layout().count() - 2, self.progress_bar)
@@ -322,9 +335,13 @@ class PromptGeneratorDialog(QDialog):
             self.progress_bar.setVisible(False)
         
         self.generate_btn.setEnabled(True)
-        self.generate_btn.setText("✨ 开始生成")
+        self.generate_btn.setText(tr("galgame.prompt_generator.generate", default="✨ 开始生成"))
         
-        InfoBar.error("生成失败", error, parent=self, duration=5000)
+        InfoBar.error(
+            tr("galgame.prompt_generator.generate_failed", default="生成失败"),
+            error,
+            parent=self, duration=5000
+        )
     
     def _show_preview(self, result: Dict):
         self.preview_widget.setVisible(True)
@@ -338,39 +355,58 @@ class PromptGeneratorDialog(QDialog):
         genre_info = GENRE_CATEGORIES.get(self._selected_genre, {})
         style_info = WRITING_STYLES.get(self._selected_style, {})
         
+        genre_prefix = tr("galgame.prompt_generator.genre_prefix", default="题材: ")
+        style_prefix = tr("galgame.prompt_generator.style_prefix", default="风格: ")
         header_layout = QHBoxLayout()
-        header_layout.addWidget(BodyLabel(f"题材: {genre_info.get('name', self._selected_genre)}"))
-        header_layout.addWidget(BodyLabel(f"风格: {style_info.get('name', self._selected_style)}"))
+        header_layout.addWidget(BodyLabel(f"{genre_prefix}{genre_info.get('name', self._selected_genre)}"))
+        header_layout.addWidget(BodyLabel(f"{style_prefix}{style_info.get('name', self._selected_style)}"))
         self.preview_layout.addLayout(header_layout)
         
+        unknown = tr("galgame.prompt_generator.unknown", default="未知")
+        none_val = tr("galgame.prompt_generator.none", default="无")
+        
         protagonist = result.get('protagonist', {})
-        self.preview_layout.addWidget(StrongBodyLabel("👤 主角设定", self))
+        protagonist_label = StrongBodyLabel(tr("galgame.prompt_generator.protagonist_label", default="👤 主角设定"), self)
+        self.preview_layout.addWidget(protagonist_label)
+        
+        name_prefix = tr("galgame.prompt_generator.name_prefix", default="名称: ")
+        personality_prefix = tr("galgame.prompt_generator.personality_prefix", default="性格: ")
+        background_prefix = tr("galgame.prompt_generator.background_prefix", default="背景: ")
+        traits_prefix = tr("galgame.prompt_generator.traits_prefix", default="特点: ")
+        
         protagonist_text = (
-            f"名称: {protagonist.get('name', '未知')}\n"
-            f"性格: {protagonist.get('personality', '无')}\n"
-            f"背景: {protagonist.get('background', '无')}\n"
-            f"特点: {', '.join(protagonist.get('traits', []))}"
+            f"{name_prefix}{protagonist.get('name', unknown)}\n"
+            f"{personality_prefix}{protagonist.get('personality', none_val)}\n"
+            f"{background_prefix}{protagonist.get('background', none_val)}\n"
+            f"{traits_prefix}{', '.join(protagonist.get('traits', []))}"
         )
         self.preview_layout.addWidget(BodyLabel(protagonist_text, self))
         
         characters = result.get('characters', [])
-        self.preview_layout.addWidget(StrongBodyLabel("👥 角色设定", self))
+        characters_label = StrongBodyLabel(tr("galgame.prompt_generator.characters_label", default="👥 角色设定"), self)
+        self.preview_layout.addWidget(characters_label)
+        char_prefix = tr("galgame.prompt_generator.character_prefix", default="【角色{idx}: {name}】")
         for idx, char in enumerate(characters, 1):
+            char_name = char.get('name', unknown)
             char_text = (
-                f"【角色{idx}: {char.get('name', '未知')}】\n"
-                f"  性格: {char.get('personality', '无')}\n"
-                f"  背景: {char.get('background', '无')}\n"
-                f"  初始好感度: {char.get('initial_affection', 50)} | 关系: {char.get('relationship', '未知')}"
+                f"{char_prefix.format(idx=idx, name=char_name)}\n"
+                f"  {personality_prefix}{char.get('personality', none_val)}\n"
+                f"  {background_prefix}{char.get('background', none_val)}\n"
+                f"  {tr('galgame.prompt_generator.initial_affection_prefix', default='初始好感度: ')}{char.get('initial_affection', 50)} | {tr('galgame.prompt_generator.relationship_prefix', default='关系: ')}{char.get('relationship', unknown)}"
             )
             self.preview_layout.addWidget(BodyLabel(char_text, self))
         
         world = result.get('world_setting', {})
-        self.preview_layout.addWidget(StrongBodyLabel("🌍 世界观设定", self))
+        world_label = StrongBodyLabel(tr("galgame.prompt_generator.world_label", default="🌍 世界观设定"), self)
+        self.preview_layout.addWidget(world_label)
+        era_prefix = tr("galgame.prompt_generator.era_prefix", default="时代: ")
+        rules_prefix = tr("galgame.prompt_generator.rules_prefix", default="规则: ")
+        special_prefix = tr("galgame.prompt_generator.special_prefix", default="特殊元素: ")
         world_text = (
-            f"名称: {world.get('name', '未知')}\n"
-            f"时代: {world.get('era', '无')}\n"
-            f"规则: {world.get('rules', '无')}\n"
-            f"特殊元素: {', '.join(world.get('special_elements', []))}"
+            f"{name_prefix}{world.get('name', unknown)}\n"
+            f"{era_prefix}{world.get('era', none_val)}\n"
+            f"{rules_prefix}{world.get('rules', none_val)}\n"
+            f"{special_prefix}{', '.join(world.get('special_elements', []))}"
         )
         self.preview_layout.addWidget(BodyLabel(world_text, self))
         
@@ -381,7 +417,7 @@ class PromptGeneratorDialog(QDialog):
         self.preview_actions_widget.setVisible(False)
         self.generate_btn.setVisible(True)
         self.generate_btn.setEnabled(True)
-        self.generate_btn.setText("✨ 开始生成")
+        self.generate_btn.setText(tr("galgame.prompt_generator.generate", default="✨ 开始生成"))
         if hasattr(self, 'progress_bar'):
             self.progress_bar.setVisible(True)
     
@@ -396,10 +432,30 @@ class PromptGeneratorDialog(QDialog):
             
             self.config_generated.emit(protagonist, characters, world_setting)
             
-            InfoBar.success("成功", "配置已应用！", parent=self, duration=2000)
+            InfoBar.success(
+                tr("galgame.prompt_generator.apply_success_title", default="成功"),
+                tr("galgame.prompt_generator.apply_success_content", default="配置已应用！"),
+                parent=self, duration=2000
+            )
             self.accept()
         except Exception as e:
-            InfoBar.error("应用失败", str(e), parent=self, duration=5000)
+            InfoBar.error(
+                tr("galgame.prompt_generator.apply_failed", default="应用失败"),
+                str(e),
+                parent=self, duration=5000
+            )
+    
+    def refresh_ui(self):
+        self.setWindowTitle(tr("galgame.prompt_generator.title", default="✨ 智能生成配置"))
+        self.title.setText(tr("galgame.prompt_generator.main_title", default="✨ 智能生成 Galgame 配置"))
+        self.genre_label.setText(tr("galgame.prompt_generator.genre_label", default="📚 选择题材分类"))
+        self.style_label.setText(tr("galgame.prompt_generator.style_label", default="✒️ 选择写作风格"))
+        self.requirements_label.setText(tr("galgame.prompt_generator.requirements_label", default="💡 额外要求（可选）"))
+        self.requirements_input.setPlaceholderText(tr("galgame.prompt_generator.requirements_placeholder", default="例如：主角应该是女性，包含魔法战斗，有3个角色..."))
+        self.cancel_btn.setText(tr("galgame.prompt_generator.cancel", default="取消"))
+        self.generate_btn.setText(tr("galgame.prompt_generator.generate", default="✨ 开始生成"))
+        self.regenerate_btn.setText(tr("galgame.prompt_generator.regenerate", default="🔄 重新生成"))
+        self.apply_btn.setText(tr("galgame.prompt_generator.apply", default="✓ 应用配置"))
     
     def update_theme(self):
         is_dark = isDarkTheme()

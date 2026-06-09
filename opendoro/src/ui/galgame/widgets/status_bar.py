@@ -4,6 +4,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from qfluentwidgets import PushButton, isDarkTheme, FluentIcon, ComboBox
 
 from ..models import AffectionState
+from src.core.i18n import I18nManager, tr
 
 
 class GalgameStatusBar(QFrame):
@@ -23,6 +24,8 @@ class GalgameStatusBar(QFrame):
         self._chapters = []
         self._inventory_count = 0
         self.init_ui()
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
     
     def init_ui(self):
         self.setFixedHeight(40)
@@ -52,32 +55,55 @@ class GalgameStatusBar(QFrame):
         
         layout.addStretch()
         
-        self.memory_btn = PushButton(FluentIcon.BOOK_SHELF, "记忆", self)
+        self.memory_btn = PushButton(FluentIcon.BOOK_SHELF, tr("galgame.status_bar.memory", default="记忆"), self)
         self.memory_btn.setFixedHeight(28)
         self.memory_btn.clicked.connect(self.memory_clicked)
         layout.addWidget(self.memory_btn)
         
-        self.ending_btn = PushButton(FluentIcon.ALBUM, "结局", self)
+        self.ending_btn = PushButton(FluentIcon.ALBUM, tr("galgame.status_bar.ending", default="结局"), self)
         self.ending_btn.setFixedHeight(28)
         self.ending_btn.clicked.connect(self.ending_clicked)
         layout.addWidget(self.ending_btn)
         
-        self.inventory_btn = PushButton(FluentIcon.APPLICATION, "背包", self)
+        self.inventory_btn = PushButton(FluentIcon.APPLICATION, tr("galgame.status_bar.inventory", default="背包"), self)
         self.inventory_btn.setFixedHeight(28)
         self.inventory_btn.clicked.connect(self.inventory_clicked)
         layout.addWidget(self.inventory_btn)
         
-        self.shop_btn = PushButton(FluentIcon.SHOPPING_CART, "商店", self)
+        self.shop_btn = PushButton(FluentIcon.SHOPPING_CART, tr("galgame.status_bar.shop", default="商店"), self)
         self.shop_btn.setFixedHeight(28)
         self.shop_btn.clicked.connect(self.shop_clicked)
         layout.addWidget(self.shop_btn)
         
-        self.save_btn = PushButton(FluentIcon.SAVE, "存档", self)
+        self.save_btn = PushButton(FluentIcon.SAVE, tr("galgame.status_bar.save", default="存档"), self)
         self.save_btn.setFixedHeight(28)
         self.save_btn.clicked.connect(self.save_clicked)
         layout.addWidget(self.save_btn)
         
         self.update_theme()
+    
+    def refresh_ui(self, lang_code: str = None):
+        self.memory_btn.setText(tr("galgame.status_bar.memory", default="记忆"))
+        self.ending_btn.setText(tr("galgame.status_bar.ending", default="结局"))
+        self.inventory_btn.setText(tr("galgame.status_bar.inventory", default="背包"))
+        self.shop_btn.setText(tr("galgame.status_bar.shop", default="商店"))
+        self.save_btn.setText(tr("galgame.status_bar.save", default="存档"))
+        self._update_chapter_combo_text()
+        self._update_currency_text()
+        self._update_affection_display()
+    
+    def _update_chapter_combo_text(self):
+        current_index = self.chapter_combo.currentIndex()
+        self.chapter_combo.blockSignals(True)
+        self.chapter_combo.clear()
+        for chapter_num in self._chapters:
+            self.chapter_combo.addItem(tr("galgame.status_bar.chapter", default="第{}章").format(chapter_num))
+        if current_index >= 0 and current_index < self.chapter_combo.count():
+            self.chapter_combo.setCurrentIndex(current_index)
+        self.chapter_combo.blockSignals(False)
+    
+    def _update_currency_text(self):
+        self.currency_label.setText(f"💰 {self._currency}")
     
     def _on_chapter_changed(self, index: int):
         if 0 <= index < len(self._chapters):
@@ -97,7 +123,7 @@ class GalgameStatusBar(QFrame):
         
         self.chapter_combo.clear()
         for chapter_num in chapters:
-            self.chapter_combo.addItem(f"第{chapter_num}章")
+            self.chapter_combo.addItem(tr("galgame.status_bar.chapter", default="第{}章").format(chapter_num))
         
         if current_chapter in chapters:
             index = chapters.index(current_chapter)

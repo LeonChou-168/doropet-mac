@@ -18,10 +18,45 @@ from src.agent.pydantic_agent import create_doro_agent, DoroDeps
 from src.agent.pydantic_tools import get_filtered_tools, get_skill_tool_functions
 from src.core.skill_manager import SkillManager
 from src.core.state_manager import StateManager, GenerationState
+from src.core.memory_manager import MemoryManager
 from src.core.logger import logger
-from src.provider.manager import ProviderManager
 from pydantic_ai import UsageLimits
 from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+
+# ---------------------------------------------------------------------------
+# OpenAI 多部分内容 → pydantic-ai UserContent 转换
+# ---------------------------------------------------------------------------
+
+def _parse_openai_content(content) -> str | list:
+    """
+    将 OpenAI 格式的 content 转换为 pydantic-ai 的 UserContent。
+
+    支持：
+    - 纯文本 → 返回 str
+    - 多部分数组（text + image_url）→ 返回 [TextContent, ImageUrl, ...]
+    """
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return str(content)
+
+    from pydantic_ai.messages import TextContent, ImageUrl
+
+    parts: list = []
+    for item in content:
+        item_type = item.get("type", "")
+        if item_type == "text":
+            parts.append(TextContent(content=item.get("text", "")))
+        elif item_type == "image_url":
+            url = item.get("image_url", {}).get("url", "")
+            parts.append(ImageUrl(url=url))
+
+    # 如果只有文本，返回纯字符串以简化处理
+    if len(parts) == 1 and isinstance(parts[0], TextContent):
+        return parts[0].content
+
+    return parts if parts else ""
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +94,8 @@ class LLMWorker(QThread):
         capabilities: Optional[list[str]] = None,
         retries: int = 999,
         usage_limits: Optional[UsageLimits] = None,
+        available_images: Optional[list[str]] = None,
+        vision_model_data: Any = None,
     ):
         super().__init__()
         self.api_key = api_key
@@ -74,6 +111,8 @@ class LLMWorker(QThread):
         self.capabilities = capabilities  # None = 启用全部 Capability
         self.retries = retries
         self.usage_limits = usage_limits or UsageLimits(request_limit=50)
+        self.available_images = available_images or []
+        self.vision_model_data = vision_model_data
 
         self.generated_images: list = []
         self.reasoning_accumulated = ""
@@ -144,7 +183,7 @@ class LLMWorker(QThread):
         # 最后一条用户消息作为 user_prompt
         for msg in reversed(history_messages):
             if msg.get("role") == "user":
-                user_prompt = msg.get("content", "")
+                user_prompt = _parse_openai_content(msg.get("content", ""))
                 break
 
         if not system_prompt:
@@ -178,7 +217,7 @@ class LLMWorker(QThread):
             content = msg.get("content", "")
             if role == "user" and content:
                 message_history.append(
-                    ModelRequest(parts=[UserPromptPart(content=str(content))])
+                    ModelRequest(parts=[UserPromptPart(content=_parse_openai_content(content))])
                 )
             elif role == "assistant":
                 parts = []
@@ -215,6 +254,9 @@ class LLMWorker(QThread):
         deps = DoroDeps(
             generated_images=self.generated_images,
             db=self.db,
+            memory_manager=MemoryManager(self.db) if self.db else None,
+            available_images=self.available_images,
+            vision_model_data=self.vision_model_data,
         )
 
         # 跳过工具时使用精简 Agent
@@ -399,8 +441,6 @@ class LLMWorker(QThread):
 # ImageGenerationWorker — 保持原有实现
 # ---------------------------------------------------------------------------
 
-from openai import OpenAI
-
 class ImageGenerationWorker(QThread):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
@@ -414,28 +454,14 @@ class ImageGenerationWorker(QThread):
 
     def run(self):
         try:
-            provider_manager = ProviderManager.get_instance()
-            img_provider = provider_manager.get_image_provider()
+            from src.agent.pydantic_tools import generate_image
 
-            if img_provider:
-                response = img_provider.generate(prompt=self.prompt, model=self.model)
-                if response.image_path:
-                    result = json.dumps({
-                        "status": "success",
-                        "image_path": response.image_path,
-                        "revised_prompt": response.revised_prompt
-                    })
-                else:
-                    result = json.dumps({"status": "error", "message": "Image generation failed"})
+            result = asyncio.run(generate_image(prompt=self.prompt))
+            data = json.loads(result)
+            if data.get("status") == "success":
                 self.finished.emit(result)
             else:
-                from src.core.agent_tools import AVAILABLE_TOOLS
-                if "generate_image" in AVAILABLE_TOOLS:
-                    func = AVAILABLE_TOOLS["generate_image"]
-                    result = func(None, self.prompt, base_url=self.base_url, api_key=self.api_key, model=self.model)
-                    self.finished.emit(result)
-                else:
-                    self.error.emit("Image generation tool not available")
+                self.error.emit(data.get("message", "Image generation failed"))
         except Exception as e:
             logger.error(f"[ImageGenerationWorker] Error: {e}")
             self.error.emit(str(e))

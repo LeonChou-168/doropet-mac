@@ -16,6 +16,8 @@ from src.core.version_manager import (
     compare_versions, __version__
 )
 from src.core.logger import logger
+from src.core.i18n import I18nManager, tr
+
 
 class VersionListItem(QWidget):
     def __init__(self, version_info: VersionInfo, is_current: bool, parent=None):
@@ -43,7 +45,7 @@ class VersionListItem(QWidget):
         version_row.addWidget(type_label)
         
         if self.is_current:
-            current_label = CaptionLabel("当前版本", self)
+            current_label = CaptionLabel(tr("update.current_version"), self)
             current_label.setObjectName("currentVersionLabel")
             current_label.setAttribute(Qt.WA_StyledBackground, True)
             version_row.addWidget(current_label)
@@ -51,7 +53,7 @@ class VersionListItem(QWidget):
         version_row.addStretch()
         info_layout.addLayout(version_row)
         
-        date_label = CaptionLabel(f"发布日期: {self.version_info.release_date}", self)
+        date_label = CaptionLabel(tr("update.published").format(date=self.version_info.release_date), self)
         date_label.setObjectName("versionDateLabel")
         info_layout.addWidget(date_label)
         
@@ -61,6 +63,7 @@ class VersionListItem(QWidget):
             size_label = CaptionLabel(self.version_info.display_size, self)
             size_label.setObjectName("versionSizeLabel")
             layout.addWidget(size_label)
+
 
 class UpdateWidget(CardWidget):
     update_available = pyqtSignal(VersionInfo)
@@ -74,6 +77,8 @@ class UpdateWidget(CardWidget):
         self._external_version_manager = version_manager is not None
         self.setup_ui()
         self.connect_signals()
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
         if not self._external_version_manager:
             self.load_versions()
     
@@ -85,17 +90,17 @@ class UpdateWidget(CardWidget):
         header_layout = QHBoxLayout()
         
         title_layout = QVBoxLayout()
-        title = TitleLabel("软件更新", self)
-        title_layout.addWidget(title)
+        self._title_label = TitleLabel(tr("update.title"), self)
+        title_layout.addWidget(self._title_label)
         
-        current_version_text = f"当前版本: v{self.version_manager.current_version}"
+        current_version_text = f"{tr('update.current_version')}: v{self.version_manager.current_version}"
         self.current_version_label = BodyLabel(current_version_text, self)
         self.current_version_label.setObjectName("currentVersionTextLabel")
         title_layout.addWidget(self.current_version_label)
         
         header_layout.addLayout(title_layout, 1)
         
-        self.refresh_btn = PushButton(FIF.SYNC, "检查更新", self)
+        self.refresh_btn = PushButton(FIF.SYNC, tr("update.check_update"), self)
         self.refresh_btn.clicked.connect(self.check_for_updates)
         header_layout.addWidget(self.refresh_btn)
         
@@ -115,7 +120,7 @@ class UpdateWidget(CardWidget):
         self.status_label = BodyLabel("", self)
         status_layout.addWidget(self.status_label, 1)
         
-        self.update_btn = PrimaryPushButton(FIF.DOWNLOAD, "立即更新", self)
+        self.update_btn = PrimaryPushButton(FIF.DOWNLOAD, tr("update.update_now"), self)
         self.update_btn.hide()
         self.update_btn.clicked.connect(self.on_update_clicked)
         status_layout.addWidget(self.update_btn)
@@ -130,7 +135,7 @@ class UpdateWidget(CardWidget):
         download_layout.setSpacing(8)
         
         download_header = QHBoxLayout()
-        self.download_label = BodyLabel("正在下载...", self)
+        self.download_label = BodyLabel(tr("update.downloading"), self)
         download_header.addWidget(self.download_label, 1)
         
         self.download_speed = CaptionLabel("", self)
@@ -150,7 +155,7 @@ class UpdateWidget(CardWidget):
         
         download_btn_layout = QHBoxLayout()
         download_btn_layout.addStretch()
-        self.cancel_download_btn = PushButton("取消下载", self)
+        self.cancel_download_btn = PushButton(tr("update.cancel_download"), self)
         self.cancel_download_btn.clicked.connect(self.cancel_download)
         download_btn_layout.addWidget(self.cancel_download_btn)
         download_layout.addLayout(download_btn_layout)
@@ -165,7 +170,7 @@ class UpdateWidget(CardWidget):
         install_layout.setSpacing(8)
         
         install_header = QHBoxLayout()
-        self.install_label = BodyLabel("正在安装更新...", self)
+        self.install_label = BodyLabel(tr("update.installing"), self)
         install_header.addWidget(self.install_label, 1)
         
         self.install_percent = CaptionLabel("", self)
@@ -183,9 +188,9 @@ class UpdateWidget(CardWidget):
         self.install_step_label = CaptionLabel("", self)
         install_layout.addWidget(self.install_step_label)
         
-        install_info = CaptionLabel("安装完成后将自动重启程序", self)
-        install_info.setObjectName("installInfoLabel")
-        install_layout.addWidget(install_info)
+        self._install_info_label = CaptionLabel(tr("update.will_restart"), self)
+        self._install_info_label.setObjectName("installInfoLabel")
+        install_layout.addWidget(self._install_info_label)
         
         self.install_widget.hide()
         main_layout.addWidget(self.install_widget)
@@ -199,10 +204,10 @@ class UpdateWidget(CardWidget):
         left_layout.setSpacing(8)
         
         list_header = QHBoxLayout()
-        list_title = StrongBodyLabel("历史版本", self)
-        list_header.addWidget(list_title, 1)
+        self._list_title_label = StrongBodyLabel(tr("update.history_versions"), self)
+        list_header.addWidget(self._list_title_label, 1)
         
-        self.show_beta_switch = SwitchButton("包含测试版", self)
+        self.show_beta_switch = SwitchButton(tr("update.include_beta"), self)
         self.show_beta_switch.setChecked(False)
         self.show_beta_switch.checkedChanged.connect(self.on_show_beta_changed)
         list_header.addWidget(self.show_beta_switch)
@@ -222,20 +227,20 @@ class UpdateWidget(CardWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(8)
         
-        changelog_title = StrongBodyLabel("更新日志", self)
-        right_layout.addWidget(changelog_title)
+        self._changelog_title_label = StrongBodyLabel(tr("update.changelog"), self)
+        right_layout.addWidget(self._changelog_title_label)
         
         self.changelog_text = QTextEdit(self)
         self.changelog_text.setObjectName("changelogTextEdit")
         self.changelog_text.setReadOnly(True)
         self.changelog_text.setFixedHeight(250)
-        self.changelog_text.setPlaceholderText("选择一个版本查看更新日志")
+        self.changelog_text.setPlaceholderText(tr("update.select_version"))
         right_layout.addWidget(self.changelog_text)
         
         action_layout = QHBoxLayout()
         action_layout.addStretch()
         
-        self.download_version_btn = PrimaryPushButton(FIF.DOWNLOAD, "下载此版本", self)
+        self.download_version_btn = PrimaryPushButton(FIF.DOWNLOAD, tr("update.download_version"), self)
         self.download_version_btn.setEnabled(False)
         self.download_version_btn.clicked.connect(self.on_download_version_clicked)
         action_layout.addWidget(self.download_version_btn)
@@ -244,6 +249,22 @@ class UpdateWidget(CardWidget):
         content_layout.addWidget(right_widget, 3)
         
         main_layout.addLayout(content_layout)
+    
+    def refresh_ui(self, lang=None):
+        self._title_label.setText(tr("update.title"))
+        self.current_version_label.setText(f"{tr('update.current_version')}: v{self.version_manager.current_version}")
+        self.refresh_btn.setText(tr("update.check_update"))
+        self.update_btn.setText(tr("update.update_now"))
+        self.download_label.setText(tr("update.downloading"))
+        self.cancel_download_btn.setText(tr("update.cancel_download"))
+        self.install_label.setText(tr("update.installing"))
+        self._install_info_label.setText(tr("update.will_restart"))
+        self._list_title_label.setText(tr("update.history_versions"))
+        self.show_beta_switch.setText(tr("update.include_beta"))
+        self._changelog_title_label.setText(tr("update.changelog"))
+        self.changelog_text.setPlaceholderText(tr("update.select_version"))
+        self.download_version_btn.setText(tr("update.download_version"))
+        self.refresh_version_list(self.version_manager.get_all_versions())
     
     def connect_signals(self):
         self.version_manager.versions_loaded.connect(self.on_versions_loaded)
@@ -263,7 +284,7 @@ class UpdateWidget(CardWidget):
         
         self.status_card.show()
         self.status_icon.show()
-        self.status_label.setText("正在获取版本信息...")
+        self.status_label.setText(tr("update.fetching"))
         self.update_btn.hide()
         
         self.version_manager.fetch_remote_versions()
@@ -286,12 +307,12 @@ class UpdateWidget(CardWidget):
         self.status_icon.hide()
         
         if latest:
-            self.status_label.setText(f"发现新版本: v{latest.version}")
+            self.status_label.setText(tr("update.new_version_found").replace("{latest.version}", str(latest.version)))
             self.update_btn.show()
             self.selected_version = latest
             self.status_card.setProperty("status", "updateAvailable")
         else:
-            self.status_label.setText("已是最新版本")
+            self.status_label.setText(tr("update.already_latest"))
             self.status_card.setProperty("status", "upToDate")
         
         self.status_card.style().unpolish(self.status_card)
@@ -301,7 +322,7 @@ class UpdateWidget(CardWidget):
     def on_load_error(self, error_msg):
         self._is_loading = False
         self.status_icon.hide()
-        self.status_label.setText(f"获取版本信息失败: {error_msg}")
+        self.status_label.setText(tr("update.fetch_failed").replace("{error_msg}", error_msg))
         self.status_card.show()
         
         versions = self.version_manager.get_all_versions()
@@ -333,7 +354,7 @@ class UpdateWidget(CardWidget):
         self.refresh_btn.setEnabled(False)
         self.status_card.show()
         self.status_icon.show()
-        self.status_label.setText("正在检查更新...")
+        self.status_label.setText(tr("update.checking"))
         self.update_btn.hide()
         
         if self._is_loading:
@@ -350,12 +371,12 @@ class UpdateWidget(CardWidget):
         self.status_icon.hide()
         
         if latest:
-            self.status_label.setText(f"发现新版本: v{latest.version}")
+            self.status_label.setText(tr("update.new_version_found").replace("{latest.version}", str(latest.version)))
             self.update_btn.show()
             self.selected_version = latest
             self.status_card.setProperty("status", "updateAvailable")
         else:
-            self.status_label.setText("已是最新版本")
+            self.status_label.setText(tr("update.already_latest"))
             self.status_card.setProperty("status", "upToDate")
         
         self.status_card.style().unpolish(self.status_card)
@@ -388,8 +409,8 @@ class UpdateWidget(CardWidget):
     def start_download(self, version: VersionInfo):
         if not version.download_url:
             InfoBar.warning(
-                title="无法下载",
-                content="该版本没有可用的下载链接",
+                title=tr("update.no_download_link"),
+                content=tr("update.no_download_link"),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -399,14 +420,12 @@ class UpdateWidget(CardWidget):
             return
         
         box = MessageBox(
-            "确认更新",
-            f"即将下载并安装 v{version.version}\n\n"
-            "下载完成后程序将自动关闭并进行更新。\n"
-            "是否继续？",
+            tr("update.confirm_update"),
+            tr("update.confirm_message").replace("{version}", str(version.version)),
             self
         )
-        box.yesButton.setText("开始更新")
-        box.cancelButton.setText("取消")
+        box.yesButton.setText(tr("update.start_update"))
+        box.cancelButton.setText(tr("general.cancel"))
         
         if not box.exec_():
             return
@@ -414,7 +433,7 @@ class UpdateWidget(CardWidget):
         self.download_widget.show()
         self.status_card.hide()
         self.install_widget.hide()
-        self.download_label.setText(f"正在下载 v{version.version}...")
+        self.download_label.setText(tr("update.downloading"))
         self.download_progress.setValue(0)
         self.download_percent.setText("0%")
         self.download_speed.setText("")
@@ -431,10 +450,10 @@ class UpdateWidget(CardWidget):
     def on_download_completed(self, file_path):
         self.download_widget.hide()
         self.install_widget.show()
-        self.install_label.setText("正在安装更新...")
+        self.install_label.setText(tr("update.installing"))
         self.install_progress.setValue(0)
         self.install_percent.setText("0%")
-        self.install_step_label.setText("准备安装...")
+        self.install_step_label.setText(tr("update.installing_ready"))
         
         self.download_completed.emit(file_path)
     
@@ -444,7 +463,7 @@ class UpdateWidget(CardWidget):
         self.status_card.show()
         
         InfoBar.error(
-            title="下载失败",
+            title=tr("update.download_failed"),
             content=error_msg,
             orient=Qt.Horizontal,
             isClosable=True,
@@ -459,13 +478,13 @@ class UpdateWidget(CardWidget):
         self.install_step_label.setText(step_text)
     
     def on_install_completed(self):
-        self.install_step_label.setText("安装完成，即将重启...")
+        self.install_step_label.setText(tr("update.restarting"))
         self.install_progress.setValue(100)
         self.install_percent.setText("100%")
         
         InfoBar.success(
-            title="更新完成",
-            content="程序将在3秒后自动重启...",
+            title=tr("update.update_complete"),
+            content=tr("update.will_restart_3s"),
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -481,7 +500,7 @@ class UpdateWidget(CardWidget):
         self.status_card.show()
         
         InfoBar.error(
-            title="安装失败",
+            title=tr("update.install_failed"),
             content=error_msg,
             orient=Qt.Horizontal,
             isClosable=True,
@@ -503,8 +522,8 @@ class UpdateWidget(CardWidget):
         self.install_widget.hide()
         
         InfoBar.warning(
-            title="已取消",
-            content="下载已取消",
+            title=tr("update.cancelled"),
+            content=tr("update.cancelled"),
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -512,18 +531,21 @@ class UpdateWidget(CardWidget):
             parent=self
         )
 
+
 class AboutWidget(CardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_ui()
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
         
-        title = TitleLabel("关于软件", self)
-        layout.addWidget(title)
+        self._about_title = TitleLabel(tr("update.about"), self)
+        layout.addWidget(self._about_title)
         
         info_widget = QWidget(self)
         info_widget.setObjectName("aboutInfoWidget")
@@ -532,63 +554,75 @@ class AboutWidget(CardWidget):
         info_layout.setSpacing(8)
         
         info_layout.addWidget(StrongBodyLabel("DoroPet", self))
-        info_layout.addWidget(BodyLabel(f"版本: v{__version__}", self))
-        info_layout.addWidget(BodyLabel("开源桌面宠物，陪伴你的每一天", self))
-        info_layout.addWidget(CaptionLabel("© 2026 DoroPet Team", self))
+        
+        self._version_label = BodyLabel(tr("update.version_prefix").format(version=__version__), self)
+        info_layout.addWidget(self._version_label)
+        
+        self._desc_label = BodyLabel(tr("update.description"), self)
+        info_layout.addWidget(self._desc_label)
+        self._copyright_label = CaptionLabel("", self)
+        info_layout.addWidget(self._copyright_label)
         
         layout.addWidget(info_widget)
         
-        # 作者声明
         disclaimer_widget = QWidget(self)
         disclaimer_widget.setObjectName("aboutInfoWidget")
         disclaimer_layout = QVBoxLayout(disclaimer_widget)
         disclaimer_layout.setContentsMargins(12, 12, 12, 12)
         disclaimer_layout.setSpacing(8)
         
-        disclaimer_title = StrongBodyLabel("作者声明", self)
-        disclaimer_layout.addWidget(disclaimer_title)
+        self._author_statement_label = StrongBodyLabel(tr("update.author_statement"), self)
+        disclaimer_layout.addWidget(self._author_statement_label)
         
-        disclaimer_text = (
-            "本软件所有数据均存储在本地，不会上传至云端"
-            "（AI 功能会与 API 服务商交互，请注意保护个人隐私），"
-            "请放心使用。AI 功能可自由调用各类工具，"
-            "请勿使用本软件进行任何违法违规行为，否则后果自负。"
-        )
-        disclaimer_label = BodyLabel(disclaimer_text, self)
-        disclaimer_label.setWordWrap(True)
-        disclaimer_layout.addWidget(disclaimer_label)
+        self._disclaimer_label = BodyLabel(tr("update.disclaimer"), self)
+        self._disclaimer_label.setWordWrap(True)
+        disclaimer_layout.addWidget(self._disclaimer_label)
         
-        footer_text = BodyLabel("本软件完全开源免费，如有小笨蛋花钱购买，不如直接把钱给我！", self)
-        footer_text.setWordWrap(True)
-        disclaimer_layout.addWidget(footer_text)
+        self._footer_text = BodyLabel(tr("update.free_notice"), self)
+        self._footer_text.setWordWrap(True)
+        disclaimer_layout.addWidget(self._footer_text)
         
         layout.addWidget(disclaimer_widget)
         
         link_layout = QHBoxLayout()
         link_layout.setSpacing(16)
         
-        gitee_btn = PushButton(FIF.GITHUB, "Gitee 仓库", self)
-        gitee_btn.clicked.connect(self.open_gitee)
-        link_layout.addWidget(gitee_btn)
+        self._gitee_btn = PushButton(FIF.GITHUB, tr("update.gitee"), self)
+        self._gitee_btn.clicked.connect(self.open_gitee)
+        link_layout.addWidget(self._gitee_btn)
         
-        github_btn = PushButton(FIF.GITHUB, "GitHub 仓库", self)
-        github_btn.clicked.connect(self.open_github)
-        link_layout.addWidget(github_btn)
+        self._github_btn = PushButton(FIF.GITHUB, tr("update.github"), self)
+        self._github_btn.clicked.connect(self.open_github)
+        link_layout.addWidget(self._github_btn)
         
-        official_btn = PushButton(FIF.LINK, "官方网站", self)
-        official_btn.clicked.connect(self.open_official)
-        link_layout.addWidget(official_btn)
+        self._website_btn = PushButton(FIF.LINK, tr("update.website"), self)
+        self._website_btn.clicked.connect(self.open_official)
+        link_layout.addWidget(self._website_btn)
         
-        qq_btn = PushButton(FIF.PEOPLE, "QQ群", self)
-        qq_btn.clicked.connect(self.open_qq_group)
-        link_layout.addWidget(qq_btn)
+        self._qq_btn = PushButton(FIF.PEOPLE, tr("update.qq_group"), self)
+        self._qq_btn.clicked.connect(self.open_qq_group)
+        link_layout.addWidget(self._qq_btn)
         
-        sponsor_btn = PushButton(FIF.HEART, "投喂欧润吉", self)
-        sponsor_btn.clicked.connect(self.open_sponsor)
-        link_layout.addWidget(sponsor_btn)
+        self._donate_btn = PushButton(FIF.HEART, tr("update.donate"), self)
+        self._donate_btn.clicked.connect(self.open_sponsor)
+        link_layout.addWidget(self._donate_btn)
         
         link_layout.addStretch()
         layout.addLayout(link_layout)
+    
+    def refresh_ui(self, lang=None):
+        self._about_title.setText(tr("update.about"))
+        self._version_label.setText(tr("update.version_prefix").format(version=__version__))
+        self._desc_label.setText(tr("update.description"))
+        self._author_statement_label.setText(tr("update.author_statement"))
+        self._copyright_label.setText(tr("update.copyright"))
+        self._disclaimer_label.setText(tr("update.disclaimer"))
+        self._footer_text.setText(tr("update.free_notice"))
+        self._gitee_btn.setText(tr("update.gitee"))
+        self._github_btn.setText(tr("update.github"))
+        self._website_btn.setText(tr("update.website"))
+        self._qq_btn.setText(tr("update.qq_group"))
+        self._donate_btn.setText(tr("update.donate"))
     
     def open_gitee(self):
         from PyQt5.QtGui import QDesktopServices
@@ -614,6 +648,7 @@ class AboutWidget(CardWidget):
         from PyQt5.QtGui import QDesktopServices
         from PyQt5.QtCore import QUrl
         QDesktopServices.openUrl(QUrl("https://www.ifdian.net/a/waterfeet"))
+
 
 class UpdateNotificationDialog(QWidget):
     update_now = pyqtSignal()
@@ -657,10 +692,10 @@ class UpdateNotificationDialog(QWidget):
         self.title_icon.setText("🎁")
         header_layout.addWidget(self.title_icon)
         
-        self.title_label = TitleLabel("发现新版本", self.container)
+        self.title_label = TitleLabel(tr("update.new_version_found"), self.container)
         header_layout.addWidget(self.title_label, 1)
         
-        self.close_btn = PushButton(FIF.CANCEL, "关闭", self.container)
+        self.close_btn = PushButton(FIF.CANCEL, tr("general.close"), self.container)
         self.close_btn.setFixedHeight(28)
         self.close_btn.clicked.connect(self._on_close)
         header_layout.addWidget(self.close_btn)
@@ -674,7 +709,7 @@ class UpdateNotificationDialog(QWidget):
         
         old_ver_layout = QVBoxLayout()
         old_ver_layout.setSpacing(2)
-        self.old_ver_label = CaptionLabel("当前版本", self.version_widget)
+        self.old_ver_label = CaptionLabel(tr("update.current_version"), self.version_widget)
         self.old_ver_value = StrongBodyLabel(f"v{self.current_version}", self.version_widget)
         old_ver_layout.addWidget(self.old_ver_label, alignment=Qt.AlignCenter)
         old_ver_layout.addWidget(self.old_ver_value, alignment=Qt.AlignCenter)
@@ -685,7 +720,7 @@ class UpdateNotificationDialog(QWidget):
         
         new_ver_layout = QVBoxLayout()
         new_ver_layout.setSpacing(2)
-        self.new_ver_label = CaptionLabel("最新版本", self.version_widget)
+        self.new_ver_label = CaptionLabel(tr("update.latest_version"), self.version_widget)
         self.new_ver_value = StrongBodyLabel(f"v{self.version_info.version}", self.version_widget)
         new_ver_layout.addWidget(self.new_ver_label, alignment=Qt.AlignCenter)
         new_ver_layout.addWidget(self.new_ver_value, alignment=Qt.AlignCenter)
@@ -698,13 +733,13 @@ class UpdateNotificationDialog(QWidget):
         
         main_layout.addWidget(self.version_widget)
         
-        self.changelog_header = StrongBodyLabel("更新内容", self.container)
+        self.changelog_header = StrongBodyLabel(tr("update.update_content"), self.container)
         main_layout.addWidget(self.changelog_header)
         
         self.changelog_text = QTextEdit(self.container)
         self.changelog_text.setReadOnly(True)
         self.changelog_text.setFixedHeight(110)
-        changelog = self.version_info.changelog or "暂无更新说明"
+        changelog = self.version_info.changelog or tr("update.no_changelog")
         self.changelog_text.setMarkdown(changelog[:500] + ("..." if len(changelog) > 500 else ""))
         main_layout.addWidget(self.changelog_text)
         
@@ -712,10 +747,10 @@ class UpdateNotificationDialog(QWidget):
         self.date_label = None
         self.size_label = None
         if self.version_info.release_date:
-            self.date_label = CaptionLabel(f"发布日期: {self.version_info.release_date}", self.container)
+            self.date_label = CaptionLabel(tr("update.published").format(date=self.version_info.release_date), self.container)
             info_layout.addWidget(self.date_label)
         if self.version_info.file_size > 0:
-            self.size_label = CaptionLabel(f"大小: {self.version_info.display_size}", self.container)
+            self.size_label = CaptionLabel(tr("update.size").format(size=self.version_info.display_size), self.container)
             info_layout.addWidget(self.size_label)
         info_layout.addStretch()
         main_layout.addLayout(info_layout)
@@ -725,12 +760,12 @@ class UpdateNotificationDialog(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(12)
         
-        self.remind_btn = PushButton(FIF.CALENDAR, "稍后提醒", self.container)
+        self.remind_btn = PushButton(FIF.CALENDAR, tr("update.remind_later"), self.container)
         self.remind_btn.setFixedHeight(36)
         self.remind_btn.clicked.connect(self._on_remind_later)
         btn_layout.addWidget(self.remind_btn)
         
-        self.update_btn = PrimaryPushButton(FIF.UPDATE, "立即更新", self.container)
+        self.update_btn = PrimaryPushButton(FIF.UPDATE, tr("update.update_now"), self.container)
         self.update_btn.setFixedHeight(36)
         self.update_btn.clicked.connect(self._on_update_now)
         btn_layout.addWidget(self.update_btn, 1)
@@ -826,6 +861,9 @@ class UpdateInterface(ScrollArea):
         self._version_manager = version_manager
         
         self.setup_ui()
+        
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
     
     def setup_ui(self):
         layout = QVBoxLayout(self.view)
@@ -839,6 +877,10 @@ class UpdateInterface(ScrollArea):
         layout.addWidget(self.about_widget)
         
         layout.addStretch()
+    
+    def refresh_ui(self, lang=None):
+        self.update_widget.refresh_ui(lang)
+        self.about_widget.refresh_ui(lang)
     
     def set_versions(self, versions):
         self.update_widget.set_versions(versions)

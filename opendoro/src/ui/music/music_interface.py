@@ -20,6 +20,7 @@ from src.services.extended_music_service import ExtendedMusicService, SongInfo, 
 from src.services.global_music_player import GlobalMusicPlayer
 from src.services.audio_spectrum_analyzer import AudioSpectrumAnalyzer
 from src.core.logger import logger
+from src.core.i18n import I18nManager, tr
 from src.utils.lyric_parser import LyricParser, LyricLine
 
 from .constants import PlayMode, PlayerConstants, ColorConstants, PLAY_MODE_CONFIG, PLATFORM_MAP
@@ -48,6 +49,8 @@ class MusicInterface(ScrollArea):
         self._music_service = ExtendedMusicService(self)
         self.global_player = GlobalMusicPlayer.get_instance(self)
         self._network_manager = NetworkManager.get_instance()
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
         self._playlists: list = []
         self._play_queue: list = []
         self._current_index: int = -1
@@ -79,10 +82,75 @@ class MusicInterface(ScrollArea):
         self.playlist_import_progress.connect(self._update_import_progress)
         self.playlist_imported.connect(self._on_playlist_imported)
         self.playlist_import_failed.connect(self._on_playlist_import_failed)
+
+    def refresh_ui(self, lang_code=None):
+        """当语言切换时刷新所有 UI 文本"""
+        self._update_nav_style()
+        self._refresh_search_view()
+        self._refresh_local_view()
+        self._refresh_playlist_view()
+        self._refresh_bottom_player()
+        self._refresh_home_view()
     
+    def _refresh_search_view(self):
+        self.search_btn.setText(tr('music.interface.search_btn', '搜索'))
+        self.search_input.setPlaceholderText(tr('music.interface.search_placeholder', '搜索歌曲、歌手...'))
+        self.platform_combo.setCurrentText(tr('music.interface.all_platforms', '全部平台'))
+        self.search_count_box.setToolTip(tr('music.interface.result_count_tip', '搜索结果数量'))
+        self.select_all_cb.setText(tr('music.interface.select_all', '全选'))
+        self.batch_add_queue_btn.setText(tr('music.interface.add_to_queue', '添加到播放列表'))
+        self.batch_add_playlist_btn.setText(tr('music.interface.add_to_playlist', '添加到歌单'))
+        self.batch_download_btn.setText(tr('music.interface.download_selected', '下载选中'))
+        self.import_playlist_btn.setToolTip(tr('music.interface.import_playlist_tip', '导入歌单'))
+        count = len(self._selected_indices.get("search", set()))
+        self.selected_count_label.setText(tr('music.interface.selected_count', '已选 {count} 首').replace('{count}', str(count)))
+        # Update segmented widget item text
+        self.content_pivot.setItemText("search", tr('music.interface.search', '搜索'))
+        self.content_pivot.setItemText("local", tr('music.interface.local', '本地'))
+        self.content_pivot.setItemText("playlist", tr('music.interface.playlist', '歌单'))
+    
+    def _refresh_local_view(self):
+        self.local_title.setText(tr('music.interface.local_music', '本地音乐'))
+        count = len(self._local_playlist)
+        self.local_count.setText(tr('music.interface.song_count', '0 首歌曲').replace('0', str(count)))
+        self.refresh_local_btn.setToolTip(tr('music.interface.refresh_tip', '刷新'))
+        self.open_music_dir_btn.setToolTip(tr('music.interface.open_music_dir_tip', '打开音乐目录'))
+        self.local_select_all_cb.setText(tr('music.interface.select_all', '全选'))
+        self.local_batch_add_queue_btn.setText(tr('music.interface.add_to_queue', '添加到播放列表'))
+        self.local_batch_add_playlist_btn.setText(tr('music.interface.add_to_playlist', '添加到歌单'))
+        local_count = len(self._selected_indices.get("local", set()))
+        self.local_selected_count_label.setText(tr('music.interface.selected_count', '已选 {count} 首').replace('{count}', str(local_count)))
+    
+    def _refresh_playlist_view(self):
+        text = tr('music.interface.playlist_label', '歌单:')
+        self.playlist_label.setText(text)
+        self.playlist_songs_count.setText(tr('music.interface.song_count', '0 首歌曲'))
+        self.new_playlist_btn.setToolTip(tr('music.interface.new_playlist_tip', '新建歌单'))
+        self.delete_playlist_btn.setToolTip(tr('music.interface.delete_playlist_tip', '删除当前歌单'))
+        self.add_playlist_to_queue_btn.setToolTip(tr('music.interface.add_to_queue_tip', '添加歌单到播放列表'))
+    
+    def _refresh_bottom_player(self):
+        self.prev_btn.setToolTip(tr('music.interface.previous_track', '上一首'))
+        self.next_btn.setToolTip(tr('music.interface.next_track', '下一首'))
+        self.mode_btn.setToolTip(tr('music.interface.play_mode', '播放模式'))
+        self.playlist_toggle_btn.setToolTip(tr('music.interface.playlist_tip', '播放列表'))
+        self.mini_btn.setToolTip(tr('music.interface.mini_window_tip', '迷你播放窗'))
+        self.volume_icon.setToolTip(tr('music.interface.volume_tip', '音量'))
+    
+    def _refresh_home_view(self):
+        self.home_song_name.setText(
+            tr('music.interface.no_track_playing', '未播放歌曲')
+            if not self.global_player.get_current_song()
+            else self.global_player.get_current_song().name
+        )
+        self.expand_btn.setToolTip(tr('music.interface.expand_panel', '展开播放面板'))
+
     def _init_default_playlist(self):
         if not self._playlists:
-            self._music_service.create_playlist("我喜欢的", "默认歌单")
+            self._music_service.create_playlist(
+                tr('music.interface.favorite', '我喜欢的'),
+                tr('music.interface.default_playlist', '默认歌单')
+            )
             self._load_playlists()
     
     def _init_local_music(self):
@@ -169,11 +237,11 @@ class MusicInterface(ScrollArea):
         self.content_stack.addWidget(self.local_music_widget)
         self.content_stack.addWidget(self.playlist_songs_widget)
         
-        self.content_pivot.addItem(routeKey="search", text="搜索", icon=FIF.SEARCH,
+        self.content_pivot.addItem(routeKey="search", text=tr('music.interface.search', '搜索'), icon=FIF.SEARCH,
                                    onClick=lambda: self._switch_to_search())
-        self.content_pivot.addItem(routeKey="local", text="本地", icon=FIF.FOLDER,
+        self.content_pivot.addItem(routeKey="local", text=tr('music.interface.local', '本地'), icon=FIF.FOLDER,
                                    onClick=lambda: self._switch_to_local())
-        self.content_pivot.addItem(routeKey="playlist", text="歌单", icon=FIF.ALBUM,
+        self.content_pivot.addItem(routeKey="playlist", text=tr('music.interface.playlist', '歌单'), icon=FIF.ALBUM,
                                    onClick=lambda: self._switch_to_playlist())
         
         self.content_pivot.setCurrentItem("search")
@@ -205,14 +273,14 @@ class MusicInterface(ScrollArea):
         self.bottom_player.raise_()
         if hasattr(self, 'expand_btn'):
             self.expand_btn.setIcon(FIF.CHEVRON_DOWN_MED)
-            self.expand_btn.setToolTip("收起播放面板")
-    
+            self.expand_btn.setToolTip(tr('music.interface.collapse_panel', '收起播放面板'))
+
     def _on_panel_collapsed(self):
         self._is_home_visible = False
         self._update_nav_style_for_widget(self._previous_widget)
         if hasattr(self, 'expand_btn'):
             self.expand_btn.setIcon(FIF.CARE_UP_SOLID)
-            self.expand_btn.setToolTip("展开播放面板")
+            self.expand_btn.setToolTip(tr('music.interface.expand_panel', '展开播放面板'))
     
     def _update_nav_style_for_widget(self, widget):
         if widget == self.search_widget:
@@ -306,7 +374,7 @@ class MusicInterface(ScrollArea):
         song_info_layout.setContentsMargins(0, 0, 0, 0)
         song_info_layout.setSpacing(8)
         
-        self.home_song_name = QLabel("未播放歌曲")
+        self.home_song_name = QLabel(tr('music.interface.no_track_playing', '未播放歌曲'))
         self.home_song_name.setAlignment(Qt.AlignCenter)
         self.home_song_name.setStyleSheet("""
             QLabel {
@@ -373,15 +441,15 @@ class MusicInterface(ScrollArea):
         self.platform_combo = ComboBox()
         for text in PLATFORM_MAP.keys():
             self.platform_combo.addItem(text)
-        self.platform_combo.setCurrentText("全部平台")
+        self.platform_combo.setCurrentText(tr('music.interface.all_platforms', '全部平台'))
         self.platform_combo.setFixedWidth(140)
-        
+
         self.search_input = SearchLineEdit()
-        self.search_input.setPlaceholderText("搜索歌曲、歌手...")
+        self.search_input.setPlaceholderText(tr('music.interface.search_placeholder', '搜索歌曲、歌手...'))
         self.search_input.setFixedWidth(300)
         self.search_input.returnPressed.connect(self._on_search)
-        
-        self.search_btn = PrimaryPushButton("搜索")
+
+        self.search_btn = PrimaryPushButton(tr('music.interface.search_btn', '搜索'))
         self.search_btn.setIcon(FIF.SEARCH)
         self.search_btn.clicked.connect(self._on_search_toggle)
         self._is_searching = False
@@ -390,18 +458,18 @@ class MusicInterface(ScrollArea):
         self.search_count_box.setRange(5, 100)
         self.search_count_box.setValue(20)
         self.search_count_box.setFixedWidth(120)
-        self.search_count_box.setToolTip("搜索结果数量")
-        
+        self.search_count_box.setToolTip(tr('music.interface.result_count_tip', '搜索结果数量'))
+
         search_card_layout.addWidget(self.platform_combo)
         search_card_layout.addWidget(self.search_input)
         search_card_layout.addWidget(self.search_btn)
-        search_card_layout.addWidget(QLabel("数量:"))
+        search_card_layout.addWidget(QLabel(tr('music.interface.result_count_label', '数量:')))
         search_card_layout.addWidget(self.search_count_box)
         search_card_layout.addStretch()
         
         self.import_playlist_btn = TransparentToolButton(FIF.DOWNLOAD, self)
         self.import_playlist_btn.setFixedSize(28, 28)
-        self.import_playlist_btn.setToolTip("导入歌单")
+        self.import_playlist_btn.setToolTip(tr('music.interface.import_playlist_tip', '导入歌单'))
         self.import_playlist_btn.clicked.connect(self._on_import_playlist)
         search_card_layout.addWidget(self.import_playlist_btn)
         
@@ -413,26 +481,26 @@ class MusicInterface(ScrollArea):
         batch_layout.setSpacing(8)
         
         self.select_all_cb = CheckBox()
-        self.select_all_cb.setText("全选")
+        self.select_all_cb.setText(tr('music.interface.select_all', '全选'))
         self.select_all_cb.stateChanged.connect(self._on_select_all_search)
         batch_layout.addWidget(self.select_all_cb)
-        
-        self.batch_add_queue_btn = PushButton("添加到播放列表")
+
+        self.batch_add_queue_btn = PushButton(tr('music.interface.add_to_queue', '添加到播放列表'))
         self.batch_add_queue_btn.setIcon(FIF.ADD)
         self.batch_add_queue_btn.clicked.connect(self._batch_add_to_playqueue)
         batch_layout.addWidget(self.batch_add_queue_btn)
-        
-        self.batch_add_playlist_btn = PushButton("添加到歌单")
+
+        self.batch_add_playlist_btn = PushButton(tr('music.interface.add_to_playlist', '添加到歌单'))
         self.batch_add_playlist_btn.setIcon(FIF.FOLDER_ADD)
         self.batch_add_playlist_btn.clicked.connect(self._batch_add_to_playlist)
         batch_layout.addWidget(self.batch_add_playlist_btn)
-        
-        self.batch_download_btn = PushButton("下载选中")
+
+        self.batch_download_btn = PushButton(tr('music.interface.download_selected', '下载选中'))
         self.batch_download_btn.setIcon(FIF.DOWNLOAD)
         self.batch_download_btn.clicked.connect(self._batch_download_songs)
         batch_layout.addWidget(self.batch_download_btn)
-        
-        self.selected_count_label = QLabel("已选 0 首")
+
+        self.selected_count_label = QLabel(tr('music.interface.selected_count', '已选 0 首').replace('{count}', '0'))
         batch_layout.addWidget(self.selected_count_label)
         
         batch_layout.addStretch()
@@ -454,23 +522,23 @@ class MusicInterface(ScrollArea):
         
         local_header = QHBoxLayout()
         
-        local_title = StrongBodyLabel("本地音乐")
-        local_header.addWidget(local_title)
-        
+        self.local_title = StrongBodyLabel(tr('music.interface.local_music', '本地音乐'))
+        local_header.addWidget(self.local_title)
+
         local_header.addStretch()
-        
-        self.local_count = BodyLabel("0 首歌曲")
+
+        self.local_count = BodyLabel(tr('music.interface.song_count', '0 首歌曲'))
         local_header.addWidget(self.local_count)
-        
+
         self.refresh_local_btn = TransparentToolButton(FIF.SYNC, self)
         self.refresh_local_btn.setFixedSize(28, 28)
-        self.refresh_local_btn.setToolTip("刷新")
+        self.refresh_local_btn.setToolTip(tr('music.interface.refresh_tip', '刷新'))
         self.refresh_local_btn.clicked.connect(self._refresh_local_music)
         local_header.addWidget(self.refresh_local_btn)
-        
+
         self.open_music_dir_btn = TransparentToolButton(FIF.FOLDER, self)
         self.open_music_dir_btn.setFixedSize(28, 28)
-        self.open_music_dir_btn.setToolTip("打开音乐目录")
+        self.open_music_dir_btn.setToolTip(tr('music.interface.open_music_dir_tip', '打开音乐目录'))
         self.open_music_dir_btn.clicked.connect(self._open_music_directory)
         local_header.addWidget(self.open_music_dir_btn)
         
@@ -482,21 +550,21 @@ class MusicInterface(ScrollArea):
         local_batch_layout.setSpacing(8)
 
         self.local_select_all_cb = CheckBox()
-        self.local_select_all_cb.setText("全选")
+        self.local_select_all_cb.setText(tr('music.interface.select_all', '全选'))
         self.local_select_all_cb.stateChanged.connect(self._on_select_all_local)
         local_batch_layout.addWidget(self.local_select_all_cb)
 
-        self.local_batch_add_queue_btn = PushButton("添加到播放列表")
+        self.local_batch_add_queue_btn = PushButton(tr('music.interface.add_to_queue', '添加到播放列表'))
         self.local_batch_add_queue_btn.setIcon(FIF.ADD)
         self.local_batch_add_queue_btn.clicked.connect(self._local_batch_add_to_playqueue)
         local_batch_layout.addWidget(self.local_batch_add_queue_btn)
 
-        self.local_batch_add_playlist_btn = PushButton("添加到歌单")
+        self.local_batch_add_playlist_btn = PushButton(tr('music.interface.add_to_playlist', '添加到歌单'))
         self.local_batch_add_playlist_btn.setIcon(FIF.FOLDER_ADD)
         self.local_batch_add_playlist_btn.clicked.connect(self._local_batch_add_to_playlist)
         local_batch_layout.addWidget(self.local_batch_add_playlist_btn)
 
-        self.local_selected_count_label = QLabel("已选 0 首")
+        self.local_selected_count_label = QLabel(tr('music.interface.selected_count', '已选 0 首').replace('{count}', '0'))
         local_batch_layout.addWidget(self.local_selected_count_label)
 
         local_batch_layout.addStretch()
@@ -517,33 +585,34 @@ class MusicInterface(ScrollArea):
         
         playlist_songs_header = QHBoxLayout()
         
-        playlist_songs_header.addWidget(QLabel("歌单:"))
-        
+        self.playlist_label = QLabel(tr('music.interface.playlist_label', '歌单:'))
+        playlist_songs_header.addWidget(self.playlist_label)
+
         self.playlist_combo = ComboBox()
         self.playlist_combo.setFixedWidth(200)
         self.playlist_combo.currentIndexChanged.connect(self._on_playlist_combo_changed)
         playlist_songs_header.addWidget(self.playlist_combo)
-        
+
         playlist_songs_header.addStretch()
-        
-        self.playlist_songs_count = BodyLabel("0 首歌曲")
+
+        self.playlist_songs_count = BodyLabel(tr('music.interface.song_count', '0 首歌曲'))
         playlist_songs_header.addWidget(self.playlist_songs_count)
-        
+
         self.new_playlist_btn = TransparentToolButton(FIF.ADD, self)
         self.new_playlist_btn.setFixedSize(28, 28)
-        self.new_playlist_btn.setToolTip("新建歌单")
+        self.new_playlist_btn.setToolTip(tr('music.interface.new_playlist_tip', '新建歌单'))
         self.new_playlist_btn.clicked.connect(self._create_playlist)
         playlist_songs_header.addWidget(self.new_playlist_btn)
-        
+
         self.delete_playlist_btn = TransparentToolButton(FIF.DELETE, self)
         self.delete_playlist_btn.setFixedSize(28, 28)
-        self.delete_playlist_btn.setToolTip("删除当前歌单")
+        self.delete_playlist_btn.setToolTip(tr('music.interface.delete_playlist_tip', '删除当前歌单'))
         self.delete_playlist_btn.clicked.connect(self._delete_current_playlist)
         playlist_songs_header.addWidget(self.delete_playlist_btn)
-        
+
         self.add_playlist_to_queue_btn = TransparentToolButton(FIF.ADD_TO, self)
         self.add_playlist_to_queue_btn.setFixedSize(28, 28)
-        self.add_playlist_to_queue_btn.setToolTip("添加歌单到播放列表")
+        self.add_playlist_to_queue_btn.setToolTip(tr('music.interface.add_to_queue_tip', '添加歌单到播放列表'))
         self.add_playlist_to_queue_btn.clicked.connect(self._add_current_playlist_to_queue)
         playlist_songs_header.addWidget(self.add_playlist_to_queue_btn)
         
@@ -626,7 +695,7 @@ class MusicInterface(ScrollArea):
         song_text_layout = QVBoxLayout()
         song_text_layout.setSpacing(2)
         
-        self.now_playing_label = QLabel("未选择歌曲")
+        self.now_playing_label = QLabel(tr('music.interface.no_song_selected', '未选择歌曲'))
         self.now_playing_label.setObjectName("musicSongNameLabel")
         
         self.now_artist_label = QLabel("")
@@ -655,26 +724,26 @@ class MusicInterface(ScrollArea):
         
         self.prev_btn = TransparentToolButton(FIF.CARE_LEFT_SOLID, self)
         self.prev_btn.setFixedSize(32, 32)
-        self.prev_btn.setToolTip("上一首")
+        self.prev_btn.setToolTip(tr('music.interface.previous_track', '上一首'))
         self.prev_btn.clicked.connect(self._play_previous)
-        
+
         self.play_btn = TransparentToolButton(FIF.PLAY, self)
         self.play_btn.setFixedSize(40, 40)
         self.play_btn.setIconSize(QSize(24, 24))
-        self.play_btn.setToolTip("播放")
+        self.play_btn.setToolTip(tr('music.interface.play', '播放'))
         self.play_btn.clicked.connect(self._toggle_play)
-        
+
         self.next_btn = TransparentToolButton(FIF.CARE_RIGHT_SOLID, self)
         self.next_btn.setFixedSize(32, 32)
-        self.next_btn.setToolTip("下一首")
+        self.next_btn.setToolTip(tr('music.interface.next_track', '下一首'))
         self.next_btn.clicked.connect(self._play_next)
-        
+
         self.mode_btn = TransparentToolButton(FIF.SYNC, self)
         self.mode_btn.setFixedSize(28, 28)
-        self.mode_btn.setToolTip("播放模式")
+        self.mode_btn.setToolTip(tr('music.interface.play_mode', '播放模式'))
         self.mode_btn.clicked.connect(self._toggle_play_mode)
-        
-        self.mode_label = QLabel("列表循环")
+
+        self.mode_label = QLabel(tr('music.interface.list_loop', '列表循环'))
         self.mode_label.setObjectName("musicModeLabel")
         
         controls_layout.addWidget(self.mode_btn)
@@ -685,29 +754,29 @@ class MusicInterface(ScrollArea):
 
         self.expand_btn = TransparentToolButton(FIF.CARE_UP_SOLID, self)
         self.expand_btn.setFixedSize(28, 28)
-        self.expand_btn.setToolTip("展开播放面板")
+        self.expand_btn.setToolTip(tr('music.interface.expand_panel', '展开播放面板'))
         self.expand_btn.clicked.connect(self._toggle_home_view)
 
         controls_layout.addWidget(self.expand_btn)
 
         player_layout.addLayout(controls_layout)
-        
+
         volume_layout = QHBoxLayout()
         volume_layout.setSpacing(8)
-        
+
         self.playlist_toggle_btn = TransparentToolButton(FIF.MENU, self)
         self.playlist_toggle_btn.setFixedSize(28, 28)
-        self.playlist_toggle_btn.setToolTip("播放列表")
+        self.playlist_toggle_btn.setToolTip(tr('music.interface.playlist_tip', '播放列表'))
         self.playlist_toggle_btn.clicked.connect(self._toggle_playlist_dock)
 
         self.mini_btn = TransparentToolButton(FIF.FIT_PAGE, self)
         self.mini_btn.setFixedSize(28, 28)
-        self.mini_btn.setToolTip("迷你播放窗")
+        self.mini_btn.setToolTip(tr('music.interface.mini_window_tip', '迷你播放窗'))
         self.mini_btn.clicked.connect(self._toggle_mini_window)
-        
+
         self.volume_icon = TransparentToolButton(FIF.VOLUME, self)
         self.volume_icon.setFixedSize(28, 28)
-        self.volume_icon.setToolTip("音量")
+        self.volume_icon.setToolTip(tr('music.interface.volume_tip', '音量'))
         
         self.volume_slider = StyledVolumeSlider(Qt.Horizontal)
         self.volume_slider.setRange(0, 100)
@@ -779,15 +848,22 @@ class MusicInterface(ScrollArea):
             self._remove_playlist(playlist)
     
     def _remove_playlist(self, playlist: Playlist):
-        reply = QMessageBox.question(self, "删除歌单", f"确定要删除歌单 '{playlist.name}' 吗？", QMessageBox.Yes | QMessageBox.No)
+        reply = QMessageBox.question(self,
+                                     tr('music.interface.delete_playlist_title', '删除歌单'),
+                                     tr('music.interface.delete_playlist_confirm', "确定要删除歌单 '{name}' 吗？").replace('{name}', playlist.name),
+                                     QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             self._music_service.delete_playlist(playlist.id)
             self._load_playlists()
-    
+
     def _create_playlist(self):
-        name, ok = QInputDialog.getText(self, "新建歌单", "请输入歌单名称:")
+        name, ok = QInputDialog.getText(self,
+                                        tr('music.interface.create_playlist_title', '新建歌单'),
+                                        tr('music.interface.create_playlist_prompt', '请输入歌单名称:'))
         if ok and name.strip():
-            description, _ = QInputDialog.getText(self, "新建歌单", "请输入歌单描述(可选):")
+            description, _ = QInputDialog.getText(self,
+                                                  tr('music.interface.create_playlist_title', '新建歌单'),
+                                                  tr('music.interface.create_playlist_desc', '请输入歌单描述(可选):'))
             self._music_service.create_playlist(name.strip(), description or "")
             self._load_playlists()
     
@@ -804,7 +880,7 @@ class MusicInterface(ScrollArea):
     def _update_playlist_view(self, playlist: Playlist):
         self._playlist_songs = playlist.songs
         self.playlist_songs_list.clear()
-        self.playlist_songs_count.setText(f"{len(playlist.songs)} 首歌曲")
+        self.playlist_songs_count.setText(tr('music.interface.song_count', '0 首歌曲').replace('0', str(len(playlist.songs))))
         
         for i, song in enumerate(playlist.songs):
             item = QListWidgetItem()
@@ -850,7 +926,7 @@ class MusicInterface(ScrollArea):
         if song.play_url:
             self.global_player.play(song, self._play_queue, index)
             self.play_btn.setIcon(FIF.PAUSE)
-            self.play_btn.setToolTip("暂停")
+            self.play_btn.setToolTip(tr('music.interface.pause', '暂停'))
             if self._vinyl_record:
                 self._vinyl_record.set_playing(True)
         else:
@@ -965,79 +1041,79 @@ class MusicInterface(ScrollArea):
             self._music_service.cancel_search()
             self._is_searching = False
             self.search_btn.setEnabled(True)
-            self.search_btn.setText("搜索")
+            self.search_btn.setText(tr('music.interface.search_btn', '搜索'))
             self.search_btn.setIcon(FIF.SEARCH)
             self.search_input.setEnabled(True)
             self.platform_combo.setEnabled(True)
             self.search_count_box.setEnabled(True)
         else:
             self._on_search()
-    
+
     def _on_search_completed(self, results: list):
         self._is_searching = False
         self.search_btn.setEnabled(True)
-        self.search_btn.setText("搜索")
+        self.search_btn.setText(tr('music.interface.search_btn', '搜索'))
         self.search_btn.setIcon(FIF.SEARCH)
         self.search_input.setEnabled(True)
         self.platform_combo.setEnabled(True)
         self.search_count_box.setEnabled(True)
-        
+
         self._search_results = results
         self._update_search_results_view(results)
-    
+
     def _on_search_failed(self, error_msg: str):
         self._is_searching = False
         self.search_btn.setEnabled(True)
-        self.search_btn.setText("搜索")
+        self.search_btn.setText(tr('music.interface.search_btn', '搜索'))
         self.search_btn.setIcon(FIF.SEARCH)
         self.search_input.setEnabled(True)
         self.platform_combo.setEnabled(True)
         self.search_count_box.setEnabled(True)
-        QMessageBox.warning(self, "搜索失败", error_msg)
+        QMessageBox.warning(self, tr('music.interface.search_failed_title', '搜索失败'), error_msg)
     
     def _on_search_progress(self, message: str):
         self.search_btn.setText(message)
     
     def _on_import_playlist(self):
-        url, ok = QInputDialog.getText(self, "导入歌单", "请输入歌单分享链接:\n支持奈缇斯、咕嘎、酷汪、酷me、咪咕等平台的歌单链接")
+        url, ok = QInputDialog.getText(self, tr('music.interface.import_playlist_title', '导入歌单'), tr('music.interface.import_playlist_prompt', '请输入歌单分享链接:\n支持奈缇斯、咕嘎、酷汪、酷me、咪咕等平台的歌单链接'))
         if ok and url.strip():
             self._import_playlist_url(url.strip())
-    
+
     def _import_playlist_url(self, url: str):
         from PyQt5.QtWidgets import QProgressDialog
-        
-        self.progress_dialog = QProgressDialog("正在解析歌单，请稍候...\n这可能需要一些时间，请耐心等待", "取消", 0, 0, self)
-        self.progress_dialog.setWindowTitle("导入歌单")
+
+        self.progress_dialog = QProgressDialog(tr('music.interface.import_parsing', '正在解析歌单，请稍候...\n这可能需要一些时间，请耐心等待'), tr('music.interface.hint', '取消'), 0, 0, self)
+        self.progress_dialog.setWindowTitle(tr('music.interface.import_playlist_title', '导入歌单'))
         self.progress_dialog.setWindowModality(Qt.WindowModal)
         self.progress_dialog.setMinimumDuration(0)
         self.progress_dialog.setRange(0, 0)
         self.progress_dialog.canceled.connect(self._on_import_cancelled)
         self.progress_dialog.show()
-        
+
         self.import_playlist_btn.setEnabled(False)
-        
+
         import threading
         def parse_thread():
             try:
                 from musicdl import musicdl
-                self.playlist_import_progress.emit("正在连接音乐平台...", 0)
-                
+                self.playlist_import_progress.emit(tr('music.interface.import_connecting', '正在连接音乐平台...'), 0)
+
                 music_client = musicdl.MusicClient()
-                
-                self.playlist_import_progress.emit("正在解析歌单信息...", 0)
-                
+
+                self.playlist_import_progress.emit(tr('music.interface.import_parsing_info', '正在解析歌单信息...'), 0)
+
                 song_infos = music_client.parseplaylist(url)
-                
+
                 if song_infos:
-                    self.playlist_import_progress.emit(f"正在处理 {len(song_infos)} 首歌曲...", 0)
-                    
+                    self.playlist_import_progress.emit(tr('music.interface.import_processing', '正在处理 {count} 首歌曲...').replace('{count}', str(len(song_infos))), 0)
+
                     songs = []
                     for idx, song_info in enumerate(song_infos):
                         try:
                             song = SongInfo(
                                 song_id=str(song_info.get('identifier', '')),
-                                name=song_info.get('song_name', '未知'),
-                                singer=song_info.get('singers', '未知'),
+                                name=song_info.get('song_name', tr('music.interface.unknown_song', '未知')),
+                                singer=song_info.get('singers', tr('music.interface.unknown_artist', '未知')),
                                 album=song_info.get('album', ''),
                                 duration=song_info.get('duration', ''),
                                 img_url=song_info.get('cover_url', ''),
@@ -1048,13 +1124,13 @@ class MusicInterface(ScrollArea):
                             songs.append(song)
                         except Exception as e:
                             logger.warning(f"Failed to parse song: {e}")
-                    
+
                     self.playlist_imported.emit(songs)
                 else:
-                    self.playlist_import_failed.emit("无法解析该歌单链接")
+                    self.playlist_import_failed.emit(tr('music.interface.import_parse_failed', '无法解析该歌单链接'))
             except Exception as e:
-                self.playlist_import_failed.emit(f"解析失败：{str(e)}")
-        
+                self.playlist_import_failed.emit(tr('music.interface.import_parse_error', '解析失败：{error}').replace('{error}', str(e)))
+
         thread = threading.Thread(target=parse_thread)
         thread.daemon = True
         thread.start()
@@ -1066,31 +1142,31 @@ class MusicInterface(ScrollArea):
     
     def _on_import_cancelled(self):
         self.import_playlist_btn.setEnabled(True)
-        self.search_btn.setText("搜索")
-    
+        self.search_btn.setText(tr('music.interface.search_btn', '搜索'))
+
     def _on_playlist_imported(self, songs: list):
         if hasattr(self, 'progress_dialog') and self.progress_dialog:
             self.progress_dialog.close()
-        
+
         self.import_playlist_btn.setEnabled(True)
-        self.search_btn.setText("搜索")
-        
+        self.search_btn.setText(tr('music.interface.search_btn', '搜索'))
+
         if songs:
             self._search_results = songs
             self._update_search_results_view(songs)
             self.content_pivot.setCurrentItem("search")
             self.content_stack.setCurrentWidget(self.search_widget)
-            QMessageBox.information(self, "导入成功", f"成功导入 {len(songs)} 首歌曲")
+            QMessageBox.information(self, tr('music.interface.import_success_title', '导入成功'), tr('music.interface.import_success_msg', '成功导入 {count} 首歌曲').replace('{count}', str(len(songs))))
         else:
-            QMessageBox.warning(self, "导入失败", "未能解析到任何歌曲")
-    
+            QMessageBox.warning(self, tr('music.interface.import_failed_title', '导入失败'), tr('music.interface.import_failed_no_songs', '未能解析到任何歌曲'))
+
     def _on_playlist_import_failed(self, error_msg: str):
         if hasattr(self, 'progress_dialog') and self.progress_dialog:
             self.progress_dialog.close()
-        
+
         self.import_playlist_btn.setEnabled(True)
-        self.search_btn.setText("搜索")
-        QMessageBox.warning(self, "导入失败", error_msg)
+        self.search_btn.setText(tr('music.interface.search_btn', '搜索'))
+        QMessageBox.warning(self, tr('music.interface.import_failed_title', '导入失败'), error_msg)
     
     def _update_search_results_view(self, songs: list):
         self.results_list.clear()
@@ -1135,34 +1211,34 @@ class MusicInterface(ScrollArea):
     
     def _update_selected_count(self, list_type: str):
         count = len(self._selected_indices.get(list_type, set()))
-        self.selected_count_label.setText(f"已选 {count} 首")
-    
+        self.selected_count_label.setText(tr('music.interface.selected_count', '已选 {count} 首').replace('{count}', str(count)))
+
     def _batch_add_to_playqueue(self):
         selected = self._selected_indices.get("search", set()).copy()
         if not selected:
-            QMessageBox.information(self, "提示", "请先选择歌曲")
+            QMessageBox.information(self, tr('music.interface.hint', '提示'), tr('music.interface.please_select_songs', '请先选择歌曲'))
             return
-        
+
         count = len(selected)
         for index in sorted(selected):
             if 0 <= index < len(self._search_results):
                 self._add_to_play_queue(self._search_results[index])
-        
+
         self._clear_selection("search")
-        QMessageBox.information(self, "成功", f"已添加 {count} 首歌曲到播放列表")
-    
+        QMessageBox.information(self, tr('music.interface.success', '成功'), tr('music.interface.added_to_queue', '已添加 {count} 首歌曲到播放列表').replace('{count}', str(count)))
+
     def _batch_add_to_playlist(self):
         selected = self._selected_indices.get("search", set()).copy()
         if not selected:
-            QMessageBox.information(self, "提示", "请先选择歌曲")
+            QMessageBox.information(self, tr('music.interface.hint', '提示'), tr('music.interface.please_select_songs', '请先选择歌曲'))
             return
-        
+
         if not self._playlists:
-            QMessageBox.information(self, "提示", "请先创建歌单")
+            QMessageBox.information(self, tr('music.interface.hint', '提示'), tr('music.interface.please_create_playlist', '请先创建歌单'))
             return
-        
+
         playlist_names = [p.name for p in self._playlists]
-        selected_playlist, ok = QInputDialog.getItem(self, "添加到歌单", "选择歌单:", playlist_names, 0, False)
+        selected_playlist, ok = QInputDialog.getItem(self, tr('music.interface.add_to_playlist', '添加到歌单'), tr('music.interface.select_playlist', '选择歌单:'), playlist_names, 0, False)
         if ok and selected_playlist:
             playlist = next((p for p in self._playlists if p.name == selected_playlist), None)
             if playlist:
@@ -1173,17 +1249,17 @@ class MusicInterface(ScrollArea):
                         count += 1
                 self._load_playlists()
                 self._clear_selection("search")
-                QMessageBox.information(self, "成功", f"已添加 {count} 首歌曲到歌单 '{playlist.name}'")
-    
+                QMessageBox.information(self, tr('music.interface.success', '成功'), tr('music.interface.added_to_playlist_name', '已添加 {count} 首歌曲到歌单 \'{name}\'').replace('{count}', str(count)).replace('{name}', playlist.name))
+
     def _clear_selection(self, list_type: str):
         self._selected_indices[list_type].clear()
         self.select_all_cb.setChecked(False)
         self._update_selected_count(list_type)
-    
+
     def _update_local_music_view(self):
         self.local_music_list.clear()
         self._selected_indices["local"].clear()
-        self.local_count.setText(f"{len(self._local_playlist)} 首歌曲")
+        self.local_count.setText(tr('music.interface.song_count', '0 首歌曲').replace('0', str(len(self._local_playlist))))
 
         for i, song in enumerate(self._local_playlist):
             item = QListWidgetItem()
@@ -1238,7 +1314,7 @@ class MusicInterface(ScrollArea):
 
     def _update_local_selected_count(self):
         count = len(self._selected_indices.get("local", set()))
-        self.local_selected_count_label.setText(f"已选 {count} 首")
+        self.local_selected_count_label.setText(tr('music.interface.selected_count', '已选 {count} 首').replace('{count}', str(count)))
 
     def _local_clear_selection(self):
         self._selected_indices["local"].clear()
@@ -1248,7 +1324,7 @@ class MusicInterface(ScrollArea):
     def _local_batch_add_to_playqueue(self):
         selected = self._selected_indices.get("local", set()).copy()
         if not selected:
-            QMessageBox.information(self, "提示", "请先选择歌曲")
+            QMessageBox.information(self, tr('music.interface.hint', '提示'), tr('music.interface.please_select_songs', '请先选择歌曲'))
             return
 
         count = len(selected)
@@ -1257,20 +1333,20 @@ class MusicInterface(ScrollArea):
                 self._add_to_play_queue(self._local_playlist[index])
 
         self._local_clear_selection()
-        QMessageBox.information(self, "成功", f"已添加 {count} 首歌曲到播放列表")
+        QMessageBox.information(self, tr('music.interface.success', '成功'), tr('music.interface.added_to_queue', '已添加 {count} 首歌曲到播放列表').replace('{count}', str(count)))
 
     def _local_batch_add_to_playlist(self):
         selected = self._selected_indices.get("local", set()).copy()
         if not selected:
-            QMessageBox.information(self, "提示", "请先选择歌曲")
+            QMessageBox.information(self, tr('music.interface.hint', '提示'), tr('music.interface.please_select_songs', '请先选择歌曲'))
             return
 
         if not self._playlists:
-            QMessageBox.information(self, "提示", "请先创建歌单")
+            QMessageBox.information(self, tr('music.interface.hint', '提示'), tr('music.interface.please_create_playlist', '请先创建歌单'))
             return
 
         playlist_names = [p.name for p in self._playlists]
-        selected_playlist, ok = QInputDialog.getItem(self, "添加到歌单", "选择歌单:", playlist_names, 0, False)
+        selected_playlist, ok = QInputDialog.getItem(self, tr('music.interface.add_to_playlist', '添加到歌单'), tr('music.interface.select_playlist', '选择歌单:'), playlist_names, 0, False)
         if ok and selected_playlist:
             playlist = next((p for p in self._playlists if p.name == selected_playlist), None)
             if playlist:
@@ -1281,25 +1357,25 @@ class MusicInterface(ScrollArea):
                         count += 1
                 self._load_playlists()
                 self._local_clear_selection()
-                QMessageBox.information(self, "成功", f"已添加 {count} 首歌曲到歌单 '{playlist.name}'")
-    
+                QMessageBox.information(self, tr('music.interface.success', '成功'), tr('music.interface.added_to_playlist_name', '已添加 {count} 首歌曲到歌单 \'{name}\'').replace('{count}', str(count)).replace('{name}', playlist.name))
+
     def _on_add_to_playlist_from_playlist(self, index: int):
         if 0 <= index < len(self._playlist_songs):
             self._show_add_to_playlist_dialog(self._playlist_songs[index])
-    
+
     def _show_add_to_playlist_dialog(self, song: SongInfo):
         if not self._playlists:
-            QMessageBox.information(self, "提示", "请先创建歌单")
+            QMessageBox.information(self, tr('music.interface.hint', '提示'), tr('music.interface.please_create_playlist', '请先创建歌单'))
             return
-        
+
         playlist_names = [p.name for p in self._playlists]
-        selected, ok = QInputDialog.getItem(self, "添加到歌单", "选择歌单:", playlist_names, 0, False)
+        selected, ok = QInputDialog.getItem(self, tr('music.interface.add_to_playlist', '添加到歌单'), tr('music.interface.select_playlist', '选择歌单:'), playlist_names, 0, False)
         if ok and selected:
             playlist = next((p for p in self._playlists if p.name == selected), None)
             if playlist:
                 self._music_service.add_to_playlist(playlist.id, song)
                 self._load_playlists()
-                QMessageBox.information(self, "成功", f"已添加到歌单 '{playlist.name}'")
+                QMessageBox.information(self, tr('music.interface.success', '成功'), tr('music.interface.added_to_playlist_single', '已添加到歌单 \'{name}\'').replace('{name}', playlist.name))
     
     def _on_playlist_double_clicked(self, index: int):
         if 0 <= index < len(self._playlist_songs):
@@ -1320,7 +1396,7 @@ class MusicInterface(ScrollArea):
         logger.debug(f"[MusicUI] _on_global_playback_state_changed: is_playing={is_playing}")
         if is_playing:
             self.play_btn.setIcon(FIF.PAUSE)
-            self.play_btn.setToolTip("暂停")
+            self.play_btn.setToolTip(tr('music.interface.pause', '暂停'))
             if self._vinyl_record:
                 self._vinyl_record.set_playing(True)
             if hasattr(self, '_spectrum_widget'):
@@ -1331,7 +1407,7 @@ class MusicInterface(ScrollArea):
                 self._spectrum_analyzer.start()
         else:
             self.play_btn.setIcon(FIF.PLAY)
-            self.play_btn.setToolTip("播放")
+            self.play_btn.setToolTip(tr('music.interface.play', '播放'))
             if self._vinyl_record:
                 self._vinyl_record.set_playing(False)
             if hasattr(self, '_spectrum_widget'):
@@ -1377,7 +1453,7 @@ class MusicInterface(ScrollArea):
         if self._current_index >= 0 and self._play_queue:
             current_song = self._play_queue[self._current_index]
             if current_song.song_id == song_id:
-                self.now_playing_label.setText("获取播放链接失败")
+                self.now_playing_label.setText(tr('music.interface.get_play_url_failed', '获取播放链接失败'))
     
     def _update_now_playing(self, song: SongInfo):
         name = song.name
@@ -1420,11 +1496,11 @@ class MusicInterface(ScrollArea):
         else:
             self._lyric_lines = []
             self.home_lyrics_list.clear()
-            self.home_lyrics_list.addItem("暂无歌词")
+            self.home_lyrics_list.addItem(tr('music.interface.no_lyrics', '暂无歌词'))
             self._update_lyric_info(song)
-    
+
     def _update_lyric_info(self, song: SongInfo):
-        self.home_song_name.setText(song.name if song.name else "未知歌曲")
+        self.home_song_name.setText(song.name if song.name else tr('music.interface.unknown_song', '未知歌曲'))
         artist = song.singer if song.singer else ""
         if song.album:
             artist += f" - {song.album}" if artist else song.album
@@ -1831,38 +1907,38 @@ class MusicInterface(ScrollArea):
     def _batch_download_songs(self):
         selected = self._selected_indices.get("search", set()).copy()
         if not selected:
-            QMessageBox.information(self, "提示", "请先选择要下载的歌曲")
+            QMessageBox.information(self, tr('music.interface.hint', '提示'), tr('music.interface.please_select_download', '请先选择要下载的歌曲'))
             return
-        
+
         songs_to_download = []
         for index in sorted(selected):
             if 0 <= index < len(self._search_results):
                 song = self._search_results[index]
                 if song.source != "local":
                     songs_to_download.append(song)
-        
+
         self._clear_selection("search")
-        
+
         if songs_to_download:
             self._music_service.download_songs_batch(songs_to_download)
             logger.info(f"[Music] 开始批量下载 {len(songs_to_download)} 首歌曲")
         else:
-            QMessageBox.information(self, "提示", "所选歌曲均为本地音乐，无需下载")
-    
+            QMessageBox.information(self, tr('music.interface.hint', '提示'), tr('music.interface.no_download_needed', '所选歌曲均为本地音乐，无需下载'))
+
     def _on_download_completed(self, song_id: str, file_path: str):
         logger.info(f"[Music] 下载完成: {song_id} -> {file_path}")
-    
+
     def _on_download_failed(self, song_id: str, error_msg: str):
         logger.error(f"[Music] 下载失败: {song_id} - {error_msg}")
-    
+
     def _on_all_downloads_completed(self, success_count: int, fail_count: int):
         self._init_local_music()
-        
+
         total = success_count + fail_count
         if fail_count == 0:
-            QMessageBox.information(self, "下载完成", f"成功下载 {success_count} 首歌曲到本地音乐目录")
+            QMessageBox.information(self, tr('music.interface.download_complete_title', '下载完成'), tr('music.interface.download_complete_success', '成功下载 {count} 首歌曲到本地音乐目录').replace('{count}', str(success_count)))
         else:
-            QMessageBox.warning(self, "下载完成", f"下载完成\n成功: {success_count} 首\n失败: {fail_count} 首")
+            QMessageBox.warning(self, tr('music.interface.download_complete_title', '下载完成'), tr('music.interface.download_complete_partial', '下载完成\n成功: {success} 首\n失败: {fail} 首').replace('{success}', str(success_count)).replace('{fail}', str(fail_count)))
     
     def _on_download_progress(self, song_id: str, progress: int):
         pass

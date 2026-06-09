@@ -30,13 +30,6 @@ _LEVEL_NAMES = {
     logging.CRITICAL: "CRITICAL",
 }
 
-def get_user_data_dir():
-    local_app_data = os.environ.get('LOCALAPPDATA')
-    if local_app_data:
-        return os.path.join(local_app_data, 'DoroPet')
-    return os.getcwd()
-
-
 class ColoredConsoleFormatter(logging.Formatter):
     def format(self, record):
         level_color = LOG_COLORS.get(record.levelno, "")
@@ -118,6 +111,12 @@ def _cleanup_old_logs(log_dir, keep_count=10):
         pass
 
 
+def _get_user_data_dir():
+    """Lazy import to avoid circular dependency with database.py."""
+    from src.core.database import get_user_data_dir as _gud
+    return _gud()
+
+
 def setup_logger():
     global logger
 
@@ -126,7 +125,7 @@ def setup_logger():
 
     logger.setLevel(logging.INFO)
 
-    log_dir = os.path.join(get_user_data_dir(), "log")
+    log_dir = os.path.join(_get_user_data_dir(), "log")
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 

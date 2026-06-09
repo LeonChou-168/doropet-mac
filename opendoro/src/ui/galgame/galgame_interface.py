@@ -8,6 +8,7 @@ from qfluentwidgets import (
 from src.core.database import ChatDatabase
 from src.provider.manager import ProviderManager
 from src.core.logger import logger
+from src.core.i18n import I18nManager, tr
 
 from .models import (
     Protagonist, Character, WorldSetting, GameState, GameConfig,
@@ -65,6 +66,9 @@ class GalgameInterface(QWidget):
         
         self._load_font_settings()
         
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
+        
         self.setObjectName("GalgameInterface")
         self.init_ui()
         self._load_models()
@@ -101,6 +105,13 @@ class GalgameInterface(QWidget):
         
         self._show_welcome()
         self.update_theme()
+    
+    def refresh_ui(self, lang_code: str = None):
+        """语言切换时刷新所有 UI 文本。"""
+        # 刷新子控件文本
+        self.top_panel.refresh_ui(lang_code)
+        self.story_area.refresh_ui(lang_code)
+        self.status_bar.refresh_ui(lang_code)
     
     def _load_models(self):
         models = self._db.get_models()
@@ -177,21 +188,22 @@ class GalgameInterface(QWidget):
         self.story_area.set_font_sizes(story_size, title_size)
         self.story_area.update_theme()
         
-        self._show_info("字体设置已应用！")
+        self._show_info(tr("galgame.interface.font_applied", default="字体设置已应用！"))
     
     def _show_welcome(self):
         welcome_msg = StoryMessage(
             id=0,
             role=MessageRole.SYSTEM,
             character_name=None,
-            content="欢迎来到 Galgame 模式！\n\n"
-                    "请先配置以下内容开始游戏：\n"
-                    "1. 点击「主角配置」设置你的角色\n"
-                    "2. 点击「角色配置」添加游戏中的角色\n"
-                    "3. 点击「世界观」设置故事背景\n"
-                    "4. 选择要使用的AI模型\n"
-                    "5. 点击「开始游戏」开始冒险！\n\n"
-                    "提示：你也可以使用底部的「存档」按钮来保存或加载游戏进度。"
+            content=tr("galgame.interface.welcome.content",
+                       default="欢迎来到 Galgame 模式！\n\n"
+                               "请先配置以下内容开始游戏：\n"
+                               "1. 点击「主角配置」设置你的角色\n"
+                               "2. 点击「角色配置」添加游戏中的角色\n"
+                               "3. 点击「世界观」设置故事背景\n"
+                               "4. 选择要使用的AI模型\n"
+                               "5. 点击「开始游戏」开始冒险！\n\n"
+                               "提示：你也可以使用底部的「存档」按钮来保存或加载游戏进度。")
         )
         self.story_area.add_message(welcome_msg)
     
@@ -200,21 +212,21 @@ class GalgameInterface(QWidget):
         if dialog.exec_():
             self._protagonist = dialog.get_protagonist()
             self._save_current_config()
-            self._show_info(f"主角已设置: {self._protagonist.name}")
+            self._show_info(tr("galgame.interface.protagonist_set", default="主角已设置: {name}").format(name=self._protagonist.name))
     
     def _show_characters_dialog(self):
         dialog = CharacterDialog(self._characters, self)
         if dialog.exec_():
             self._characters = dialog.get_characters()
             self._save_current_config()
-            self._show_info(f"已配置 {len(self._characters)} 个角色")
+            self._show_info(tr("galgame.interface.characters_configured", default="已配置 {count} 个角色").format(count=len(self._characters)))
     
     def _show_world_dialog(self):
         dialog = WorldDialog(self._world_setting, self)
         if dialog.exec_():
             self._world_setting = dialog.get_world_setting()
             self._save_current_config()
-            self._show_info(f"世界观已设置: {self._world_setting.name}")
+            self._show_info(tr("galgame.interface.world_set", default="世界观已设置: {name}").format(name=self._world_setting.name))
     
     def _show_smart_generate_dialog(self):
         dialog = PromptGeneratorDialog(self._provider_manager, self)
@@ -226,7 +238,7 @@ class GalgameInterface(QWidget):
         self._characters = characters
         self._world_setting = world_setting
         self._save_current_config()
-        self._show_info(f"智能配置已应用：{self._protagonist.name} + {len(self._characters)} 个角色")
+        self._show_info(tr("galgame.interface.config_applied", default="智能配置已应用：{name} + {count} 个角色").format(name=self._protagonist.name, count=len(self._characters)))
     
     def _on_model_changed(self, model_id: str):
         logger.info(f"Model changed to: {model_id}")
@@ -238,12 +250,12 @@ class GalgameInterface(QWidget):
             return
         
         if not self._characters:
-            self._show_error("请先添加至少一个角色！")
+            self._show_error(tr("galgame.interface.no_characters", default="请先添加至少一个角色！"))
             return
         
         model_id = self.top_panel.get_current_model_id()
         if not model_id:
-            self._show_error("请先配置AI模型！")
+            self._show_error(tr("galgame.interface.no_model", default="请先配置AI模型！"))
             return
         
         self._is_generating = True
@@ -255,7 +267,7 @@ class GalgameInterface(QWidget):
             save_id=0,
             config_id=0,
             chapter=1,
-            scene="开场",
+            scene=tr("galgame.interface.opening_scene", default="开场"),
             currency=100,
             affections=[
                 AffectionState(
@@ -281,10 +293,10 @@ class GalgameInterface(QWidget):
         special_events = self._special_date_manager.get_today_events()
         if special_events:
             for event in special_events:
-                self._show_info(f"🎉 今日特殊：{event['name']}！")
+                self._show_info(tr("galgame.interface.special_date", default="🎉 今日特殊：{name}！").format(name=event['name']))
         
         # Phase 1: 生成故事规划
-        self._show_info("正在生成故事大纲...")
+        self._show_info(tr("galgame.interface.story_planning", default="正在生成故事大纲..."))
         
         self._current_worker = StoryPlanWorker(
             self._story_generator,
@@ -304,7 +316,10 @@ class GalgameInterface(QWidget):
         chapter_num = cache.current_chapter.chapter_number if cache.current_chapter else 1
         chapter_name = cache.current_chapter.chapter_name if cache.current_chapter else ""
         
-        self._show_info(f"开始 第{chapter_num}章：{chapter_name if chapter_name else '无题'}")
+        self._show_info(tr("galgame.interface.chapter_format", default="开始 第{num}章：{name}").format(
+            num=chapter_num,
+            name=chapter_name if chapter_name else tr("galgame.interface.untitled", default="无题")
+        ))
         self._update_status_bar()
         
         # Phase 2: 生成第一章开头
@@ -408,7 +423,7 @@ class GalgameInterface(QWidget):
     def _transition_to_next_chapter(self, choice_text: str):
         model_id = self.top_panel.get_current_model_id()
         
-        self._show_info("正在生成章节摘要...")
+        self._show_info(tr("galgame.interface.chapter_summary", default="正在生成章节摘要..."))
         
         # Step 1: 概括前文
         self._current_worker = ChapterSummaryWorker(
@@ -428,7 +443,7 @@ class GalgameInterface(QWidget):
         
         model_id = self.top_panel.get_current_model_id()
         
-        self._show_info("正在规划下一章...")
+        self._show_info(tr("galgame.interface.next_chapter_plan", default="正在规划下一章..."))
         
         # Step 2: 生成下一章规划
         self._current_worker = NextChapterPlanWorker(
@@ -453,7 +468,10 @@ class GalgameInterface(QWidget):
         if self._story_cache.current_chapter:
             self._story_cache.current_chapter.chapter_name = chapter_name
         
-        self._show_info(f"开始 第{chapter_num}章：{chapter_name if chapter_name else '无题'}")
+        self._show_info(tr("galgame.interface.chapter_format", default="开始 第{num}章：{name}").format(
+            num=chapter_num,
+            name=chapter_name if chapter_name else tr("galgame.interface.untitled", default="无题")
+        ))
         self._update_status_bar()
         
         # 清空章节消息
@@ -550,11 +568,15 @@ class GalgameInterface(QWidget):
                     
                     milestone = self._check_affection_milestone(char_name, old_aff, new_aff)
                     if milestone:
-                        self._show_info(f"💕 {char_name}的好感度达到了{new_aff}！{milestone}")
+                        self._show_info(tr("galgame.interface.affection_milestone", default="💕 {name}的好感度达到了{value}！{milestone}").format(
+                            name=char_name, value=new_aff, milestone=milestone
+                        ))
                         # 添加特殊记忆
                         self._memory_manager.add_memory(
                             char_name, "special",
-                            f"好感度达到{new_aff}，关系升级为{get_relationship_name(new_aff)}",
+                            tr("galgame.interface.affection_level_up", default="好感度达到{value}，关系升级为{relationship}").format(
+                                value=new_aff, relationship=get_relationship_name(new_aff)
+                            ),
                             importance=8,
                             context={"chapter": chapter_num, "milestone": True}
                         )
@@ -605,13 +627,15 @@ class GalgameInterface(QWidget):
         
         event = self._exclusive_event_trigger.check_triggers(self._game_state)
         if event:
-            self._show_info(f"🎭 触发专属事件：{event.character_name}的「{event.event_name}」")
+            self._show_info(tr("galgame.interface.exclusive_event", default="🎭 触发专属事件：{char}的「{event}」").format(
+                char=event.character_name, event=event.event_name
+            ))
             
             # 添加事件相关的记忆
             self._memory_manager.add_memory(
                 event.character_name,
                 "special",
-                f"经历了「{event.event_name}」事件",
+                tr("galgame.interface.experienced_event", default="经历了「{event}」事件").format(event=event.event_name),
                 importance=9,
                 context={"chapter": self._game_state.chapter, "exclusive_event": event.id}
             )
@@ -621,7 +645,9 @@ class GalgameInterface(QWidget):
         if upcoming:
             nearest = upcoming[0]
             if nearest["diff"] <= 10:
-                self._show_info(f"💡 提示：{nearest['character']}的「{nearest['event_name']}」即将触发（还差{nearest['diff']}好感度）")
+                self._show_info(tr("galgame.interface.upcoming_event", default="💡 提示：{char}的「{event}」即将触发（还差{diff}好感度）").format(
+                    char=nearest['character'], event=nearest['event_name'], diff=nearest['diff']
+                ))
         
         # 检查结局触发
         self._check_ending()
@@ -641,7 +667,7 @@ class GalgameInterface(QWidget):
         """触发结局"""
         character_name = self._ending_manager.get_ending_character(self._game_state, ending_type)
         
-        self._show_info(f"🎊 触发结局：{ending_type}结局！")
+        self._show_info(tr("galgame.interface.ending_triggered", default="🎊 触发结局：{type}结局！").format(type=ending_type))
         
         model_id = self.top_panel.get_current_model_id()
         ending = self._ending_manager.generate_ending(
@@ -678,20 +704,20 @@ class GalgameInterface(QWidget):
         self._is_generating = False
         self.top_panel.set_start_enabled(True)
         
-        self._show_error(f"生成错误: {error}")
+        self._show_error(tr("galgame.interface.generation_error", default="生成错误: {error}").format(error=error))
         
         if self._streaming_card:
-            self.story_area.update_streaming_content(self._streaming_card, f"\n\n[错误: {error}]")
+            self.story_area.update_streaming_content(self._streaming_card, tr("galgame.interface.error_bracket", default="\n\n[错误: {error}]").format(error=error))
         
         self._streaming_card = None
         self._current_worker = None
     
     def _check_affection_milestone(self, char_name: str, old_aff: int, new_aff: int) -> str:
         milestones = {
-            30: "角色开始信任你了！",
-            50: "你们建立了友谊！",
-            70: "角色对你产生了好感！",
-            90: "角色对你非常亲密！"
+            30: tr("galgame.interface.milestone.trust", default="角色开始信任你了！"),
+            50: tr("galgame.interface.milestone.friendship", default="你们建立了友谊！"),
+            70: tr("galgame.interface.milestone.like", default="角色对你产生了好感！"),
+            90: tr("galgame.interface.milestone.intimate", default="角色对你非常亲密！")
         }
         
         for threshold, message in milestones.items():
@@ -716,7 +742,7 @@ class GalgameInterface(QWidget):
                 item_name = item.get('name', '')
                 if item_keyword in item_name or item_name in item_keyword:
                     self._game_state.inventory.remove(item)
-                    self._show_info(f"使用了 {item_name}！")
+                    self._show_info(tr("galgame.interface.item_used", default="使用了 {name}！").format(name=item_name))
                     break
     
     def _handle_currency_consumption(self, choice_text: str):
@@ -740,7 +766,7 @@ class GalgameInterface(QWidget):
             if self._story_cache:
                 chapter_name = StoryCacheManager.get_chapter_display_name(self._story_cache)
             elif self._game_state.chapter:
-                chapter_name = f"第{self._game_state.chapter}章"
+                chapter_name = tr("galgame.interface.chapter_display", default="第{num}章").format(num=self._game_state.chapter)
             
             self.status_bar.update_state(
                 chapter_name,
@@ -750,7 +776,7 @@ class GalgameInterface(QWidget):
     
     def _show_shop_dialog(self):
         if not self._game_state:
-            self._show_error("请先开始游戏！")
+            self._show_error(tr("galgame.interface.start_game_first", default="请先开始游戏！"))
             return
         
         dialog = ShopDialog(self._galgame_db, self._game_state, self)
@@ -761,7 +787,7 @@ class GalgameInterface(QWidget):
     
     def _show_inventory_dialog(self):
         if not self._game_state:
-            self._show_error("请先开始游戏！")
+            self._show_error(tr("galgame.interface.start_game_first", default="请先开始游戏！"))
             return
         
         dialog = InventoryDialog(self._game_state, self)
@@ -773,7 +799,7 @@ class GalgameInterface(QWidget):
     
     def _show_memory_dialog(self):
         if not self._game_state or not self._characters:
-            self._show_error("请先开始游戏！")
+            self._show_error(tr("galgame.interface.start_game_first", default="请先开始游戏！"))
             return
         
         character_names = [char.name for char in self._characters]
@@ -785,20 +811,20 @@ class GalgameInterface(QWidget):
         all_endings = self._galgame_db.get_all_endings()
         
         if not all_endings:
-            self._show_info("还没有达成任何结局，继续游戏吧！")
+            self._show_info(tr("galgame.interface.no_endings", default="还没有达成任何结局，继续游戏吧！"))
             return
         
         dialog = EndingListDialog(all_endings, self)
         dialog.exec_()
     
     def _on_item_used(self, item: dict):
-        self._show_info(f"使用了 {item.get('name', '物品')}！")
+        self._show_info(tr("galgame.interface.item_used", default="使用了 {name}！").format(name=item.get('name', tr("galgame.interface.unknown_item", default="物品"))))
     
     def _show_save_dialog(self):
         if self._is_generating:
             InfoBar.warning(
-                title="警告",
-                content="正在生成故事，请稍后再保存",
+                title=tr("galgame.interface.info.warning", default="警告"),
+                content=tr("galgame.interface.save_generating", default="正在生成故事，请稍后再保存"),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -818,7 +844,7 @@ class GalgameInterface(QWidget):
                     self._game_state.characters = self._characters
                     self._game_state.world_setting = self._world_setting
                     self._galgame_db.save_state(self._game_state)
-                    self._show_info("游戏已保存！")
+                    self._show_info(tr("galgame.interface.game_saved", default="游戏已保存！"))
                 else:
                     loaded_state = self._galgame_db.load_state(save_id)
                     if loaded_state:
@@ -857,11 +883,11 @@ class GalgameInterface(QWidget):
                             current_chapter = self._game_state.chapter
                             self.status_bar.update_chapters(chapters, current_chapter)
                         
-                        self._show_info("存档已加载！")
+                        self._show_info(tr("galgame.interface.game_loaded", default="存档已加载！"))
     
     def _show_info(self, message: str):
         InfoBar.success(
-            title="成功",
+            title=tr("galgame.interface.info.success", default="成功"),
             content=message,
             orient=Qt.Horizontal,
             isClosable=True,
@@ -872,7 +898,7 @@ class GalgameInterface(QWidget):
     
     def _show_error(self, message: str):
         InfoBar.error(
-            title="错误",
+            title=tr("galgame.interface.error.title", default="错误"),
             content=message,
             orient=Qt.Horizontal,
             isClosable=True,

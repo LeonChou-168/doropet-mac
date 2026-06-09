@@ -4,6 +4,7 @@ from PyQt5.QtCore import Qt
 from qfluentwidgets import isDarkTheme
 
 from ..models import AffectionState, RELATIONSHIP_LEVELS
+from src.core.i18n import I18nManager, tr
 
 
 class AffectionDisplay(QFrame):
@@ -12,18 +13,20 @@ class AffectionDisplay(QFrame):
         self._affections = affections or []
         self.setObjectName("affectionDisplay")
         self.init_ui()
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
     
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(8)
         
-        title = QLabel("角色好感度", self)
-        title.setObjectName("title")
-        font = title.font()
+        self.title = QLabel(tr("galgame.affection.title", default="角色好感度"), self)
+        self.title.setObjectName("title")
+        font = self.title.font()
         font.setBold(True)
-        title.setFont(font)
-        layout.addWidget(title)
+        self.title.setFont(font)
+        layout.addWidget(self.title)
         
         self.cards_container = QWidget(self)
         self.cards_layout = QVBoxLayout(self.cards_container)
@@ -33,6 +36,9 @@ class AffectionDisplay(QFrame):
         
         self._update_cards()
         self.update_theme()
+    
+    def refresh_ui(self, lang_code: str = None):
+        self.title.setText(tr("galgame.affection.title", default="角色好感度"))
     
     def set_affections(self, affections: List[AffectionState]):
         self._affections = affections

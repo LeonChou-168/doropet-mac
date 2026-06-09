@@ -11,6 +11,7 @@ from src.core.live2d_model_manager import Live2DModelManager, Live2DModelInfo
 from src.ui.widgets.model_selector_dialog import ModelSelectorDialog
 from src.resource_utils import resource_path
 from src.core.logger import logger
+from src.core.i18n import I18nManager, tr
 
 
 class ModelPreviewCard(CardWidget):
@@ -39,7 +40,7 @@ class ModelPreviewCard(CardWidget):
         info_layout = QVBoxLayout()
         info_layout.setSpacing(6)
         
-        self.name_label = BodyLabel("未选择模型")
+        self.name_label = BodyLabel(tr("live2d.no_model"))
         self.name_label.setStyleSheet("font-weight: bold; font-size: 15px;")
         info_layout.addWidget(self.name_label)
         
@@ -64,8 +65,8 @@ class ModelPreviewCard(CardWidget):
     
     def _update_display(self):
         if not self.model_info:
-            self.name_label.setText("未选择模型")
-            self.path_label.setText("点击下方按钮选择模型")
+            self.name_label.setText(tr("live2d.no_model"))
+            self.path_label.setText(tr("live2d.select_hint"))
             self.desc_label.setText("")
             self.icon_label.setText("🎭")
             self.icon_label.setStyleSheet("""
@@ -130,6 +131,9 @@ class Live2DConfigInterface(QWidget):
         self.setObjectName("Live2DConfigInterface")
         self.init_ui()
         self.load_current_model()
+        
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
 
     def set_live2d_widget(self, widget):
         self.live2d_widget = widget
@@ -151,8 +155,8 @@ class Live2DConfigInterface(QWidget):
         left_layout.setContentsMargins(16, 20, 16, 20)
         left_layout.setSpacing(12)
 
-        left_title = StrongBodyLabel("模型列表", self.left_panel)
-        left_layout.addWidget(left_title)
+        self._list_title_label = StrongBodyLabel(tr("live2d.model_list"), self.left_panel)
+        left_layout.addWidget(self._list_title_label)
 
         self.model_list = ListWidget(self.left_panel)
         self.model_list.setObjectName("live2dModelList")
@@ -160,13 +164,13 @@ class Live2DConfigInterface(QWidget):
         self.model_list.itemDoubleClicked.connect(self.on_model_double_clicked)
         left_layout.addWidget(self.model_list)
 
-        refresh_btn = PushButton(FluentIcon.SYNC, "刷新模型列表", self.left_panel)
-        refresh_btn.clicked.connect(self.load_model_list)
-        left_layout.addWidget(refresh_btn)
+        self._refresh_list_btn = PushButton(FluentIcon.SYNC, tr("live2d.refresh_list"), self.left_panel)
+        self._refresh_list_btn.clicked.connect(self.load_model_list)
+        left_layout.addWidget(self._refresh_list_btn)
 
-        import_btn = PushButton(FluentIcon.FOLDER, "从本地导入...", self.left_panel)
-        import_btn.clicked.connect(self._on_import_model)
-        left_layout.addWidget(import_btn)
+        self._import_btn = PushButton(FluentIcon.FOLDER, tr("live2d.import_local"), self.left_panel)
+        self._import_btn.clicked.connect(self._on_import_model)
+        left_layout.addWidget(self._import_btn)
 
         main_layout.addWidget(self.left_panel)
 
@@ -180,9 +184,9 @@ class Live2DConfigInterface(QWidget):
         right_layout.setContentsMargins(36, 36, 36, 36)
         right_layout.setSpacing(20)
 
-        title_label = TitleLabel("Live2D 模型配置", self.edit_widget)
-        title_label.setMaximumHeight(48)
-        right_layout.addWidget(title_label)
+        self._config_title_label = TitleLabel(tr("live2d.title"), self.edit_widget)
+        self._config_title_label.setMaximumHeight(48)
+        right_layout.addWidget(self._config_title_label)
 
         current_section = QWidget()
         current_section.setObjectName("currentModelSection")
@@ -190,9 +194,9 @@ class Live2DConfigInterface(QWidget):
         current_layout.setContentsMargins(0, 0, 0, 0)
         current_layout.setSpacing(12)
 
-        current_title = SubtitleLabel("当前模型", current_section)
-        current_title.setStyleSheet("font-weight: bold; font-size: 15px; color: #0078d4;")
-        current_layout.addWidget(current_title)
+        self._current_model_title_label = SubtitleLabel(tr("live2d.current_model"), current_section)
+        self._current_model_title_label.setStyleSheet("font-weight: bold; font-size: 15px; color: #0078d4;")
+        current_layout.addWidget(self._current_model_title_label)
 
         self._add_separator(current_layout)
 
@@ -202,15 +206,15 @@ class Live2DConfigInterface(QWidget):
         model_btn_layout = QHBoxLayout()
         model_btn_layout.setSpacing(10)
         
-        self.select_model_btn = PrimaryPushButton(FluentIcon.PHOTO, "选择模型", current_section)
+        self.select_model_btn = PrimaryPushButton(FluentIcon.PHOTO, tr("live2d.select_model"), current_section)
         self.select_model_btn.clicked.connect(self._on_select_model)
         model_btn_layout.addWidget(self.select_model_btn)
         
-        self.reload_model_btn = PushButton(FluentIcon.SYNC, "重新加载", current_section)
+        self.reload_model_btn = PushButton(FluentIcon.SYNC, tr("live2d.reload"), current_section)
         self.reload_model_btn.clicked.connect(self._on_reload_model)
         model_btn_layout.addWidget(self.reload_model_btn)
         
-        self.clear_model_btn = PushButton(FluentIcon.DELETE, "清除模型", current_section)
+        self.clear_model_btn = PushButton(FluentIcon.DELETE, tr("live2d.clear_model"), current_section)
         self.clear_model_btn.clicked.connect(self._on_clear_model)
         model_btn_layout.addWidget(self.clear_model_btn)
         
@@ -225,23 +229,23 @@ class Live2DConfigInterface(QWidget):
         info_layout.setContentsMargins(0, 20, 0, 0)
         info_layout.setSpacing(12)
 
-        info_title = SubtitleLabel("模型信息", info_section)
-        info_title.setStyleSheet("font-weight: bold; font-size: 15px; color: #0078d4;")
-        info_layout.addWidget(info_title)
+        self._info_title_label = SubtitleLabel(tr("live2d.model_info"), info_section)
+        self._info_title_label.setStyleSheet("font-weight: bold; font-size: 15px; color: #0078d4;")
+        info_layout.addWidget(self._info_title_label)
 
         self._add_separator(info_layout)
 
-        self.info_name_label = BodyLabel("模型名称: -", info_section)
+        self.info_name_label = BodyLabel(tr("live2d.model_name") + " -", info_section)
         info_layout.addWidget(self.info_name_label)
 
-        self.info_path_label = BodyLabel("模型路径: -", info_section)
+        self.info_path_label = BodyLabel(tr("live2d.model_path") + " -", info_section)
         self.info_path_label.setWordWrap(True)
         info_layout.addWidget(self.info_path_label)
 
-        self.info_expressions_label = BodyLabel("表情数量: -", info_section)
+        self.info_expressions_label = BodyLabel(tr("live2d.expression_count") + " -", info_section)
         info_layout.addWidget(self.info_expressions_label)
 
-        self.info_motions_label = BodyLabel("动作数量: -", info_section)
+        self.info_motions_label = BodyLabel(tr("live2d.motion_count") + " -", info_section)
         info_layout.addWidget(self.info_motions_label)
 
         info_layout.addStretch()
@@ -253,6 +257,18 @@ class Live2DConfigInterface(QWidget):
         main_layout.addWidget(right_panel)
 
         self.load_model_list()
+
+    def refresh_ui(self, lang=None):
+        self._list_title_label.setText(tr("live2d.model_list"))
+        self._refresh_list_btn.setText(tr("live2d.refresh_list"))
+        self._import_btn.setText(tr("live2d.import_local"))
+        self._config_title_label.setText(tr("live2d.title"))
+        self._current_model_title_label.setText(tr("live2d.current_model"))
+        self.select_model_btn.setText(tr("live2d.select_model"))
+        self.reload_model_btn.setText(tr("live2d.reload"))
+        self.clear_model_btn.setText(tr("live2d.clear_model"))
+        self._info_title_label.setText(tr("live2d.model_info"))
+        self._update_model_info()
 
     def _add_separator(self, layout):
         separator = QFrame()
@@ -310,22 +326,22 @@ class Live2DConfigInterface(QWidget):
                 self._update_model_info()
                 logger.info(f"Live2D model applied: {model_path}")
             else:
-                MessageBox("失败", "模型加载失败，请检查模型文件", self).exec_()
+                MessageBox(tr("general.error"), tr("live2d.load_failed"), self).exec_()
 
     def _on_reload_model(self):
         if not self.current_model_path:
-            MessageBox("提示", "请先选择一个 Live2D 模型", self).exec_()
+            MessageBox(tr("general.tip"), tr("live2d.select_first"), self).exec_()
             return
         
         if self.live2d_widget:
             success = self.live2d_widget.reload_model(self.current_model_path)
             if success:
                 self._update_model_info()
-                MessageBox("成功", "模型已重新加载", self).exec_()
+                MessageBox(tr("general.success"), tr("live2d.reload_success"), self).exec_()
             else:
-                MessageBox("失败", "模型重新加载失败，请检查模型文件", self).exec_()
+                MessageBox(tr("general.error"), tr("live2d.reload_failed"), self).exec_()
         else:
-            MessageBox("提示", "Live2D 组件未初始化", self).exec_()
+            MessageBox(tr("general.tip"), tr("live2d.not_initialized"), self).exec_()
 
     def _on_clear_model(self):
         default_model_path = resource_path("models/Doro/Doro.model3.json")
@@ -338,7 +354,7 @@ class Live2DConfigInterface(QWidget):
 
     def _on_import_model(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择 Live2D 模型文件", "", "Model3 Files (*.model3.json)"
+            self, tr("live2d.select_file"), "", "Model3 Files (*.model3.json)"
         )
         if file_path:
             self._apply_model(file_path)
@@ -350,12 +366,12 @@ class Live2DConfigInterface(QWidget):
         
         model_info = self.model_manager.get_model_by_path(self.current_model_path)
         if model_info:
-            self.info_name_label.setText(f"模型名称: {model_info.name}")
-            self.info_path_label.setText(f"模型路径: {model_info.model_path}")
+            self.info_name_label.setText(f"{tr('live2d.model_name')} {model_info.name}")
+            self.info_path_label.setText(f"{tr('live2d.model_path')} {model_info.model_path}")
         
         if hasattr(self.live2d_widget, 'expression_ids'):
             expr_count = len(self.live2d_widget.expression_ids) if self.live2d_widget.expression_ids else 0
-            self.info_expressions_label.setText(f"表情数量: {expr_count}")
+            self.info_expressions_label.setText(f"{tr('live2d.expression_count')} {expr_count}")
         
         if hasattr(self.live2d_widget, 'motion_groups'):
             motion_groups = self.live2d_widget.motion_groups
@@ -366,15 +382,15 @@ class Live2DConfigInterface(QWidget):
                         motion_count += v
                     elif isinstance(v, (list, tuple)):
                         motion_count += len(v)
-                self.info_motions_label.setText(f"动作数量: {motion_count}")
+                self.info_motions_label.setText(f"{tr('live2d.motion_count')} {motion_count}")
             else:
-                self.info_motions_label.setText("动作数量: 0")
+                self.info_motions_label.setText(f"{tr('live2d.motion_count')} 0")
 
     def _clear_model_info(self):
-        self.info_name_label.setText("模型名称: -")
-        self.info_path_label.setText("模型路径: -")
-        self.info_expressions_label.setText("表情数量: -")
-        self.info_motions_label.setText("动作数量: -")
+        self.info_name_label.setText(tr("live2d.model_name") + " -")
+        self.info_path_label.setText(tr("live2d.model_path") + " -")
+        self.info_expressions_label.setText(tr("live2d.expression_count") + " -")
+        self.info_motions_label.setText(tr("live2d.motion_count") + " -")
 
     def update_theme(self):
         pass

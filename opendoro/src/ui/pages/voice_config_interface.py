@@ -7,6 +7,7 @@ from qfluentwidgets import (ScrollArea, LineEdit, StrongBodyLabel,
                             CardWidget, IconWidget, HyperlinkButton, InfoBar, InfoBarPosition, isDarkTheme)
 import os
 from src.core.downloader import ModelDownloader
+from src.core.i18n import I18nManager, tr
 
 class VoiceConfigInterface(QWidget):
     settingsChanged = pyqtSignal()
@@ -19,6 +20,9 @@ class VoiceConfigInterface(QWidget):
         self.init_ui()
         self.load_settings()
         self.update_theme()
+        
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -26,7 +30,8 @@ class VoiceConfigInterface(QWidget):
         main_layout.setSpacing(20)
 
         # Title
-        main_layout.addWidget(TitleLabel("语音识别配置", self))
+        self._title_label = TitleLabel(tr("voice.title"), self)
+        main_layout.addWidget(self._title_label)
 
         # --- Enable Switch ---
         self.enable_card = CardWidget(self)
@@ -39,14 +44,16 @@ class VoiceConfigInterface(QWidget):
         
         text_layout = QVBoxLayout()
         text_layout.setSpacing(0)
-        text_layout.addWidget(StrongBodyLabel("启用语音助手", self.enable_card))
-        text_layout.addWidget(BodyLabel("开启后将在聊天界面显示语音交互按钮", self.enable_card))
+        self._enable_title_label = StrongBodyLabel(tr("voice.enable"), self.enable_card)
+        text_layout.addWidget(self._enable_title_label)
+        self._enable_desc_label = BodyLabel(tr("voice.enable_desc"), self.enable_card)
+        text_layout.addWidget(self._enable_desc_label)
         enable_layout.addLayout(text_layout)
         enable_layout.addStretch()
         
         self.enable_switch = SwitchButton(self.enable_card)
-        self.enable_switch.setOnText("开启")
-        self.enable_switch.setOffText("关闭")
+        self.enable_switch.setOnText(tr("voice.on"))
+        self.enable_switch.setOffText(tr("voice.off"))
         self.enable_switch.checkedChanged.connect(self._on_enable_switch_changed)
         enable_layout.addWidget(self.enable_switch)
         
@@ -64,26 +71,30 @@ class VoiceConfigInterface(QWidget):
         form_layout.setSpacing(15)
 
         # 1. Wake Word
-        form_layout.addWidget(StrongBodyLabel("唤醒词", self.settings_widget))
+        self._wake_word_label = StrongBodyLabel(tr("voice.wake_word"), self.settings_widget)
+        form_layout.addWidget(self._wake_word_label)
         self.wake_word_input = LineEdit(self.settings_widget)
-        self.wake_word_input.setPlaceholderText("例如: Hey Doro")
+        self.wake_word_input.setPlaceholderText(tr("voice.wake_word_hint"))
         form_layout.addWidget(self.wake_word_input)
-        form_layout.addWidget(BodyLabel("提示: 修改唤醒词可能需要对应的模型支持 (当前仅支持 'Hey Doro' 或自定义训练模型)", self.settings_widget))
+        self._wake_word_tip_label = BodyLabel(tr("voice.wake_word_tip"), self.settings_widget)
+        form_layout.addWidget(self._wake_word_tip_label)
 
         # 2. Model Paths
-        form_layout.addWidget(StrongBodyLabel("KWS 模型路径 (唤醒词检测)", self.settings_widget))
+        self._kws_path_label = StrongBodyLabel(tr("voice.kws_path"), self.settings_widget)
+        form_layout.addWidget(self._kws_path_label)
         kws_layout = QHBoxLayout()
         self.kws_input = LineEdit(self.settings_widget)
-        self.kws_btn = PushButton(FluentIcon.FOLDER, "选择", self.settings_widget)
+        self.kws_btn = PushButton(FluentIcon.FOLDER, tr("voice.select"), self.settings_widget)
         self.kws_btn.clicked.connect(lambda: self.select_folder(self.kws_input))
         kws_layout.addWidget(self.kws_input)
         kws_layout.addWidget(self.kws_btn)
         form_layout.addLayout(kws_layout)
 
-        form_layout.addWidget(StrongBodyLabel("ASR 模型路径 (语音转文字)", self.settings_widget))
+        self._asr_path_label = StrongBodyLabel(tr("voice.asr_path"), self.settings_widget)
+        form_layout.addWidget(self._asr_path_label)
         asr_layout = QHBoxLayout()
         self.asr_input = LineEdit(self.settings_widget)
-        self.asr_btn = PushButton(FluentIcon.FOLDER, "选择", self.settings_widget)
+        self.asr_btn = PushButton(FluentIcon.FOLDER, tr("voice.select"), self.settings_widget)
         self.asr_btn.clicked.connect(lambda: self.select_folder(self.asr_input))
         asr_layout.addWidget(self.asr_input)
         asr_layout.addWidget(self.asr_btn)
@@ -91,13 +102,14 @@ class VoiceConfigInterface(QWidget):
 
         # Download Link
         link_layout = QHBoxLayout()
-        link_layout.addWidget(BodyLabel("需要下载更多模型？", self.settings_widget))
-        self.link_btn = HyperlinkButton("https://github.com/k2-fsa/sherpa-onnx/releases", "前往 Sherpa-ONNX 模型仓库", self.settings_widget)
+        self._download_more_label = BodyLabel(tr("voice.download_more"), self.settings_widget)
+        link_layout.addWidget(self._download_more_label)
+        self.link_btn = HyperlinkButton("https://github.com/k2-fsa/sherpa-onnx/releases", tr("voice.model_repo"), self.settings_widget)
         self.link_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/k2-fsa/sherpa-onnx/releases")))
         link_layout.addWidget(self.link_btn)
         
         # Download Button
-        self.download_btn = PushButton(FluentIcon.DOWNLOAD, "一键下载默认模型", self.settings_widget)
+        self.download_btn = PushButton(FluentIcon.DOWNLOAD, tr("voice.download_default"), self.settings_widget)
         self.download_btn.clicked.connect(self.download_default_models)
         link_layout.addWidget(self.download_btn)
 
@@ -111,12 +123,30 @@ class VoiceConfigInterface(QWidget):
 
         # --- Save Button ---
         btn_layout = QHBoxLayout()
-        self.save_btn = PrimaryPushButton(FluentIcon.SAVE, "保存配置", self)
+        self.save_btn = PrimaryPushButton(FluentIcon.SAVE, tr("voice.save_config"), self)
         self.save_btn.clicked.connect(self.save_settings)
         btn_layout.addStretch()
         btn_layout.addWidget(self.save_btn)
         
         main_layout.addLayout(btn_layout)
+
+    def refresh_ui(self, lang=None):
+        self._title_label.setText(tr("voice.title"))
+        self._enable_title_label.setText(tr("voice.enable"))
+        self._enable_desc_label.setText(tr("voice.enable_desc"))
+        self.enable_switch.setOnText(tr("voice.on"))
+        self.enable_switch.setOffText(tr("voice.off"))
+        self._wake_word_label.setText(tr("voice.wake_word"))
+        self.wake_word_input.setPlaceholderText(tr("voice.wake_word_hint"))
+        self._wake_word_tip_label.setText(tr("voice.wake_word_tip"))
+        self._kws_path_label.setText(tr("voice.kws_path"))
+        self.kws_btn.setText(tr("voice.select"))
+        self._asr_path_label.setText(tr("voice.asr_path"))
+        self.asr_btn.setText(tr("voice.select"))
+        self._download_more_label.setText(tr("voice.download_more"))
+        self.link_btn.setText(tr("voice.model_repo"))
+        self.download_btn.setText(tr("voice.download_default"))
+        self.save_btn.setText(tr("voice.save_config"))
 
     def load_settings(self):
         settings = self.db.get_voice_settings()
@@ -147,8 +177,8 @@ class VoiceConfigInterface(QWidget):
         
         # Show success message
         InfoBar.success(
-            title='保存成功',
-            content="语音配置已更新 (重启语音助手生效)",
+            title=tr("general.success"),
+            content=tr("voice.save_success"),
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP_RIGHT,
@@ -159,7 +189,7 @@ class VoiceConfigInterface(QWidget):
         self.settingsChanged.emit()
 
     def select_folder(self, line_edit):
-        folder = QFileDialog.getExistingDirectory(self, "选择模型目录")
+        folder = QFileDialog.getExistingDirectory(self, tr("voice.select_dir"))
         if folder:
             line_edit.setText(folder)
 
@@ -183,7 +213,7 @@ class VoiceConfigInterface(QWidget):
         # Check if already extracted (simple check)
         if not os.path.exists(os.path.join(models_dir, kws_model_name, "tokens.txt")):
              tasks.append({
-                "name": "KWS Model (唤醒词)",
+                "name": tr("voice.kws_model"),
                 "filename": kws_target,
                 "urls": [
                     f"https://mirror.ghproxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/{kws_model_name}.tar.bz2",
@@ -197,7 +227,7 @@ class VoiceConfigInterface(QWidget):
         asr_target = os.path.join(models_dir, f"{asr_model_name}.tar.bz2")
         if not os.path.exists(os.path.join(models_dir, asr_model_name, "tokens.txt")):
             tasks.append({
-                "name": "ASR Model (语音识别)",
+                "name": tr("voice.asr_model"),
                 "filename": asr_target,
                 "urls": [
                     f"https://mirror.ghproxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/{asr_model_name}.tar.bz2",
@@ -208,12 +238,12 @@ class VoiceConfigInterface(QWidget):
             })
             
         if not tasks:
-            InfoBar.info("提示", "默认模型已存在，无需下载。", parent=self)
+            InfoBar.info(tr("general.tip"), tr("voice.model_exists"), parent=self)
             return
 
         # Setup Progress Dialog
-        self.progress_dialog = QProgressDialog("准备下载...", "取消", 0, 100, self)
-        self.progress_dialog.setWindowTitle("下载语音模型")
+        self.progress_dialog = QProgressDialog(tr("voice.preparing"), tr("general.cancel"), 0, 100, self)
+        self.progress_dialog.setWindowTitle(tr("voice.download_model"))
         self.progress_dialog.setWindowModality(Qt.WindowModal)
         self.progress_dialog.setMinimumDuration(0)
         self.progress_dialog.setValue(0)
@@ -231,13 +261,13 @@ class VoiceConfigInterface(QWidget):
     def update_download_progress(self, task_name, percent, speed):
         if self.progress_dialog.wasCanceled():
             return
-        self.progress_dialog.setLabelText(f"{task_name}\n速度: {speed}")
+        self.progress_dialog.setLabelText(tr("voice.download_speed", default="{task}\n速度: {speed}").format(task=task_name, speed=speed))
         self.progress_dialog.setValue(percent)
 
     def on_download_finished(self, success, message):
         self.progress_dialog.close()
         if success:
-            InfoBar.success("下载完成", "模型下载并解压成功！", parent=self)
+            InfoBar.success(tr("voice.download_complete"), tr("voice.download_complete"), parent=self)
             
             # Auto-fill paths
             cwd = os.getcwd()
@@ -254,6 +284,6 @@ class VoiceConfigInterface(QWidget):
             self.save_settings()
         else:
             if "cancelled" in str(message).lower():
-                InfoBar.warning("已取消", "下载已取消", parent=self)
+                InfoBar.warning(tr("voice.download_cancelled"), tr("voice.download_cancelled"), parent=self)
             else:
-                InfoBar.error("下载失败", str(message), parent=self)
+                InfoBar.error(tr("voice.download_failed"), str(message), parent=self)

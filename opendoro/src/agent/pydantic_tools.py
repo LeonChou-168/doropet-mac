@@ -17,6 +17,8 @@ from typing import Optional, Any
 import requests
 from bs4 import BeautifulSoup
 
+from pydantic_ai.tools import RunContext
+
 from src.core.logger import logger
 from src.agent.tools.browser_control import BROWSER_TOOLS
 
@@ -593,7 +595,7 @@ async def modify_pet_attribute(
 # 图片生成工具
 # ---------------------------------------------------------------------------
 
-async def generate_image(prompt: str) -> str:
+async def generate_image(ctx: RunContext[Any] = None, prompt: str = "") -> str:
     """Generate an image based on a text prompt and save it locally.
 
     Use this when the user asks to generate, draw, or create an image/illustration.
@@ -616,6 +618,8 @@ async def generate_image(prompt: str) -> str:
             )
             if img_response.image_path:
                 file_uri = pathlib.Path(img_response.image_path).as_uri()
+                if ctx is not None:
+                    ctx.deps.generated_images.append(img_response.image_path)
                 return json.dumps({
                     "status": "success",
                     "message": f"Image generated successfully.\n![Generated Image]({file_uri})",
@@ -687,6 +691,8 @@ async def generate_image(prompt: str) -> str:
             handler.write(img_data)
 
         file_uri = pathlib.Path(file_path).as_uri()
+        if ctx is not None:
+            ctx.deps.generated_images.append(file_path)
         return json.dumps({
             "status": "success",
             "message": f"Image generated successfully.\n![Generated Image]({file_uri})",
@@ -775,8 +781,8 @@ async def remove_agent_skill(skill_name: str) -> str:
 # 记忆工具 — 让 LLM 主动管理用户记忆
 # ---------------------------------------------------------------------------
 
-async def search_memories(query: str, top_n: int = 5) -> str:
-    """搜索用户记忆中与查询相关的信息。
+async def search_memories(ctx: RunContext[Any], query: str, top_n: int = 5) -> str:
+    """搜索用户的长期记忆。
 
     搜索会智能匹配你查询中的关键词片段。例如搜索"喜欢什么饮料"也会匹配到"喜欢喝咖啡"。
     如果第一次搜索没有结果，请换一组关键词再试一次（比如用户说"我住aaa"，搜"住在"或"aaa"都能找到）。
@@ -785,21 +791,19 @@ async def search_memories(query: str, top_n: int = 5) -> str:
         query: 搜索关键词，尽量包含核心信息词（不包含的我你他吗呢等虚词也能搜到）
         top_n: 最多返回多少条记忆（默认 5 条）
     """
-    from src.core.memory_manager import MemoryManager
-    from src.core.database import ChatDatabase
     try:
-        db = ChatDatabase()
-        mm = MemoryManager(db)
+        mm = ctx.deps.memory_manager
+        if mm is None:
+            return '{"status":"error","message":"记忆管理器不可用"}'
         results = mm.search_by_keywords(query, top_n)
         if not results:
             return '{"status":"ok","memories":[],"message":"未找到相关记忆"}'
-        import json
         return json.dumps({"status": "ok", "memories": results}, ensure_ascii=False)
     except Exception as e:
-        return f'{{"status":"error","message":"搜索记忆失败: {e}"}}'
+        return '{"status":"error","message":"搜索记忆失败: '+str(e)+'"}'
 
 
-async def add_memory(category: str, content: str, importance: int = 3) -> str:
+async def add_memory(ctx: RunContext[Any], category: str, content: str, importance: int = 3) -> str:
     """记住一条关于用户的信息。当用户分享个人信息（名字、喜好、经历、约定等）时使用此工具主动记住。
 
     Args:
@@ -807,32 +811,115 @@ async def add_memory(category: str, content: str, importance: int = 3) -> str:
         content: 要记住的内容，简洁完整地描述
         importance: 重要程度 1-5（5=最重要，一般重要请用 3）
     """
-    from src.core.memory_manager import MemoryManager
-    from src.core.database import ChatDatabase
     try:
-        db = ChatDatabase()
-        mm = MemoryManager(db)
+        mm = ctx.deps.memory_manager
+        if mm is None:
+            return '{"status":"error","message":"记忆管理器不可用"}'
         mm.save_to_long_term_memory(category, content, importance, [], content)
         return '{"status":"ok","message":"已记住"}'
     except Exception as e:
-        return f'{{"status":"error","message":"保存记忆失败: {e}"}}'
+        return '{"status":"error","message":"保存记忆失败: '+str(e)+'"}'
 
 
-async def delete_memory(memory_id: int) -> str:
+
+async def delete_memory(ctx: RunContext[Any], memory_id: int) -> str:
     """删除一条指定的记忆。
 
     Args:
         memory_id: 要删除的记忆 ID
     """
-    from src.core.memory_manager import MemoryManager
-    from src.core.database import ChatDatabase
     try:
-        db = ChatDatabase()
-        mm = MemoryManager(db)
+        mm = ctx.deps.memory_manager
+        if mm is None:
+            return '{"status":"error","message":"记忆管理器不可用"}'
         mm.delete_memory(memory_id)
         return '{"status":"ok","message":"记忆已删除"}'
     except Exception as e:
-        return f'{{"status":"error","message":"删除记忆失败: {e}"}}'
+        return '{"status":"error","message":"删除记忆失败: '+str(e)+'"}'
+
+
+# ---------------------------------------------------------------------------
+# 视觉读取工具
+# ---------------------------------------------------------------------------
+
+async def analyze_image(ctx: RunContext[Any], image_index: int = 1, prompt: str = "请详细描述这张图片。") -> str:
+    """Analyze an image attached to the current conversation using a configured vision model.
+
+    Use this only when the user asks about an attached image and the current chat model cannot see images directly.
+
+    Args:
+        image_index: The 1-based index of the attached image to analyze.
+        prompt: What to inspect or describe in the image.
+    """
+    try:
+        deps = ctx.deps
+        images = list(getattr(deps, "available_images", []) or [])
+        if not images:
+            return json.dumps({"status": "error", "message": "当前对话没有可读取的图片附件。"}, ensure_ascii=False)
+
+        if image_index < 1 or image_index > len(images):
+            return json.dumps({
+                "status": "error",
+                "message": f"图片序号无效，可用范围为 1-{len(images)}。"
+            }, ensure_ascii=False)
+
+        file_path = images[image_index - 1]
+        if not os.path.exists(file_path):
+            return json.dumps({"status": "error", "message": f"图片文件不存在: {file_path}"}, ensure_ascii=False)
+
+        db = getattr(deps, "db", None)
+        cache_key = f"{file_path}|{prompt.strip()}"
+        if db is not None:
+            cached = db.get_image_description(cache_key) or db.get_image_description(file_path)
+            if cached:
+                return json.dumps({
+                    "status": "success",
+                    "image_index": image_index,
+                    "cached": True,
+                    "description": cached,
+                }, ensure_ascii=False)
+
+        vision_model_data = getattr(deps, "vision_model_data", None)
+        if not vision_model_data:
+            return json.dumps({"status": "error", "message": "未配置可用的视觉模型。"}, ensure_ascii=False)
+
+        api_key, base_url, model = vision_model_data[:3]
+        provider_id = vision_model_data[6] if len(vision_model_data) >= 7 else ""
+
+        import base64
+        import mimetypes
+        from pydantic_ai.messages import TextContent, ImageUrl
+        from src.agent.pydantic_agent import create_quick_agent
+
+        mime_type = mimetypes.guess_type(file_path)[0] or "image/jpeg"
+        with open(file_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode("utf-8")
+
+        agent = create_quick_agent(
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+            provider_id=provider_id,
+            system_prompt="你是图片理解助手。请准确、客观地读取图片内容，并只回答图片分析结果。",
+        )
+        result = await agent.run([
+            TextContent(content=prompt or "请详细描述这张图片。"),
+            ImageUrl(url=f"data:{mime_type};base64,{encoded}"),
+        ])
+        description = str(getattr(result, "output", "") or "").strip()
+
+        if db is not None and description:
+            db.save_image_description(cache_key, description)
+
+        return json.dumps({
+            "status": "success",
+            "image_index": image_index,
+            "cached": False,
+            "description": description,
+        }, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"[analyze_image] Error: {e}")
+        return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -845,6 +932,7 @@ TOOLS_BY_CATEGORY = {
              "insert_at_line", "delete_lines", "find_in_file"],
     "search": ["search_baidu", "search_bing", "visit_webpage"],
     "image": ["generate_image"],
+    "vision": ["analyze_image"],
     "expression": ["set_expression", "modify_pet_attribute"],
     "coding": ["run_python_script"],
     "memory": ["search_memories", "add_memory", "delete_memory"],
@@ -869,6 +957,7 @@ ALL_TOOLS: dict[str, Any] = {
     "visit_webpage": visit_webpage,
     # 图片
     "generate_image": generate_image,
+    "analyze_image": analyze_image,
     # 宠物
     "set_expression": set_expression,
     "modify_pet_attribute": modify_pet_attribute,
@@ -894,7 +983,7 @@ def get_filtered_tools(enabled_plugins: list[str]) -> list:
 
     category_enabled = {
         cat: cat in enabled_plugins
-        for cat in ["search", "image", "coding", "file", "expression", "memory", "browser"]
+        for cat in ["search", "image", "vision", "coding", "file", "expression", "memory", "browser"]
     }
 
     for cat, tool_names in TOOLS_BY_CATEGORY.items():

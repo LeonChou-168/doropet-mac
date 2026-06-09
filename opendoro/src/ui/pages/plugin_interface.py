@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget,
                              QStackedWidget, QLabel, QMessageBox, QFrame, QListWidgetItem)
 from PyQt5.QtCore import Qt
 from qfluentwidgets import (SubtitleLabel, PrimaryPushButton, FluentIcon)
+from src.core.i18n import I18nManager, tr
 
 class PluginInterface(QWidget):
     def __init__(self, parent=None):
@@ -28,9 +29,9 @@ class PluginInterface(QWidget):
         self.left_layout.setContentsMargins(10, 20, 10, 20)
         self.left_layout.setSpacing(10)
         
-        self.lbl_title = SubtitleLabel("插件列表", self)
+        self.lbl_title = SubtitleLabel(tr("plugin.title"), self)
         
-        self.btn_refresh = PrimaryPushButton("刷新插件", self)
+        self.btn_refresh = PrimaryPushButton(tr("plugin.refresh"), self)
         self.btn_refresh.setIcon(FluentIcon.SYNC)
         self.btn_refresh.clicked.connect(self.load_plugins)
         
@@ -68,9 +69,9 @@ class PluginInterface(QWidget):
         # Default Welcome Page
         self.welcome_widget = QWidget()
         welcome_layout = QVBoxLayout(self.welcome_widget)
-        welcome_lbl = SubtitleLabel("请从左侧选择一个插件", self.welcome_widget)
-        welcome_lbl.setAlignment(Qt.AlignCenter)
-        welcome_layout.addWidget(welcome_lbl)
+        self.welcome_lbl = SubtitleLabel(tr("plugin.select_hint"), self.welcome_widget)
+        self.welcome_lbl.setAlignment(Qt.AlignCenter)
+        welcome_layout.addWidget(self.welcome_lbl)
         self.right_panel.addWidget(self.welcome_widget)
         
         # Add panels to main layout
@@ -81,6 +82,9 @@ class PluginInterface(QWidget):
         
         # Initial Load
         self.load_plugins()
+
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
 
     def get_plugin_name(self, file_path):
         """
@@ -121,7 +125,7 @@ class PluginInterface(QWidget):
             try:
                 os.makedirs(plugin_dir)
             except Exception as e:
-                self.show_error(f"无法创建插件目录: {e}")
+                self.show_error(tr("plugin.dir_create_failed", default="无法创建插件目录: {error}").format(error=e))
                 return
             
         # Scan for plugins
@@ -165,10 +169,10 @@ class PluginInterface(QWidget):
                 self.plugin_list.addItem(list_item)
                 
             if not valid_plugins:
-                self.plugin_list.addItem("暂无插件")
+                self.plugin_list.addItem(tr("plugin.no_plugins"))
                 self.plugin_list.item(0).setFlags(Qt.NoItemFlags) # Disable selection
         except Exception as e:
-            self.show_error(f"扫描插件目录失败: {e}")
+            self.show_error(tr("plugin.scan_failed") + f": {e}")
 
     def on_plugin_selected(self, row):
         if row < 0:
@@ -207,7 +211,7 @@ class PluginInterface(QWidget):
             # 1. Load module spec
             spec = importlib.util.spec_from_file_location(module_name_suffix, entry_point_file)
             if spec is None:
-                 self.show_error(f"无法加载模块规范: {entry_point_file}")
+                 self.show_error(tr("plugin.load_spec_failed", default="无法加载模块规范: {file}").format(file=entry_point_file))
                  return
                  
             module = importlib.util.module_from_spec(spec)
@@ -229,14 +233,20 @@ class PluginInterface(QWidget):
                     self.right_panel.setCurrentWidget(widget)
                     self.loaded_plugins[plugin_id] = widget
                 else:
-                    self.show_error(f"Error: {plugin_info['name']} 中的 'Plugin' 类必须继承自 QWidget")
+                    self.show_error(tr("plugin.class_not_qwidget", default="Error: {name} 中的 'Plugin' 类必须继承自 QWidget").format(name=plugin_info['name']))
             else:
-                self.show_error(f"Error: {plugin_info['name']} 未定义 'Plugin' 类")
+                self.show_error(tr("plugin.class_not_defined", default="Error: {name} 未定义 'Plugin' 类").format(name=plugin_info['name']))
                 
         except Exception as e:
-            self.show_error(f"加载插件 {plugin_info['name']} 失败:\n{str(e)}")
+            self.show_error(tr("plugin.load_failed", default="加载插件 {name} 失败:\n{error}").format(name=plugin_info['name'], error=str(e)))
             import traceback
             traceback.print_exc()
+
+    def refresh_ui(self, lang_code: str = ""):
+        """语言切换时刷新所有 UI 文本。"""
+        self.lbl_title.setText(tr("plugin.title"))
+        self.btn_refresh.setText(tr("plugin.refresh"))
+        self.welcome_lbl.setText(tr("plugin.select_hint"))
 
     def show_error(self, message):
         """Displays an error message in the right panel."""

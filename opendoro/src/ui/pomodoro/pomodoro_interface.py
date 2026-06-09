@@ -9,7 +9,13 @@ from .pomodoro_timer import PomodoroTimer, TimerState
 from .database import PomodoroDatabase
 from .widgets import TimerRing
 from src.core.orange_manager import OrangeManager
+from src.core.pet_constants import DORO_LEVEL_TITLES
 from src.core.logger import logger
+from src.core.i18n import I18nManager, tr
+
+
+def get_doro_level_title(level: int) -> str:
+    return tr(f"pet.doro_level.{level}", default=DORO_LEVEL_TITLES.get(level, "Doro崽"))
 
 
 class OrangeBadge(QLabel):
@@ -51,14 +57,10 @@ class OrangeInfoCard(CardWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(4)
 
-        self._title = StrongBodyLabel("🍊 奖励规则")
+        self._title = StrongBodyLabel("🍊 " + tr("pomodoro.reward_rules"))
         layout.addWidget(self._title)
 
-        self._rule_label = BodyLabel(
-            "15m → 100🍊    25m → 150🍊\n"
-            "45m → 300🍊    60m → 500🍊\n"
-            "每日首次 +100  |  连击额外奖励"
-        )
+        self._rule_label = BodyLabel(tr("pomodoro.daily_bonus"))
         self._rule_label.setStyleSheet("font-size: 11px; color: #888; line-height: 1.4;")
         layout.addWidget(self._rule_label)
 
@@ -121,6 +123,9 @@ class PomodoroInterface(QWidget):
         self._connect_signals()
         self._refresh_stats()
 
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
+
     def set_orange_manager(self, orange_manager: OrangeManager):
         self._orange_manager = orange_manager
         self._orange_manager.orange_changed.connect(self._on_orange_changed)
@@ -134,7 +139,7 @@ class PomodoroInterface(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(6)
 
-        self._title_label = TitleLabel("🍊 欧润吉钟")
+        self._title_label = TitleLabel("🍊 " + tr("pomodoro.title"))
         header_layout.addWidget(self._title_label)
         header_layout.addStretch()
 
@@ -163,7 +168,7 @@ class PomodoroInterface(QWidget):
 
         timer_card_layout.addWidget(timer_section)
 
-        self._status_label = SubtitleLabel("点击「开始」开始一个欧润吉钟")
+        self._status_label = SubtitleLabel(tr("pomodoro.start_hint"))
         self._status_label.setAlignment(Qt.AlignCenter)
         timer_card_layout.addWidget(self._status_label)
 
@@ -172,7 +177,7 @@ class PomodoroInterface(QWidget):
         status_line_layout.setContentsMargins(0, 0, 0, 0)
         status_line_layout.setSpacing(6)
 
-        self._today_badge = BodyLabel("今日🍊 × 0")
+        self._today_badge = BodyLabel(tr("pomodoro.today_oranges", default="今日🍊 × 0").format(count=0))
         self._today_badge.setAlignment(Qt.AlignCenter)
         status_line_layout.addWidget(self._today_badge)
 
@@ -193,11 +198,11 @@ class PomodoroInterface(QWidget):
         control_layout.setContentsMargins(0, 0, 0, 0)
         control_layout.setSpacing(4)
 
-        self._start_btn = PrimaryPushButton("▶ 开始")
+        self._start_btn = PrimaryPushButton("▶ " + tr("pomodoro.start"))
         self._start_btn.setFixedHeight(30)
-        self._pause_btn = PushButton("⏸ 暂停")
+        self._pause_btn = PushButton("⏸ " + tr("pomodoro.pause"))
         self._pause_btn.setFixedHeight(30)
-        self._stop_btn = PushButton("⏹ 停止")
+        self._stop_btn = PushButton("⏹ " + tr("pomodoro.stop"))
         self._stop_btn.setFixedHeight(30)
 
         control_layout.addStretch()
@@ -221,9 +226,9 @@ class PomodoroInterface(QWidget):
         duration_layout.setContentsMargins(0, 0, 0, 0)
         duration_layout.setSpacing(2)
 
-        dur_label = BodyLabel("时长")
-        dur_label.setStyleSheet("font-size: 11px;")
-        duration_layout.addWidget(dur_label)
+        self._dur_label = BodyLabel(tr("pomodoro.duration"))
+        self._dur_label.setStyleSheet("font-size: 11px;")
+        duration_layout.addWidget(self._dur_label)
 
         self._duration_group = QButtonGroup(self)
         self._duration_radios = {}
@@ -268,7 +273,7 @@ class PomodoroInterface(QWidget):
             self._timer.set_focus_duration(minutes)
             if self._timer.is_idle:
                 mins = self._timer.get_focus_duration_minutes()
-                self._timer_ring.set_time(mins * 60, mins * 60, "就绪")
+                self._timer_ring.set_time(mins * 60, mins * 60, tr("pomodoro.ready"))
 
     def _on_start(self):
         if self._timer.state == TimerState.IDLE:
@@ -298,24 +303,24 @@ class PomodoroInterface(QWidget):
         self._update_button_states()
 
         if new_state == TimerState.FOCUSING:
-            self._timer_ring.set_time(self._timer.remaining, self._timer.total, "专注中...")
-            self._status_label.setText("🔴 专注中... 加油！")
+            self._timer_ring.set_time(self._timer.remaining, self._timer.total, tr("pomodoro.focusing"))
+            self._status_label.setText("🔴 " + tr("pomodoro.focusing_encourage"))
         elif new_state == TimerState.BREAK:
-            self._timer_ring.set_time(self._timer.remaining, self._timer.total, "休息中...")
-            self._status_label.setText("☕ 休息时间，放松一下~")
+            self._timer_ring.set_time(self._timer.remaining, self._timer.total, tr("pomodoro.resting"))
+            self._status_label.setText("☕ " + tr("pomodoro.resting_relax"))
         elif new_state == TimerState.PAUSED_FOCUS:
-            self._status_label.setText("⏸ 专注已暂停")
+            self._status_label.setText("⏸ " + tr("pomodoro.focus_paused"))
         elif new_state == TimerState.PAUSED_BREAK:
-            self._status_label.setText("⏸ 休息已暂停")
+            self._status_label.setText("⏸ " + tr("pomodoro.rest_paused"))
         elif new_state == TimerState.IDLE:
             mins = self._timer.get_focus_duration_minutes()
-            self._timer_ring.set_time(mins * 60, mins * 60, "就绪")
+            self._timer_ring.set_time(mins * 60, mins * 60, tr("pomodoro.ready"))
             if old_state == TimerState.FOCUSING:
-                self._status_label.setText("🍊 欧润吉get！太棒了！")
+                self._status_label.setText("🍊 " + tr("pomodoro.orange_get"))
             elif old_state == TimerState.BREAK:
-                self._status_label.setText("☕ 休息结束，可以开始新的欧润吉了")
+                self._status_label.setText("☕ " + tr("pomodoro.rest_end"))
             else:
-                self._status_label.setText("点击「开始」开始一个欧润吉钟")
+                self._status_label.setText(tr("pomodoro.start_hint"))
 
     def _on_tick(self, remaining: int):
         self._timer_ring.set_time(remaining, self._timer.total, self._timer.state.value)
@@ -346,25 +351,30 @@ class PomodoroInterface(QWidget):
         self._refresh_orange_display()
 
     def _update_button_states(self):
+        self._stop_btn.setText("⏹ " + tr("pomodoro.stop"))
         if self._timer.is_idle:
-            self._start_btn.setText("▶ 开始")
+            self._start_btn.setText("▶ " + tr("pomodoro.start"))
+            self._pause_btn.setText("⏸ " + tr("pomodoro.pause"))
+            self._stop_btn.setText("⏹ " + tr("pomodoro.stop"))
             self._start_btn.setEnabled(True)
             self._pause_btn.setEnabled(False)
             self._stop_btn.setEnabled(False)
         elif self._timer.is_focusing:
+            self._start_btn.setText("▶ " + tr("pomodoro.start"))
             self._start_btn.setEnabled(False)
-            self._pause_btn.setText("⏸ 暂停")
+            self._pause_btn.setText("⏸ " + tr("pomodoro.pause"))
             self._pause_btn.setEnabled(True)
             self._stop_btn.setEnabled(True)
         elif self._timer.is_on_break:
+            self._start_btn.setText("▶ " + tr("pomodoro.start"))
             self._start_btn.setEnabled(False)
-            self._pause_btn.setText("⏸ 暂停")
+            self._pause_btn.setText("⏸ " + tr("pomodoro.pause"))
             self._pause_btn.setEnabled(True)
             self._stop_btn.setEnabled(True)
         elif self._timer.is_paused:
-            self._start_btn.setText("▶ 继续")
+            self._start_btn.setText("▶ " + tr("pomodoro.continue"))
             self._start_btn.setEnabled(True)
-            self._pause_btn.setText("▶ 继续")
+            self._pause_btn.setText("▶ " + tr("pomodoro.continue"))
             self._pause_btn.setEnabled(True)
             self._stop_btn.setEnabled(True)
 
@@ -376,7 +386,7 @@ class PomodoroInterface(QWidget):
         if today is None:
             today = self._db.get_today_stats()
         orange_today = self._orange_manager.today_earned if self._orange_manager else 0
-        self._today_badge.setText(f"今日🍊 × {orange_today}")
+        self._today_badge.setText(tr("pomodoro.today_oranges").format(count=orange_today))
 
     def _refresh_orange_display(self):
         if self._orange_manager:
@@ -403,8 +413,8 @@ class PomodoroInterface(QWidget):
             return
 
         level = self._orange_manager.doro_level
-        title = self._orange_manager.doro_title
-        self._doro_level_label.setText(f"⭐ Lv.{level} {title}")
+        title = get_doro_level_title(level)
+        self._doro_level_label.setText(tr("pet.status.title", default="⭐ Lv.{level} {title}").format(level=level, title=title))
 
         dark = isDarkTheme()
         self._doro_level_label.setStyleSheet(f"""
@@ -415,6 +425,37 @@ class PomodoroInterface(QWidget):
 
     def set_doro_attribute_display(self, hunger: float = None, mood: float = None):
         pass
+
+    def refresh_ui(self, lang_code: str = ""):
+        """Language switch refresh: update all label texts."""
+        self._title_label.setText("🍊 " + tr("pomodoro.title"))
+        if self._timer.is_focusing:
+            self._status_label.setText("🔴 " + tr("pomodoro.focusing_encourage"))
+        elif self._timer.is_on_break:
+            self._status_label.setText("☕ " + tr("pomodoro.resting_relax"))
+        elif self._timer._state == TimerState.PAUSED_FOCUS:
+            self._status_label.setText("⏸ " + tr("pomodoro.focus_paused"))
+        elif self._timer._state == TimerState.PAUSED_BREAK:
+            self._status_label.setText("⏸ " + tr("pomodoro.rest_paused"))
+        else:
+            self._status_label.setText(tr("pomodoro.start_hint"))
+        
+        # Refresh button states (they use tr() so just re-trigger)
+        self._update_button_states()
+        
+        # Refresh today badge
+        self._refresh_today_badge()
+        
+        # Refresh OrangeInfoCard
+        self._orange_info._title.setText("🍊 " + tr("pomodoro.reward_rules"))
+        self._orange_info._rule_label.setText(tr("pomodoro.daily_bonus"))
+        
+        # Refresh duration label
+        if hasattr(self, '_dur_label'):
+            self._dur_label.setText(tr("pomodoro.duration"))
+        
+        # Refresh doro level label
+        self._refresh_doro_status()
 
     def update_theme(self, is_dark: bool = None):
         if is_dark is None:

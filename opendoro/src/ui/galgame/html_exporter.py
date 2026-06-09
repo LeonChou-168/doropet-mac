@@ -2,11 +2,15 @@ import os
 from datetime import datetime
 from typing import List, Optional
 from .models import GameState, StoryMessage, MessageRole
+from src.core.i18n import tr
 
 
 class HTMLExporter:
     
-    HTML_TEMPLATE = '''<!DOCTYPE html>
+    @staticmethod
+    def _get_translated_template() -> str:
+        """获取翻译后的 HTML 模板。"""
+        return '''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -265,22 +269,22 @@ class HTMLExporter:
         </div>
         
         <div class="meta-info">
-            <h2>故事概览</h2>
+            <h2>{story_overview_label}</h2>
             <div class="meta-grid">
                 <div class="meta-item">
-                    <div class="label">主角</div>
+                    <div class="label">{protagonist_label}</div>
                     <div class="value">{protagonist_name}</div>
                 </div>
                 <div class="meta-item">
-                    <div class="label">当前章节</div>
-                    <div class="value">第 {chapter} 章</div>
+                    <div class="label">{chapter_label}</div>
+                    <div class="value">{chapter_value}</div>
                 </div>
                 <div class="meta-item">
-                    <div class="label">金币</div>
-                    <div class="value">{currency} 💰</div>
+                    <div class="label">{currency_label}</div>
+                    <div class="value">{currency_value}</div>
                 </div>
                 <div class="meta-item">
-                    <div class="label">导出时间</div>
+                    <div class="label">{export_time_label}</div>
                     <div class="value">{export_time}</div>
                 </div>
             </div>
@@ -293,15 +297,15 @@ class HTMLExporter:
         </div>
         
         <div class="footer">
-            <div>由 DoroPet Galgame 生成</div>
-            <div class="export-info">导出于 {export_time}</div>
+            <div>{footer_generated_by}</div>
+            <div class="export-info">{footer_exported_at}</div>
         </div>
     </div>
 </body>
 </html>'''
     
     @staticmethod
-    def export_to_html(state: GameState, output_path: str, story_title: str = "未命名故事") -> bool:
+    def export_to_html(state: GameState, output_path: str, story_title: str = None) -> bool:
         try:
             html_content = HTMLExporter._generate_html(state, story_title)
             
@@ -314,25 +318,45 @@ class HTMLExporter:
             return False
     
     @staticmethod
-    def _generate_html(state: GameState, story_title: str) -> str:
-        protagonist_name = state.protagonist.name if state.protagonist else "未知主角"
-        world_name = state.world_setting.name if state.world_setting else "未知世界"
+    def _generate_html(state: GameState, story_title: str = None) -> str:
+        if story_title is None:
+            story_title = tr("galgame.html.untitled_story", default="未命名故事")
+        
+        protagonist_name = state.protagonist.name if state.protagonist else tr("galgame.html.unknown_protagonist", default="未知主角")
+        world_name = state.world_setting.name if state.world_setting else tr("galgame.html.unknown_world", default="未知世界")
         
         characters_section = HTMLExporter._generate_characters_section(state)
         story_messages = HTMLExporter._generate_story_messages(state.messages)
         
         export_time = datetime.now().strftime("%Y-%m-%d %H:%M")
         
-        html = HTMLExporter.HTML_TEMPLATE.format(
+        html_template = HTMLExporter._get_translated_template()
+        
+        chapter_label = tr("galgame.html.chapter_label", default="当前章节")
+        chapter_value = tr("galgame.html.chapter_value", default="第 {} 章").format(state.chapter)
+        
+        currency_value = f"{state.currency} 💰"
+        
+        footer_generated_by = tr("galgame.html.footer_generated_by", default="由 DoroPet Galgame 生成")
+        footer_exported_at = tr("galgame.html.footer_exported_at", default="导出于 {export_time}").format(export_time=export_time)
+        
+        html = html_template.format(
             title=f"{story_title} - Galgame Story",
             story_title=story_title,
             world_name=world_name,
+            story_overview_label=tr("galgame.html.story_overview", default="故事概览"),
+            protagonist_label=tr("galgame.html.protagonist_label", default="主角"),
             protagonist_name=protagonist_name,
-            chapter=state.chapter,
-            currency=state.currency,
+            chapter_label=chapter_label,
+            chapter_value=chapter_value,
+            currency_label=tr("galgame.html.currency_label", default="金币"),
+            currency_value=currency_value,
+            export_time_label=tr("galgame.html.export_time_label", default="导出时间"),
             export_time=export_time,
             characters_section=characters_section,
-            story_messages=story_messages
+            story_messages=story_messages,
+            footer_generated_by=footer_generated_by,
+            footer_exported_at=footer_exported_at
         )
         
         return html
@@ -342,22 +366,29 @@ class HTMLExporter:
         if not state.characters and not state.affections:
             return ""
         
-        characters_html = ['<div class="characters-section">', '<h2>角色信息</h2>']
+        characters_title = tr("galgame.html.characters_title", default="角色信息")
+        characters_html = ['<div class="characters-section">', f'<h2>{characters_title}</h2>']
+        
+        relationship_prefix = tr("galgame.html.relationship_prefix", default="关系: ")
+        affection_suffix = tr("galgame.html.affection_suffix", default="好感度: {affection}/100")
+        stranger = tr("galgame.html.stranger", default="陌生人")
         
         for char in state.characters:
             affection = 50
-            relationship = "陌生人"
+            relationship = stranger
             for aff in state.affections:
                 if aff.character_name == char.name:
                     affection = aff.affection
                     relationship = aff.relationship
                     break
             
+            details = f"{relationship_prefix}{relationship} | {affection_suffix.format(affection=affection)}"
+            
             characters_html.append(f'''
             <div class="character-card">
                 <div class="name">{char.name}</div>
                 <div class="details">
-                    关系: {relationship} | 好感度: {affection}/100
+                    {details}
                 </div>
             </div>''')
         
@@ -366,8 +397,12 @@ class HTMLExporter:
     
     @staticmethod
     def _generate_story_messages(messages: List[StoryMessage]) -> str:
+        no_content = tr("galgame.html.no_content", default="暂无故事内容")
         if not messages:
-            return '<p style="text-align: center; color: #7f8c8d;">暂无故事内容</p>'
+            return f'<p style="text-align: center; color: #7f8c8d;">{no_content}</p>'
+        
+        narrator_label = tr("galgame.html.narrator", default="旁白")
+        choice_label = tr("galgame.html.choice", default="✦ 选择")
         
         html_parts = []
         current_chapter = 0
@@ -375,13 +410,15 @@ class HTMLExporter:
         for msg in messages:
             if msg.chapter_number != current_chapter:
                 current_chapter = msg.chapter_number
-                chapter_title = f"第{current_chapter}章"
+                chapter_prefix = tr("galgame.status_bar.chapter", default="第{}章").format(current_chapter)
                 if msg.chapter_name:
-                    chapter_title += f" · {msg.chapter_name}"
+                    chapter_title = f"{chapter_prefix} · {msg.chapter_name}"
+                else:
+                    chapter_title = chapter_prefix
                 html_parts.append(f'<div class="chapter"><div class="chapter-title">{chapter_title}</div>')
             
             message_class = "narrator"
-            speaker = "旁白"
+            speaker = narrator_label
             
             if msg.role == MessageRole.CHARACTER and msg.character_name:
                 message_class = "character"
@@ -395,7 +432,7 @@ class HTMLExporter:
                     if choice.id == msg.selected_choice:
                         choice_html = f'''
                         <div class="choice-section">
-                            <div class="label">✦ 选择</div>
+                            <div class="label">{choice_label}</div>
                             <div class="choice-text">{HTMLExporter._escape_html(choice.text)}</div>
                         </div>'''
                         break
