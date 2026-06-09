@@ -1,7 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QApplication, QDesktopWidget
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont
-from src.core.i18n import tr
 
 
 class SplashScreen(QWidget):
@@ -32,12 +31,12 @@ class SplashScreen(QWidget):
         title_label.setAlignment(Qt.AlignCenter)
         container_layout.addWidget(title_label)
         
-        subtitle_label = QLabel(tr("app.subtitle"))
+        subtitle_label = QLabel("桌面 AI 伙伴")
         subtitle_label.setStyleSheet("font-size: 14px; color: #888888; margin-bottom: 15px;")
         subtitle_label.setAlignment(Qt.AlignCenter)
         container_layout.addWidget(subtitle_label)
         
-        self.status_label = QLabel(tr("splash.starting"))
+        self.status_label = QLabel("启动中...")
         self.status_label.setStyleSheet("font-size: 13px; color: #aaaaaa;")
         self.status_label.setAlignment(Qt.AlignCenter)
         container_layout.addWidget(self.status_label)
@@ -65,7 +64,7 @@ class SplashScreen(QWidget):
     def set_status(self, text):
         self.status_label.setText(text)
         self.dot_timer.stop()
-        self.loading_label.setText(tr("splash.starting"))
+        self.loading_label.setText("启动中...")
     
     def close_splash(self):
         self.dot_timer.stop()

@@ -4,25 +4,12 @@ import threading
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.core.dependency_checker import check_and_exit_on_failure
-check_and_exit_on_failure()
-
-from src.live2dview import Live2DWidget
-from src.resource_utils import resource_path
-from src.core.logger import setup_logger
-from src.core.i18n import I18nManager, tr
-from src.splash_screen import SplashScreen
-from src.provider.manager import ProviderManager
-from src.core.database import DatabaseManager
-from src.core.startup_update_checker import StartupUpdateChecker
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtCore import QSettings
-from PyQt5.QtGui import *
-
-# Initialize Logger
-logger = setup_logger()
+logger = None
 
 def init_provider_framework():
+    from src.core.database import DatabaseManager
+    from src.provider.manager import ProviderManager
+
     try:
         from src.provider.sources import (
             ProviderOpenAI, ProviderDeepSeek, ProviderAnthropic,
@@ -65,6 +52,10 @@ def init_agent_framework():
 
 def setup_tray_icon(app, widget):
     """设置系统托盘"""
+    from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction
+    from PyQt5.QtGui import QIcon
+    from src.resource_utils import resource_path
+
     tray_icon = QSystemTrayIcon(app)
     
     # 尝试加载图标
@@ -164,6 +155,8 @@ def setup_tray_icon(app, widget):
     return tray_icon
 
 def setup_startup_update_checker(widget):
+    from src.core.startup_update_checker import StartupUpdateChecker
+
     update_checker = StartupUpdateChecker(widget)
     
     def on_update_available(version_info):
@@ -216,14 +209,32 @@ def check_and_create_shortcut_async():
     threading.Thread(target=_worker, daemon=True).start()
 
 def main():
+    global logger, tr
+
+    from PyQt5.QtWidgets import QApplication
+    from PyQt5.QtGui import QIcon
+    from PyQt5.QtCore import QSettings
+    from src.splash_screen import SplashScreen
+    from src.core.i18n import I18nManager, tr
+    from src.core.logger import setup_logger
+    from src.resource_utils import resource_path
+
     app = QApplication(sys.argv)
-    from qfluentwidgets import setThemeColor
-    from src.core.app_theme import THEME_COLOR
-    setThemeColor(THEME_COLOR)
     # 显示启动画面（立即显示，让用户知道程序正在启动）
     splash = SplashScreen()
     splash.show()
     app.processEvents()
+
+    logger = setup_logger()
+
+    from qfluentwidgets import setThemeColor
+    from src.core.app_theme import THEME_COLOR
+    setThemeColor(THEME_COLOR)
+
+    splash.set_status(tr("splash.checking_dependencies", default="正在检查运行环境..."))
+    app.processEvents()
+    from src.core.dependency_checker import check_and_exit_on_failure
+    check_and_exit_on_failure()
 
     logger.info("Application started.")
 
@@ -246,9 +257,11 @@ def main():
     app.setQuitOnLastWindowClosed(False)
 
     splash.set_status(tr("splash.loading_provider"))
+    app.processEvents()
     init_provider_framework()
 
     splash.set_status(tr("splash.loading_agent"))
+    app.processEvents()
     init_agent_framework()
 
     qss_path = resource_path("themes/light.qss")
@@ -263,9 +276,11 @@ def main():
         logger.warning(f"Stylesheet not found: {qss_path}")
 
     logger.info("Initializing Live2DWidget...")
-    splash.set_status("正在加载Live2D模型...")
+    splash.set_status(tr("splash.loading_live2d", default="正在加载 Live2D 模型..."))
+    app.processEvents()
 
     from src.core.database import DatabaseManager
+    from src.live2dview import Live2DWidget
     db_manager = DatabaseManager()
     default_model_path = resource_path("models/Doro/Doro.model3.json")
 

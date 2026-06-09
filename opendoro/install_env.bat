@@ -105,8 +105,5 @@ if not exist "!SCRIPT_DIR!\models\voice" mkdir "!SCRIPT_DIR!\models\voice"
 
 echo [7/7] Setup complete!
 echo.
-powershell -Command "Write-Host '环境安装完成！即将启动 Doro Pet...' -ForegroundColor Green"
-powershell -Command "Write-Host '程序将在 3 秒后自动启动，按 Ctrl+C 取消...' -ForegroundColor Yellow"
-timeout /t 3 /nobreak >nul
-powershell -Command "Write-Host '正在启动 Doro Pet...' -ForegroundColor Green"
+powershell -Command "Write-Host '环境安装完成！正在启动 Doro Pet...' -ForegroundColor Green"
 call "!SCRIPT_DIR!\start_app_background.bat"

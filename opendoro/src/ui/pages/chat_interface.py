@@ -26,7 +26,6 @@ from qfluentwidgets import (ListWidget, TextEdit, LineEdit,
 
 from src.core.database import ChatDatabase
 from src.services.llm_service import LLMWorker, ImageGenerationWorker
-from src.core.voice import VoiceAssistant
 from src.core.tts import TTSManager
 from src.core.skill_manager import SkillManager
 from src.core.state_manager import StateManager, GenerationState, ConnectionState
@@ -1832,6 +1831,7 @@ class ChatInterface(QWidget):
         self.select_last_active_session()
 
         # Initialize Voice Assistant
+        from src.core.voice import VoiceAssistant
         self.voice_assistant = VoiceAssistant(self.db, self)
         self.voice_assistant.wake_detected.connect(self.on_voice_wake_detected)
         self.voice_assistant.text_recognized.connect(self.on_voice_text_recognized)
