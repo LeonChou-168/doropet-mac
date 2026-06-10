@@ -22,7 +22,8 @@ from src.core.random_wanderer import RandomWanderer
 
 class SpeechBubble(QLabel):
     """
-    自定义的气泡控件，用于显示对话文本
+    自定义的气泡控件，用于显示对话文本。
+    支持深色/浅色主题自适应。
     """
     def __init__(self, parent=None):
         super().__init__(None)
@@ -38,7 +39,7 @@ class SpeechBubble(QLabel):
         
         self.setContentsMargins(15, 15, 15, 30)
         
-        self.setStyleSheet("color: black; font-family: 'Microsoft YaHei'; font-size: 14px; font-weight: bold;")
+        self._update_style()
         
         self.hide()
         
@@ -46,7 +47,19 @@ class SpeechBubble(QLabel):
         self.hide_timer.setSingleShot(True)
         self.hide_timer.timeout.connect(self.fade_out)
 
+    def _update_style(self):
+        """根据当前主题更新文字颜色。"""
+        from src.ui.design_tokens import get_token
+        text_color = get_token("text_primary")
+        if not text_color:
+            text_color = "rgba(235, 240, 250, 235)" if isDarkTheme() else "rgba(30, 30, 40, 220)"
+        self.setStyleSheet(
+            f"color: {text_color}; font-family: 'Microsoft YaHei'; "
+            "font-size: 14px; font-weight: bold;"
+        )
+
     def show_text(self, text, duration=3000):
+        self._update_style()
         self.setText(text)
         self.adjustSize()
         
@@ -63,14 +76,19 @@ class SpeechBubble(QLabel):
 
     def paintEvent(self, event):
         """
-        绘制漫画风格的气泡
+        绘制漫画风格的气泡，使用主题感知颜色。
         """
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         
-        bg_color = QColor(255, 255, 255)
-        border_color = QColor(0, 0, 0)
-        border_width = 3
+        dark = isDarkTheme()
+        if dark:
+            bg_color = QColor(45, 50, 60)
+            border_color = QColor(100, 105, 115)
+        else:
+            bg_color = QColor(255, 255, 255)
+            border_color = QColor(60, 60, 70)
+        border_width = 2.5
         
         rect = self.rect()
         w = rect.width()
@@ -86,13 +104,9 @@ class SpeechBubble(QLabel):
         r = 10
         
         path.moveTo(margin + r, margin)
-        
         path.lineTo(w - margin - r, margin)
-        
         path.quadTo(w - margin, margin, w - margin, margin + r)
-        
         path.lineTo(w - margin, body_h - margin - r)
-        
         path.quadTo(w - margin, body_h - margin, w - margin - r, body_h - margin)
         
         tail_width = 20
@@ -103,11 +117,8 @@ class SpeechBubble(QLabel):
         path.lineTo(tail_x_center - tail_width / 2, body_h - margin)
         
         path.lineTo(margin + r, body_h - margin)
-        
         path.quadTo(margin, body_h - margin, margin, body_h - margin - r)
-        
         path.lineTo(margin, margin + r)
-        
         path.quadTo(margin, margin, margin + r, margin)
         
         path.closeSubpath()
@@ -914,8 +925,11 @@ class Live2DWidget(QOpenGLWidget):
             self.status_overlay._fade_in()
 
     def open_main_window(self):
+        """显示主界面（已在启动时预初始化）。"""
         try:
             if self.main_window is None:
+                # 兜底：如果启动时未初始化，则在此处创建
+                from src.ui.main_window import MainWindow
                 version_manager = None
                 if hasattr(self, '_startup_checker') and self._startup_checker:
                     version_manager = self._startup_checker.get_version_manager()

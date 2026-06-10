@@ -231,7 +231,7 @@ def main():
     from src.core.app_theme import THEME_COLOR
     setThemeColor(THEME_COLOR)
 
-    splash.set_status(tr("splash.checking_dependencies", default="正在检查运行环境..."))
+    splash.set_status(tr("splash.checking_dependencies", default="正在检查运行环境..."), 5)
     app.processEvents()
     from src.core.dependency_checker import check_and_exit_on_failure
     check_and_exit_on_failure()
@@ -256,11 +256,11 @@ def main():
 
     app.setQuitOnLastWindowClosed(False)
 
-    splash.set_status(tr("splash.loading_provider"))
+    splash.set_status(tr("splash.loading_provider"), 20)
     app.processEvents()
     init_provider_framework()
 
-    splash.set_status(tr("splash.loading_agent"))
+    splash.set_status(tr("splash.loading_agent"), 35)
     app.processEvents()
     init_agent_framework()
 
@@ -276,11 +276,12 @@ def main():
         logger.warning(f"Stylesheet not found: {qss_path}")
 
     logger.info("Initializing Live2DWidget...")
-    splash.set_status(tr("splash.loading_live2d", default="正在加载 Live2D 模型..."))
+    splash.set_status(tr("splash.loading_live2d", default="正在加载 Live2D 模型..."), 50)
     app.processEvents()
 
     from src.core.database import DatabaseManager
     from src.live2dview import Live2DWidget
+    from src.ui.main_window import MainWindow
     db_manager = DatabaseManager()
     default_model_path = resource_path("models/Doro/Doro.model3.json")
 
@@ -301,9 +302,17 @@ def main():
     settings = QSettings("DoroPet", "Settings")
     hide_pet_on_startup = settings.value("hide_pet_on_startup", False, type=bool)
 
+    # ---- 提前初始化主界面（避免首次打开时的创建延迟）----
+    splash.set_status(tr("splash.loading_live2d", default="正在准备主界面..."), 75)
+    app.processEvents()
+    w.main_window = MainWindow(version_manager=None)
+    w.main_window.set_live2d_widget(w)
+    w.main_window.hide()  # 隐藏，等用户点击时才显示
+    logger.info("MainWindow pre-initialized")
+
     if hide_pet_on_startup:
         w.hide()
-        w.open_main_window()
+        w.main_window.show()
         logger.info("Pet hidden on startup, showing main window instead.")
     else:
         w.show()
@@ -313,6 +322,9 @@ def main():
     if not hide_pet_on_startup:
         w.talk(tr("pet.welcome_back"))
 
+    splash.set_status(tr("splash.loading_live2d", default="即将完成..."), 92)
+    app.processEvents()
+
     splash.close_splash()
     logger.info("Splash screen closed")
 
@@ -321,6 +333,10 @@ def main():
 
     update_checker = setup_startup_update_checker(w)
     w._startup_checker = update_checker
+    # 将更新检查器的 version_manager 同步到主窗口
+    if hasattr(w, 'main_window') and w.main_window:
+        version_mgr = update_checker.get_version_manager()
+        w.main_window.set_version_manager(version_mgr)
     update_checker.start_check(delay_ms=3000)
 
     sys.exit(app.exec())

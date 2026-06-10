@@ -48,37 +48,42 @@ class MainWindow(FluentWindow):
         # 2. 初始化数据库 (单一实例)
         self.db = ChatDatabase()
 
-        # 3. 创建子界面
+        # 3. 创建子界面（分批创建，每批之后刷新事件循环以保持启动动画流畅）
         self.chat_interface = ChatInterface(self.db, self)
         self.config_interface = ConfigInterface(self.db, self)
         self.voice_config_interface = VoiceConfigInterface(self.db, self)
         self.live2d_config_interface = Live2DConfigInterface(self.db, self)
+        QApplication.processEvents()
+
         self.prompt_interface = PromptInterface(self.db, self)
         self.plugin_interface = PluginInterface(self)
         self.skills_interface = SkillsInterface(self)
         self.log_interface = LogInterface(self)
         self.update_interface = UpdateInterface(self, version_manager)
         self.settings_interface = SettingsInterface(self)
-        
+        QApplication.processEvents()
+
         self.attr_manager = None
-        
         self._orange_manager = OrangeManager(self)
-        
+        QApplication.processEvents()
+
         self.pomodoro_interface = PomodoroInterface(self)
         self.pet_status_interface = PetStatusInterface(None, self.db, self, self.pomodoro_interface)
         self.music_interface = MusicInterface(self)
         self.galgame_interface = GalgameInterface(self.db, self)
         self.memory_interface = MemoryInterface(self.db, self)
+        QApplication.processEvents()
 
         self.pomodoro_interface.set_orange_manager(self._orange_manager)
         self.pet_status_interface.set_orange_manager(self._orange_manager)
-        
+
         # 4. 初始化导航栏
         self.init_navigation()
-        
+        QApplication.processEvents()
+
         # 5. 初始化标题栏功能 (置顶、主题切换)
         self.init_title_bar()
-        
+
         setThemeColor(THEME_COLOR)
         if isDarkTheme():
             setTheme(Theme.DARK)
@@ -86,6 +91,7 @@ class MainWindow(FluentWindow):
         else:
             setTheme(Theme.LIGHT)
             self.load_stylesheet(resource_path("themes/light.qss"))
+        QApplication.processEvents()
 
         # 6. 初始化窗口属性
         self.init_window()
@@ -317,32 +323,38 @@ class MainWindow(FluentWindow):
 
     def set_live2d_widget(self, widget):
         self.live2d_widget = widget
-        
+
         if hasattr(widget, 'attr_manager'):
             self.attr_manager = widget.attr_manager
             if self._orange_manager:
                 self.attr_manager.set_orange_manager(self._orange_manager)
-        
+
         if hasattr(widget, 'orange_manager'):
             pass
-        
+
         if hasattr(self, 'settings_interface'):
             self.settings_interface.set_live2d_widget(widget)
-        
+
         if hasattr(self, 'chat_interface'):
             self.chat_interface.set_live2d_widget(widget)
-        
+
         if hasattr(self, 'live2d_config_interface'):
             self.live2d_config_interface.set_live2d_widget(widget)
-        
+
         if hasattr(self, 'pet_status_interface') and self.attr_manager:
             self.pet_status_interface.set_attr_manager(self.attr_manager)
-        
+
         if hasattr(widget, '_startup_checker') and widget._startup_checker:
             widget._startup_checker.set_main_window(self)
-        
+
         if self._orange_manager:
             self._orange_manager.level_changed.connect(self._on_doro_level_changed)
+
+    def set_version_manager(self, version_manager):
+        """设置版本管理器（在启动阶段延迟注入）。"""
+        self._version_manager = version_manager
+        if hasattr(self, 'update_interface'):
+            self.update_interface.update_widget.version_manager = version_manager
         
     def closeEvent(self, event):
         """重写关闭事件，使其隐藏而不是关闭"""

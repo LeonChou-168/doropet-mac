@@ -651,6 +651,7 @@ class AboutWidget(CardWidget):
 
 
 class UpdateNotificationDialog(QWidget):
+    """更新通知弹窗 —— 继承 BaseDialog 的统一视觉风格。"""
     update_now = pyqtSignal()
     remind_later = pyqtSignal()
 
@@ -658,168 +659,202 @@ class UpdateNotificationDialog(QWidget):
         super().__init__(parent)
         self.version_info = version_info
         self.current_version = current_version
-        self._is_dragging = False
-        self._drag_pos = None
-        
+
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(440, 400)
-        self.setup_ui()
-        self._apply_theme()
-        self.center_on_parent()
+        self.setFixedSize(460, 420)
 
-    def setup_ui(self):
+        self._setup_ui()
+        self._center_on_parent()
+
+    def _setup_ui(self):
+        from src.ui.design_tokens import get_tokens, get_token, BRAND_PRIMARY, scrollbar_qss
+        t = get_tokens()
+
         self.setObjectName("updateNotificationDialog")
-        
+
+        # 阴影
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(20)
-        shadow.setColor(QColor(0, 0, 0, 60))
+        shadow.setColor(QColor(0, 0, 0, 60 if isDarkTheme() else 20))
         shadow.setOffset(0, 5)
-        
-        self.container = QWidget(self)
-        self.container.setObjectName("updateDialogContainer")
-        self.container.setGeometry(10, 10, self.width() - 20, self.height() - 20)
-        self.container.setGraphicsEffect(shadow)
-        
-        main_layout = QVBoxLayout(self.container)
+
+        # 容器
+        self._container = QWidget(self)
+        self._container.setObjectName("updateDialogContainer")
+        self._container.setGeometry(10, 10, 440, 400)
+        self._container.setGraphicsEffect(shadow)
+
+        # 毛玻璃背景
+        bg_color = t['bg_glass'] if 'bg_glass' in t else (
+            "rgba(32, 36, 48, 220)" if isDarkTheme() else "rgba(255, 255, 255, 230)"
+        )
+        border_color = t['border_strong'] if 'border_strong' in t else (
+            "rgba(255,255,255,12)" if isDarkTheme() else "rgba(0,0,0,10)"
+        )
+        self._container.setStyleSheet(f"""
+            QWidget#updateDialogContainer {{
+                background-color: {bg_color};
+                border: 1px solid {border_color};
+                border-radius: 14px;
+            }}
+        """)
+
+        main_layout = QVBoxLayout(self._container)
         main_layout.setContentsMargins(20, 16, 20, 16)
         main_layout.setSpacing(10)
-        
+
+        # ---- 标题栏 ----
         header_layout = QHBoxLayout()
-        
-        self.title_icon = QLabel(self.container)
+
+        self.title_icon = QLabel("🎁")
         self.title_icon.setFixedSize(28, 28)
-        self.title_icon.setText("🎁")
+        self.title_icon.setStyleSheet("font-size: 20px; background: transparent;")
         header_layout.addWidget(self.title_icon)
-        
-        self.title_label = TitleLabel(tr("update.new_version_found"), self.container)
+
+        self.title_label = TitleLabel(tr("update.new_version_found"), self._container)
         header_layout.addWidget(self.title_label, 1)
-        
-        self.close_btn = PushButton(FIF.CANCEL, tr("general.close"), self.container)
-        self.close_btn.setFixedHeight(28)
+
+        self.close_btn = PushButton(FIF.CANCEL, "", self._container)
+        self.close_btn.setFixedSize(28, 28)
         self.close_btn.clicked.connect(self._on_close)
         header_layout.addWidget(self.close_btn)
-        
+
         main_layout.addLayout(header_layout)
-        
-        self.version_widget = QWidget(self.container)
-        version_layout = QHBoxLayout(self.version_widget)
-        version_layout.setContentsMargins(12, 8, 12, 8)
+
+        # ---- 版本对比卡片 ----
+        ver_card = QWidget(self._container)
+        card_bg = t['input_bg'] if 'input_bg' in t else (
+            "rgba(255,255,255,6)" if isDarkTheme() else "rgba(0,0,0,4)"
+        )
+        ver_card.setStyleSheet(
+            f"background-color: {card_bg}; border-radius: 10px;"
+        )
+        version_layout = QHBoxLayout(ver_card)
+        version_layout.setContentsMargins(14, 10, 14, 10)
         version_layout.setSpacing(16)
-        
+
         old_ver_layout = QVBoxLayout()
         old_ver_layout.setSpacing(2)
-        self.old_ver_label = CaptionLabel(tr("update.current_version"), self.version_widget)
-        self.old_ver_value = StrongBodyLabel(f"v{self.current_version}", self.version_widget)
-        old_ver_layout.addWidget(self.old_ver_label, alignment=Qt.AlignCenter)
-        old_ver_layout.addWidget(self.old_ver_value, alignment=Qt.AlignCenter)
+        old_label = QLabel(tr("update.current_version"))
+        old_label.setStyleSheet(
+            f"color: {t.get('text_secondary','#888')}; font-size: 12px; background: transparent;"
+        )
+        old_label.setAlignment(Qt.AlignCenter)
+        old_ver_layout.addWidget(old_label)
+
+        old_value = QLabel(f"v{self.current_version}")
+        old_value.setAlignment(Qt.AlignCenter)
+        old_value.setStyleSheet(
+            f"color: {t.get('text_primary','#fff')}; font-size: 16px; font-weight: bold; background: transparent;"
+        )
+        old_ver_layout.addWidget(old_value)
         version_layout.addLayout(old_ver_layout)
-        
-        self.arrow_label = QLabel("→", self.version_widget)
-        version_layout.addWidget(self.arrow_label)
-        
+
+        arrow = QLabel("→")
+        arrow.setStyleSheet(
+            f"font-size: 18px; color: {BRAND_PRIMARY}; background: transparent;"
+        )
+        version_layout.addWidget(arrow)
+
         new_ver_layout = QVBoxLayout()
         new_ver_layout.setSpacing(2)
-        self.new_ver_label = CaptionLabel(tr("update.latest_version"), self.version_widget)
-        self.new_ver_value = StrongBodyLabel(f"v{self.version_info.version}", self.version_widget)
-        new_ver_layout.addWidget(self.new_ver_label, alignment=Qt.AlignCenter)
-        new_ver_layout.addWidget(self.new_ver_value, alignment=Qt.AlignCenter)
+        new_label = QLabel(tr("update.latest_version"))
+        new_label.setAlignment(Qt.AlignCenter)
+        new_label.setStyleSheet(
+            f"color: {t.get('text_secondary','#888')}; font-size: 12px; background: transparent;"
+        )
+        new_ver_layout.addWidget(new_label)
+
+        new_value = QLabel(f"v{self.version_info.version}")
+        new_value.setAlignment(Qt.AlignCenter)
+        new_value.setStyleSheet(
+            f"color: {BRAND_PRIMARY}; font-size: 16px; font-weight: bold; background: transparent;"
+        )
+        new_ver_layout.addWidget(new_value)
         version_layout.addLayout(new_ver_layout)
-        
+
         version_layout.addStretch()
-        
-        self.type_label = QLabel(get_version_type_display(self.version_info.release_type), self.version_widget)
-        version_layout.addWidget(self.type_label)
-        
-        main_layout.addWidget(self.version_widget)
-        
-        self.changelog_header = StrongBodyLabel(tr("update.update_content"), self.container)
-        main_layout.addWidget(self.changelog_header)
-        
-        self.changelog_text = QTextEdit(self.container)
+
+        type_text = get_version_type_display(self.version_info.release_type)
+        type_label = QLabel(type_text)
+        type_label.setStyleSheet(
+            f"background-color: {BRAND_PRIMARY}; color: white; "
+            "padding: 2px 10px; border-radius: 4px; font-size: 12px;"
+        )
+        version_layout.addWidget(type_label)
+
+        main_layout.addWidget(ver_card)
+
+        # ---- 更新内容 ----
+        changelog_header = QLabel(tr("update.update_content"))
+        changelog_header.setStyleSheet(
+            f"color: {t.get('text_primary','#333')}; font-size: 13px; font-weight: bold; background: transparent;"
+        )
+        main_layout.addWidget(changelog_header)
+
+        text_bg = t['input_bg'] if 'input_bg' in t else (
+            "rgba(255,255,255,6)" if isDarkTheme() else "rgba(0,0,0,3)"
+        )
+        text_color = t.get('text_primary', '#333')
+        border_c = t.get('border_default', 'rgba(0,0,0,10)')
+        self.changelog_text = QTextEdit(self._container)
         self.changelog_text.setReadOnly(True)
         self.changelog_text.setFixedHeight(110)
+        self.changelog_text.setStyleSheet(
+            f"background-color: {text_bg}; "
+            f"border: 1px solid {border_c}; "
+            f"border-radius: 8px; "
+            f"color: {text_color}; font-size: 12px; padding: 6px;"
+            + scrollbar_qss()
+        )
         changelog = self.version_info.changelog or tr("update.no_changelog")
         self.changelog_text.setMarkdown(changelog[:500] + ("..." if len(changelog) > 500 else ""))
         main_layout.addWidget(self.changelog_text)
-        
+
+        # ---- 日期和大小信息 ----
         info_layout = QHBoxLayout()
-        self.date_label = None
-        self.size_label = None
+        info_style = f"color: {t.get('text_disabled','#888')}; font-size: 12px; background: transparent;"
         if self.version_info.release_date:
-            self.date_label = CaptionLabel(tr("update.published").format(date=self.version_info.release_date), self.container)
-            info_layout.addWidget(self.date_label)
+            date_lbl = QLabel(tr("update.published").format(date=self.version_info.release_date))
+            date_lbl.setStyleSheet(info_style)
+            info_layout.addWidget(date_lbl)
         if self.version_info.file_size > 0:
-            self.size_label = CaptionLabel(tr("update.size").format(size=self.version_info.display_size), self.container)
-            info_layout.addWidget(self.size_label)
+            size_lbl = QLabel(tr("update.size").format(size=self.version_info.display_size))
+            size_lbl.setStyleSheet(info_style)
+            info_layout.addWidget(size_lbl)
         info_layout.addStretch()
         main_layout.addLayout(info_layout)
-        
+
         main_layout.addStretch()
-        
+
+        # ---- 按钮 ----
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(12)
-        
-        self.remind_btn = PushButton(FIF.CALENDAR, tr("update.remind_later"), self.container)
-        self.remind_btn.setFixedHeight(36)
-        self.remind_btn.clicked.connect(self._on_remind_later)
-        btn_layout.addWidget(self.remind_btn)
-        
-        self.update_btn = PrimaryPushButton(FIF.UPDATE, tr("update.update_now"), self.container)
-        self.update_btn.setFixedHeight(36)
-        self.update_btn.clicked.connect(self._on_update_now)
-        btn_layout.addWidget(self.update_btn, 1)
-        
+
+        remind_btn = PushButton(FIF.CALENDAR, tr("update.remind_later"), self._container)
+        remind_btn.setFixedHeight(36)
+        remind_btn.clicked.connect(self._on_remind_later)
+        btn_layout.addWidget(remind_btn)
+
+        update_btn = PrimaryPushButton(FIF.UPDATE, tr("update.update_now"), self._container)
+        update_btn.setFixedHeight(36)
+        update_btn.clicked.connect(self._on_update_now)
+        btn_layout.addWidget(update_btn, 1)
+
         main_layout.addLayout(btn_layout)
 
-    def _apply_theme(self):
-        is_dark = isDarkTheme()
-        if is_dark:
-            self.container.setStyleSheet("""
-                QWidget#updateDialogContainer {
-                    background-color: #2b2b2b;
-                    border-radius: 12px;
-                    border: 1px solid #454545;
-                }
-            """)
-            self.title_icon.setStyleSheet("font-size: 24px; background: transparent;")
-            self.title_label.setStyleSheet("color: #ffffff;")
-            self.arrow_label.setStyleSheet("font-size: 18px; color: #666; background: transparent;")
-            self.version_widget.setStyleSheet("background-color: #363636; border-radius: 8px;")
-            self.new_ver_value.setStyleSheet("color: #64b5f6; font-weight: bold;")
-            self.type_label.setStyleSheet("background-color: #1976d2; color: white; padding: 2px 8px; border-radius: 4px;")
-            self.changelog_header.setStyleSheet("color: #e0e0e0;")
-            self.changelog_text.setStyleSheet("background-color: #1e1e1e; border: 1px solid #404040; border-radius: 6px; color: #e0e0e0;")
-            if self.date_label:
-                self.date_label.setStyleSheet("color: #888;")
-            if self.size_label:
-                self.size_label.setStyleSheet("color: #888;")
+    def _center_on_parent(self):
+        if self.parent() and self.parent().isVisible():
+            geo = self.parent().geometry()
+            x = geo.x() + (geo.width() - self.width()) // 2
+            y = geo.y() + (geo.height() - self.height()) // 2
+            self.move(max(0, x), max(0, y))
         else:
-            self.container.setStyleSheet("""
-                QWidget#updateDialogContainer {
-                    background-color: #ffffff;
-                    border-radius: 12px;
-                    border: 1px solid #e0e0e0;
-                }
-            """)
-            self.title_icon.setStyleSheet("font-size: 24px; background: transparent;")
-            self.title_label.setStyleSheet("color: #000000;")
-            self.arrow_label.setStyleSheet("font-size: 18px; color: #999; background: transparent;")
-            self.version_widget.setStyleSheet("background-color: #f5f5f5; border-radius: 8px;")
-            self.new_ver_value.setStyleSheet("color: #0078d4; font-weight: bold;")
-            self.type_label.setStyleSheet("background-color: #0078d4; color: white; padding: 2px 8px; border-radius: 4px;")
-            self.changelog_header.setStyleSheet("color: #333;")
-            self.changelog_text.setStyleSheet("background-color: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; color: #333;")
-            if self.date_label:
-                self.date_label.setStyleSheet("color: #666;")
-            if self.size_label:
-                self.size_label.setStyleSheet("color: #666;")
-
-    def center_on_parent(self):
-        if self.parent():
-            parent_rect = self.parent().geometry()
-            x = parent_rect.x() + (parent_rect.width() - self.width()) // 2
-            y = parent_rect.y() + (parent_rect.height() - self.height()) // 2
+            from PyQt5.QtWidgets import QDesktopWidget
+            screen = QDesktopWidget().screenGeometry()
+            x = (screen.width() - self.width()) // 2
+            y = (screen.height() - self.height()) // 2
             self.move(x, y)
 
     def _on_update_now(self):
@@ -834,20 +869,32 @@ class UpdateNotificationDialog(QWidget):
         self.remind_later.emit()
         self.close()
 
+    # 拖拽支持
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton and event.y() < 44:
             self._is_dragging = True
             self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
             event.accept()
+            return
+        super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if self._is_dragging and self._drag_pos:
+        if hasattr(self, '_is_dragging') and self._is_dragging and hasattr(self, '_drag_pos'):
             self.move(event.globalPos() - self._drag_pos)
             event.accept()
+            return
+        super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         self._is_dragging = False
-        self._drag_pos = None
+        if hasattr(self, '_drag_pos'):
+            self._drag_pos = None
+        super().mouseReleaseEvent(event)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.raise_()
+        self.activateWindow()
 
 
 class UpdateInterface(ScrollArea):
