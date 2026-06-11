@@ -1553,7 +1553,7 @@ class MusicInterface(ScrollArea):
         self._apply_theme_color_to_window(pixmap)
     
     def _apply_theme_color_to_window(self, pixmap: QPixmap):
-        if pixmap.isNull():
+        if pixmap is None or pixmap.isNull():
             self._dominant_color = None
             self._sliding_panel.set_background_style("""
                 QWidget {
