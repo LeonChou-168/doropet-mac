@@ -256,6 +256,7 @@ class LLMWorker(QThread):
             db=self.db,
             memory_manager=MemoryManager(self.db) if self.db else None,
             available_images=self.available_images,
+            available_expressions=self.available_expressions,
             vision_model_data=self.vision_model_data,
         )
 
@@ -320,6 +321,7 @@ class LLMWorker(QThread):
                 if isinstance(event, FunctionToolCallEvent):
                     part = event.part
                     tool_name = getattr(part, 'tool_name', 'unknown')
+                    tool_call_id = getattr(event, 'tool_call_id', None)
                     tool_args = getattr(part, 'args', {})
                     if hasattr(part, 'args_as_dict'):
                         tool_args = part.args_as_dict()
@@ -330,7 +332,8 @@ class LLMWorker(QThread):
                         "type": "tool",
                         "args": args_str,
                         "result": "",
-                        "status": "running"
+                        "status": "running",
+                        "tool_call_id": tool_call_id,
                     }
                     self.tool_calls_accumulated.append(tool_entry)
 
@@ -358,18 +361,29 @@ class LLMWorker(QThread):
 
                 # 工具调用结果返回
                 if isinstance(event, FunctionToolResultEvent):
-                    for entry in reversed(self.tool_calls_accumulated):
-                        if entry.get("status") == "running":
-                            try:
-                                result_content = event.result.model_response_str()
-                            except Exception:
-                                result_content = str(event.result)
-                            entry["result"] = result_content
-                            entry["status"] = "success"
-                            self.tool_execution_update.emit(
-                                entry["name"], "tool", "success", entry["args"], result_content
-                            )
-                            break
+                    result_tool_call_id = getattr(event, 'tool_call_id', None)
+                    # 优先用 tool_call_id 精确匹配，fallback 到找第一个 running 的
+                    matched_entry = None
+                    if result_tool_call_id:
+                        for entry in reversed(self.tool_calls_accumulated):
+                            if entry.get("tool_call_id") == result_tool_call_id:
+                                matched_entry = entry
+                                break
+                    if matched_entry is None:
+                        for entry in reversed(self.tool_calls_accumulated):
+                            if entry.get("status") == "running":
+                                matched_entry = entry
+                                break
+                    if matched_entry:
+                        try:
+                            result_content = event.result.model_response_str()
+                        except Exception:
+                            result_content = str(event.result)
+                        matched_entry["result"] = result_content
+                        matched_entry["status"] = "success"
+                        self.tool_execution_update.emit(
+                            matched_entry["name"], "tool", "success", matched_entry["args"], result_content
+                        )
 
         try:
             run_result = await agent.run(

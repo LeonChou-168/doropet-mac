@@ -82,6 +82,33 @@ class UpdateWidget(CardWidget):
         if not self._external_version_manager:
             self.load_versions()
     
+    def set_version_manager(self, version_manager):
+        """替换 version_manager 并重连信号到新实例。"""
+        # 断开旧实例的信号
+        old_vm = self.version_manager
+        if old_vm:
+            try:
+                old_vm.versions_loaded.disconnect(self.on_versions_loaded)
+                old_vm.load_error.disconnect(self.on_load_error)
+                old_vm.download_progress.disconnect(self.on_download_progress)
+                old_vm.download_completed.disconnect(self.on_download_completed)
+                old_vm.download_error.disconnect(self.on_download_error)
+                old_vm.install_progress.disconnect(self.on_install_progress)
+                old_vm.install_completed.disconnect(self.on_install_completed)
+                old_vm.install_error.disconnect(self.on_install_error)
+            except TypeError:
+                pass  # 如果信号未连接（首次创建时可能），忽略
+        
+        self.version_manager = version_manager
+        self._external_version_manager = True
+        # 重新连接信号到新实例
+        self.connect_signals()
+        # 更新 UI 中引用的版本号
+        if hasattr(self, 'current_version_label'):
+            self.current_version_label.setText(
+                f"{tr('update.current_version')}: v{self.version_manager.current_version}"
+            )
+    
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -406,7 +433,7 @@ class UpdateWidget(CardWidget):
         if self.selected_version:
             self.start_download(self.selected_version)
     
-    def start_download(self, version: VersionInfo):
+    def start_download(self, version: VersionInfo, skip_confirm: bool = False):
         if not version.download_url:
             InfoBar.warning(
                 title=tr("update.no_download_link"),
@@ -419,16 +446,17 @@ class UpdateWidget(CardWidget):
             )
             return
         
-        box = MessageBox(
-            tr("update.confirm_update"),
-            tr("update.confirm_message").replace("{version}", str(version.version)),
-            self
-        )
-        box.yesButton.setText(tr("update.start_update"))
-        box.cancelButton.setText(tr("general.cancel"))
-        
-        if not box.exec_():
-            return
+        if not skip_confirm:
+            box = MessageBox(
+                tr("update.confirm_update"),
+                tr("update.confirm_message").replace("{version}", str(version.version)),
+                self
+            )
+            box.yesButton.setText(tr("update.start_update"))
+            box.cancelButton.setText(tr("general.cancel"))
+            
+            if not box.exec_():
+                return
         
         self.download_widget.show()
         self.status_card.hide()

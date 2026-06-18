@@ -461,7 +461,7 @@ class QuickChatService:
         system_prompt = self._state.current_persona_prompt
         if len(system_prompt) > 1000:
             if "你是 Doro" in system_prompt:
-                system_prompt = "你是 Doro，一个可爱的白色小生物。你性格活泼、黏人，喜欢用可爱的语气和表情符号。请用中文回复，保持简短友好。"
+                system_prompt = "你是 Doro，一个可爱的白色小生物。你性格天真烂漫、超级黏人，喜欢用软萌的语气和拟声词（唔、啊、呀、嗷、哼）。句子要短，不啰嗦，适当用颜文字。请用中文回复。你最爱吃欧润吉（橘子），对'人'永远热情。"
 
         history.insert(0, {"role": "system", "content": system_prompt})
         

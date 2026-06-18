@@ -354,7 +354,7 @@ class MainWindow(FluentWindow):
         """设置版本管理器（在启动阶段延迟注入）。"""
         self._version_manager = version_manager
         if hasattr(self, 'update_interface'):
-            self.update_interface.update_widget.version_manager = version_manager
+            self.update_interface.update_widget.set_version_manager(version_manager)
         
     def closeEvent(self, event):
         """重写关闭事件，使其隐藏而不是关闭"""

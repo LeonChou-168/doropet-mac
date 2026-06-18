@@ -3905,7 +3905,7 @@ class ChatInterface(QWidget):
                             break
             
             logger.info(f"Setting expression to: {target_exp}")
-            self.live2d_widget.model.SetExpression(target_exp)
+            self.live2d_widget.set_expression_safe(target_exp)
         except Exception as e:
             logger.error(f"Failed to set expression: {e}")
 

@@ -544,12 +544,21 @@ async def visit_webpage(url: str) -> str:
 # 宠物互动工具（需要 UI 信号回传）
 # ---------------------------------------------------------------------------
 
-async def set_expression(expression_name: str) -> str:
+async def set_expression(ctx: RunContext[Any], expression_name: str) -> str:
     """Change the facial expression of the Live2D model. Use this to reflect the mood or emotion of the response.
 
     Args:
+        ctx: Run context (injected by pydantic-ai).
         expression_name: The name of the expression to set.
     """
+    # 校验表情名是否有效
+    available = getattr(ctx.deps, 'available_expressions', [])
+    if available and expression_name not in available:
+        return json.dumps({
+            "status": "error",
+            "message": f"表情 '{expression_name}' 不存在。可用表情: {', '.join(available)}",
+        }, ensure_ascii=False)
+
     return json.dumps({
         "status": "success",
         "message": f"已修改为{expression_name}表情"

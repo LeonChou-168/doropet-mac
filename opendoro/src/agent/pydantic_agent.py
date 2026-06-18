@@ -43,6 +43,7 @@ class DoroDeps:
     db: Any = None  # ChatDatabase instance
     memory_manager: Any = None  # MemoryManager instance
     available_images: list[str] = field(default_factory=list)
+    available_expressions: list[str] = field(default_factory=list)
     vision_model_data: Any = None
 
 
@@ -221,14 +222,14 @@ def create_doro_agent(
     filtered_core = get_filtered_tools(enabled_plugins)
     if filtered_core:
         core_toolset = FunctionToolset(tools=filtered_core)
-        toolsets.append(core_toolset.prefixed(""))
+        toolsets.append(core_toolset)
         logger.info(f"[PydanticAgent] Core tools: {len(filtered_core)} functions")
 
     # 2. 技能工具（从 SkillManager 动态加载）
     skill_funcs = get_skill_tool_functions()
     if skill_funcs:
         skill_toolset = FunctionToolset(tools=skill_funcs)
-        toolsets.append(skill_toolset.prefixed(""))
+        toolsets.append(skill_toolset)
         logger.info(f"[PydanticAgent] Skill tools: {len(skill_funcs)} functions")
 
     # 合并工具集
