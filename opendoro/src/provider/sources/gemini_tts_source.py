@@ -4,7 +4,7 @@ import wave
 from typing import Optional, List, Dict
 from ..provider import TTSProvider
 from ..entities import TTSResponse, ProviderConfig, ProviderType
-from ..register import register_provider_adapter, TTS_CONFIG_FIELDS
+from ..register import register_provider_adapter, GEMINI_TTS_CONFIG_FIELDS
 from src.core.logger import logger
 
 try:
@@ -26,7 +26,7 @@ except ImportError:
         "voice": "Kore",
     },
     provider_display_name="Gemini TTS",
-    config_fields=TTS_CONFIG_FIELDS
+    config_fields=GEMINI_TTS_CONFIG_FIELDS
 )
 class ProviderGeminiTTS(TTSProvider):
     DEFAULT_VOICES = [

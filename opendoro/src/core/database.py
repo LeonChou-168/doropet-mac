@@ -369,6 +369,8 @@ class ConfigDatabase(BaseDatabase):
             cursor.execute("ALTER TABLE tts_models ADD COLUMN prompt_audio TEXT DEFAULT ''")
         if 'prompt_text' not in columns:
             cursor.execute("ALTER TABLE tts_models ADD COLUMN prompt_text TEXT DEFAULT ''")
+        if 'extra_config' not in columns:
+            cursor.execute("ALTER TABLE tts_models ADD COLUMN extra_config TEXT DEFAULT '{}'")
         
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='quick_replies'")
         if cursor.fetchone() is None:
@@ -421,26 +423,48 @@ class ConfigDatabase(BaseDatabase):
         return cursor.fetchone()
 
     # TTS Model Methods
-    def add_tts_model(self, name, provider, api_key, base_url, model_name, voice, proxy="", api_name="/predict", prompt_audio="", prompt_text=""):
+    def add_tts_model(self, name, provider, api_key, base_url, model_name, voice, proxy="", api_name="/predict", prompt_audio="", prompt_text="", extra_config="{}"):
         cursor = self.conn.cursor()
         cursor.execute("SELECT count(*) FROM tts_models")
         count = cursor.fetchone()[0]
         is_active = 1 if count == 0 else 0
         
-        cursor.execute("INSERT INTO tts_models (name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-                       (name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text))
+        import json as _json
+        # 向后兼容：如果传入旧参数但未传 extra_config，则自动合并
+        extra = _json.loads(extra_config) if extra_config else {}
+        if api_name and api_name != "/predict":
+            extra.setdefault("api_name", api_name)
+        if prompt_audio:
+            extra.setdefault("prompt_audio", prompt_audio)
+        if prompt_text:
+            extra.setdefault("prompt_text", prompt_text)
+        extra_config = _json.dumps(extra, ensure_ascii=False)
+        
+        cursor.execute("INSERT INTO tts_models (name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text, extra_config) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                       (name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text, extra_config))
         self.conn.commit()
         return cursor.lastrowid
 
     def get_tts_models(self):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text FROM tts_models ORDER BY id ASC")
+        cursor.execute("SELECT id, name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text, extra_config FROM tts_models ORDER BY id ASC")
         return cursor.fetchall()
 
-    def update_tts_model(self, model_id, name, provider, api_key, base_url, model_name, voice, proxy="", api_name="/predict", prompt_audio="", prompt_text=""):
+    def update_tts_model(self, model_id, name, provider, api_key, base_url, model_name, voice, proxy="", api_name="/predict", prompt_audio="", prompt_text="", extra_config="{}"):
         cursor = self.conn.cursor()
-        cursor.execute("UPDATE tts_models SET name=?, provider=?, api_key=?, base_url=?, model_name=?, voice=?, proxy=?, api_name=?, prompt_audio=?, prompt_text=? WHERE id=?", 
-                       (name, provider, api_key, base_url, model_name, voice, proxy, api_name, prompt_audio, prompt_text, model_id))
+        
+        import json as _json
+        extra = _json.loads(extra_config) if extra_config else {}
+        if api_name and api_name != "/predict":
+            extra.setdefault("api_name", api_name)
+        if prompt_audio:
+            extra.setdefault("prompt_audio", prompt_audio)
+        if prompt_text:
+            extra.setdefault("prompt_text", prompt_text)
+        extra_config = _json.dumps(extra, ensure_ascii=False)
+        
+        cursor.execute("UPDATE tts_models SET name=?, provider=?, api_key=?, base_url=?, model_name=?, voice=?, proxy=?, api_name=?, prompt_audio=?, prompt_text=?, extra_config=? WHERE id=?", 
+                       (name, provider, api_key, base_url, model_name, voice, proxy, api_name, prompt_audio, prompt_text, extra_config, model_id))
         self.conn.commit()
 
     def delete_tts_model(self, model_id):
@@ -456,7 +480,7 @@ class ConfigDatabase(BaseDatabase):
 
     def get_active_tts_model(self):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text FROM tts_models WHERE is_active = 1")
+        cursor.execute("SELECT id, name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text, extra_config FROM tts_models WHERE is_active = 1")
         return cursor.fetchone()
 
     # Voice Settings Methods

@@ -6,7 +6,7 @@ import httpx
 
 from ..provider import TTSProvider
 from ..entities import TTSResponse, ProviderConfig, ProviderType
-from ..register import register_provider_adapter, TTS_CONFIG_FIELDS
+from ..register import register_provider_adapter, OPENAI_TTS_CONFIG_FIELDS
 from src.core.logger import logger
 
 
@@ -20,7 +20,7 @@ from src.core.logger import logger
         "voice": "alloy",
     },
     provider_display_name="OpenAI TTS",
-    config_fields=TTS_CONFIG_FIELDS
+    config_fields=OPENAI_TTS_CONFIG_FIELDS
 )
 class ProviderOpenAITTS(TTSProvider):
     DEFAULT_VOICES = [

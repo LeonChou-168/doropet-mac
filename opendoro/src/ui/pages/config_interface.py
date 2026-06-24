@@ -8,10 +8,13 @@ LLM 模式直接对应 pydantic-ai 的 provider 体系：
 TTS / IMAGE 模式保持原有 ProviderManager 体系不变。
 """
 
+import json
+
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QMessageBox,
                              QListWidgetItem, QLineEdit, QDialog, QLabel,
                              QListWidget as QtListWidget, QDialogButtonBox,
-                             QApplication, QSizePolicy, QFrame)
+                             QApplication, QSizePolicy, QFrame, QFileDialog,
+                             QPushButton as QtPushButton)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QFontMetrics
 from qfluentwidgets import (ScrollArea, ComboBox, LineEdit, StrongBodyLabel,
@@ -602,6 +605,10 @@ class ConfigInterface(QWidget):
         self._i18n = I18nManager.get_instance()
         self._i18n.languageChanged.connect(self.refresh_ui)
 
+        # 动态表单跟踪：{field_name: (FormField, widget)}
+        self._dynamic_fields = {}
+        self._voice_field_widget = None   # 语音包字段的独立跟踪（用于获取语音按钮）
+
         self.init_ui()
         self.load_models()
         self.update_form_visibility()
@@ -786,33 +793,12 @@ class ConfigInterface(QWidget):
         self.model_field = FormField(tr("config.model_name"), model_widget, tr("config.model_name_hint"), parent=self)
         self.basic_card.add_field(self.model_field)
 
-        # ===== TTS 专用字段 =====
-        voice_widget = QWidget(self)
-        voice_layout = QHBoxLayout(voice_widget)
-        voice_layout.setContentsMargins(0, 0, 0, 0)
-        voice_layout.setSpacing(8)
-        self.voice_input = LineEdit(voice_widget)
-        self.voice_input.setPlaceholderText(tr("config.voice_placeholder"))
-        voice_layout.addWidget(self.voice_input, 1)
-        self.fetch_voices_btn = PushButton(FluentIcon.SEARCH, tr("config.get_voices"), voice_widget)
-        self.fetch_voices_btn.setFixedHeight(32)
-        self.fetch_voices_btn.clicked.connect(self.fetch_voices_from_provider)
-        voice_layout.addWidget(self.fetch_voices_btn)
-        self.voice_field = FormField(tr("config.voice_package"), voice_widget, tr("config.voice_package_hint"), parent=self)
-        self.basic_card.add_field(self.voice_field)
-
-        self.api_name_field = FormField(tr("config.api_endpoint"), LineEdit(self), tr("config.api_endpoint_hint"), parent=self)
-        self.api_name_field.widget.setPlaceholderText(tr("config.api_endpoint_placeholder"))
-        self.api_name_field.widget.setText("/tts_request")
-        self.basic_card.add_field(self.api_name_field)
-
-        self.prompt_audio_field = FormField(tr("config.ref_audio_path"), LineEdit(self), tr("config.ref_audio_path_hint"), parent=self)
-        self.prompt_audio_field.widget.setPlaceholderText(tr("config.ref_audio_path_placeholder"))
-        self.basic_card.add_field(self.prompt_audio_field)
-
-        self.prompt_text_field = FormField(tr("config.ref_audio_text"), LineEdit(self), tr("config.ref_audio_text_hint"), parent=self)
-        self.prompt_text_field.widget.setPlaceholderText(tr("config.ref_audio_text_placeholder"))
-        self.basic_card.add_field(self.prompt_text_field)
+        # TTS 动态字段容器（根据 provider 的 config_fields 动态重建）
+        self.tts_dynamic_container = QWidget(self)
+        self.tts_dynamic_layout = QVBoxLayout(self.tts_dynamic_container)
+        self.tts_dynamic_layout.setContentsMargins(0, 0, 0, 0)
+        self.tts_dynamic_layout.setSpacing(12)
+        self.basic_card.add_widget(self.tts_dynamic_container)
 
         return self.basic_card
 
@@ -852,6 +838,7 @@ class ConfigInterface(QWidget):
         self.chk_thinking.setToolTip(tr("config.thinking_model_desc"))
         options_layout.addWidget(self.chk_thinking)
         options_layout.addStretch()
+        self._advanced_options_widget = options_widget
         self.advanced_card.add_widget(options_widget)
 
         return self.advanced_card
@@ -887,6 +874,8 @@ class ConfigInterface(QWidget):
             for p in PYDANTIC_LLM_PROVIDERS:
                 self.provider_combo.addItem(tr(f"config.provider.{p['id']}.name", default=p["name"]), userData=p["id"])
         elif self.current_mode == "TTS":
+            # 确保所有 TTS provider 源文件已导入（以便 registry 完整）
+            self._ensure_tts_providers_imported()
             providers = get_all_providers_by_type(ProviderType.TEXT_TO_SPEECH)
             for pm in providers:
                 self.provider_combo.addItem(pm.provider_display_name, userData=pm.type)
@@ -896,6 +885,33 @@ class ConfigInterface(QWidget):
                 self.provider_combo.addItem(pm.provider_display_name, userData=pm.type)
 
         self.provider_combo.blockSignals(False)
+
+    def _ensure_tts_providers_imported(self):
+        """预导入所有 TTS provider 源文件，确保 registry 完整。"""
+        try:
+            from src.provider.sources.edge_tts_source import ProviderEdgeTTS  # noqa: F401
+        except ImportError:
+            pass
+        try:
+            from src.provider.sources.openai_tts_source import ProviderOpenAITTS  # noqa: F401
+        except ImportError:
+            pass
+        try:
+            from src.provider.sources.qwen_tts_source import ProviderQwenTTS  # noqa: F401
+        except ImportError:
+            pass
+        try:
+            from src.provider.sources.gemini_tts_source import ProviderGeminiTTS  # noqa: F401
+        except ImportError:
+            pass
+        try:
+            from src.provider.sources.gradio_tts_source import ProviderGradioTTS  # noqa: F401
+        except ImportError:
+            pass
+        try:
+            from src.provider.sources.mimo_tts_source import ProviderMimoTTS  # noqa: F401
+        except ImportError:
+            pass
 
     # ---------- 属性访问器 ----------
 
@@ -908,11 +924,31 @@ class ConfigInterface(QWidget):
     @property
     def proxy_input(self): return self.proxy_field.widget
     @property
-    def api_name_input(self): return self.api_name_field.widget
+    def voice_input(self):
+        """返回 voice 动态字段内的 LineEdit，兼容旧代码。"""
+        entry = self._dynamic_fields.get("voice")
+        if entry:
+            widget = entry[1]
+            # voice 是复合控件（LineEdit + 按钮），取内部 LineEdit
+            if hasattr(widget, '_voice_input'):
+                return widget._voice_input
+            return widget
+        return LineEdit(self)  # fallback
     @property
-    def prompt_audio_input(self): return self.prompt_audio_field.widget
+    def api_name_input(self): return self._get_dynamic_widget("api_name")
     @property
-    def prompt_text_input(self): return self.prompt_text_field.widget
+    def prompt_audio_input(self): return self._get_dynamic_widget("prompt_audio")
+    @property
+    def prompt_text_input(self): return self._get_dynamic_widget("prompt_text")
+    @property
+    def fetch_voices_btn(self): return self._voice_field_widget
+
+    def _get_dynamic_widget(self, field_name):
+        """获取动态字段的控件，不存在返回一个空 LineEdit。"""
+        entry = self._dynamic_fields.get(field_name)
+        if entry:
+            return entry[1]
+        return LineEdit(self)  # fallback，避免 AttributeError
 
     # ---------- 模式切换 ----------
 
@@ -954,15 +990,10 @@ class ConfigInterface(QWidget):
         self.model_id_input.setPlaceholderText(tr("config.model_name_placeholder"))
         self.fetch_models_btn.setText(tr("config.search_models"))
         self.fetch_models_btn.setToolTip(tr("config.fetch_models"))
-        self.voice_field.label.setText(tr("config.voice_package"))
-        self.voice_input.setPlaceholderText(tr("config.voice_placeholder"))
-        self.fetch_voices_btn.setText(tr("config.get_voices"))
-        self.api_name_field.label.setText(tr("config.api_endpoint"))
-        self.api_name_field.widget.setPlaceholderText(tr("config.api_endpoint_placeholder"))
-        self.prompt_audio_field.label.setText(tr("config.ref_audio_path"))
-        self.prompt_audio_field.widget.setPlaceholderText(tr("config.ref_audio_path_placeholder"))
-        self.prompt_text_field.label.setText(tr("config.ref_audio_text"))
-        self.prompt_text_field.widget.setPlaceholderText(tr("config.ref_audio_text_placeholder"))
+
+        # TTS 动态表单：语言切换时重建
+        if self.current_mode == "TTS":
+            self._rebuild_tts_form()
 
         # 快捷填充
         self.quick_fill_combo.blockSignals(True)
@@ -1026,19 +1057,298 @@ class ConfigInterface(QWidget):
         self.chk_thinking.setVisible(is_llm)
         self.provider_desc_label.setVisible(is_llm)
 
-        # TTS 特有
-        self.voice_field.setVisible(is_tts)
-        self.fetch_voices_btn.setVisible(is_tts)
-        self.api_name_field.setVisible(is_tts)
-        self.prompt_audio_field.setVisible(is_tts)
-        self.prompt_text_field.setVisible(is_tts)
+        # TTS 动态容器
+        self.tts_dynamic_container.setVisible(is_tts)
+
+        # 快捷填充仅 LLM
+        self.quick_fill_widget.setVisible(is_llm)
 
         # 通用
         self.fetch_models_btn.setVisible(is_llm)
 
-        # 根据 provider 进一步调整（on_provider_changed 处理）
+        # 根据 provider 进一步调整
         if is_llm:
             self.on_provider_changed(self.provider_combo.currentIndex())
+        elif is_tts:
+            self._rebuild_tts_form()
+
+    # ---------- TTS 动态表单 ----------
+
+    def _rebuild_tts_form(self):
+        """根据当前选中 provider 的 config_fields 动态重建 TTS 表单。"""
+        # 清空旧动态字段
+        self._clear_dynamic_fields()
+
+        provider_type = self.provider_combo.currentData()
+        if not provider_type:
+            return
+
+        metadata = get_provider_metadata(provider_type)
+        if not metadata or not metadata.config_fields:
+            return
+
+        config_fields = metadata.config_fields
+        default_tmpl = metadata.default_config_tmpl or {}
+
+        for field_def in config_fields:
+            field_name = field_def.get("name", "")
+            if field_name == "name":
+                continue  # name 字段由固定表单处理
+
+            # 判断属于哪个卡片
+            is_voice = (field_name == "voice")
+            is_auth = (field_name == "api_key")
+            is_advanced = (field_name in ("base_url", "proxy"))
+
+            # 创建控件
+            field_type = field_def.get("type", "text")
+            widget, is_complex = self._create_field_widget(field_def)
+
+            if is_complex:
+                # 复杂控件（如 voice 带获取按钮）
+                form_field = FormField(
+                    field_def.get("label", field_name),
+                    widget,
+                    field_def.get("help", ""),
+                    parent=self
+                )
+            else:
+                form_field = FormField(
+                    field_def.get("label", field_name),
+                    widget,
+                    field_def.get("help", ""),
+                    parent=self
+                )
+
+            # 设置 placeholder
+            if hasattr(widget, 'setPlaceholderText') and field_def.get("placeholder"):
+                widget.setPlaceholderText(field_def["placeholder"])
+
+            # 密码模式
+            if field_type == "password" and hasattr(widget, 'setEchoMode'):
+                widget.setEchoMode(QLineEdit.Password)
+
+            # 设置默认值
+            default_val = default_tmpl.get(field_name, "")
+            if default_val and hasattr(widget, 'setText'):
+                widget.setText(str(default_val))
+            elif default_val and hasattr(widget, 'setCurrentText'):
+                widget.setCurrentText(str(default_val))
+
+            # 添加到对应卡片
+            if is_auth:
+                self.auth_card.add_field(form_field)
+                form_field.set_visible(True)
+            elif is_advanced:
+                self.advanced_card.add_widget(form_field)
+                form_field.set_visible(True)
+                self.advanced_card.set_collapsed(False)
+            else:
+                self.tts_dynamic_layout.addWidget(form_field)
+                form_field.set_visible(True)
+
+            # 跟踪字段
+            self._dynamic_fields[field_name] = (form_field, widget)
+
+            # 标记语音按钮
+            if is_voice and is_complex:
+                self._voice_field_widget = getattr(widget, '_voice_btn', None)
+
+        # 控制认证卡和高级卡的可见性
+        has_api_key = any(f["name"] == "api_key" for f in config_fields)
+        has_advanced = any(f["name"] in ("base_url", "proxy") for f in config_fields)
+        has_model = any(f["name"] == "model" for f in config_fields)
+        self.auth_card.setVisible(has_api_key)
+        # TTS 有动态 API Key 字段时，隐藏固定字段避免重复
+        if has_api_key:
+            self.api_key_field.setVisible(False)
+        else:
+            self.api_key_field.setVisible(True)
+        self.advanced_card.setVisible(has_advanced)
+        # 控制固定 model 字段可见性
+        self.model_field.setVisible(has_model)
+        # 控制固定 base_url 字段可见性（高级卡内）
+        self.base_url_field.setVisible(has_advanced)
+
+    def _create_field_widget(self, field_def):
+        """根据字段定义创建对应的控件。返回 (widget, is_complex)。"""
+        field_type = field_def.get("type", "text")
+        field_name = field_def.get("name", "")
+
+        if field_type == "file":
+            w = QWidget(self)
+            layout = QHBoxLayout(w)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(8)
+            line_edit = LineEdit(w)
+            line_edit.setPlaceholderText(field_def.get("placeholder", ""))
+            layout.addWidget(line_edit, 1)
+            btn = QtPushButton("...", w)
+            btn.setFixedSize(32, 32)
+            btn.clicked.connect(lambda checked, le=line_edit, fd=field_def: self._browse_file(le, fd))
+            layout.addWidget(btn)
+            return w, True
+
+        elif field_name == "voice" and field_def.get("show_fetch", True):
+            # voice 字段带"获取语音"按钮
+            w = QWidget(self)
+            layout = QHBoxLayout(w)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(8)
+            line_edit = LineEdit(w)
+            line_edit.setPlaceholderText(field_def.get("placeholder", ""))
+            layout.addWidget(line_edit, 1)
+            fetch_btn = PushButton(FluentIcon.SEARCH, tr("config.get_voices"), w)
+            fetch_btn.setFixedHeight(32)
+            fetch_btn.clicked.connect(self.fetch_voices_from_provider)
+            layout.addWidget(fetch_btn)
+            # 挂载按钮引用
+            w._voice_btn = fetch_btn
+            w._voice_input = line_edit
+            return w, True
+
+        elif field_type == "checkbox":
+            cb = CheckBox(field_def.get("label", ""), self)
+            return cb, False
+
+        elif field_type == "combo":
+            cb = ComboBox(self)
+            choices = field_def.get("choices", [])
+            for choice in choices:
+                if isinstance(choice, dict):
+                    cb.addItem(choice.get("label", ""), userData=choice.get("value", ""))
+                else:
+                    cb.addItem(str(choice))
+            return cb, False
+
+        else:
+            le = LineEdit(self)
+            return le, False
+
+    def _browse_file(self, line_edit, field_def):
+        """打开文件选择对话框。"""
+        path, _ = QFileDialog.getOpenFileName(
+            self, f"选择 {field_def.get('label', '文件')}",
+            "", "音频文件 (*.wav *.mp3 *.ogg *.flac);;所有文件 (*)"
+        )
+        if path:
+            line_edit.setText(path)
+
+    def _clear_dynamic_fields(self):
+        """清空所有动态创建的表单字段。"""
+        # 从基本卡容器中移除
+        while self.tts_dynamic_layout.count():
+            item = self.tts_dynamic_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # 从认证卡中移除动态字段
+        self._remove_dynamic_from_card(self.auth_card)
+
+        # 从高级卡中移除动态字段
+        self._remove_dynamic_from_card(self.advanced_card)
+
+        self._dynamic_fields.clear()
+        self._voice_field_widget = None
+
+        # 恢复卡片可见性默认值和固定字段
+        self.auth_card.setVisible(True)
+        self.api_key_field.setVisible(True)
+        self.advanced_card.setVisible(True)
+        self.advanced_card.set_collapsed(True)
+        self.model_field.setVisible(True)
+        self.base_url_field.setVisible(True)
+
+    def _remove_dynamic_from_card(self, card):
+        """从卡片中移除动态添加的字段（保留卡片自身的固定内容）。"""
+        if not hasattr(card, 'content_layout'):
+            return
+        layout = card.content_layout
+
+        # 固定字段（不能被删除）
+        FIXED_WIDGETS = {self.api_key_field, self.base_url_field, self.proxy_field,
+                         getattr(self, 'chk_visual', None), getattr(self, 'chk_thinking', None),
+                         getattr(self, '_advanced_options_widget', None)}
+
+        i = layout.count() - 1
+        while i >= 0:
+            item = layout.itemAt(i)
+            if item and item.widget():
+                w = item.widget()
+                if w not in FIXED_WIDGETS:
+                    layout.removeWidget(w)
+                    w.deleteLater()
+            i -= 1
+
+    def _collect_tts_form_data(self):
+        """收集 TTS 动态表单数据，返回 (standard_data, extra_config_dict)。"""
+        import json as _json
+
+        standard = {}
+        extra = {}
+
+        STANDARD_NAMES = {"name", "api_key", "base_url", "model", "voice"}
+
+        for field_name, (form_field, widget) in self._dynamic_fields.items():
+            val = self._get_widget_value(widget)
+            if field_name in STANDARD_NAMES:
+                standard[field_name] = val
+            else:
+                extra[field_name] = val
+
+        return standard, _json.dumps(extra, ensure_ascii=False)
+
+    def _populate_tts_form(self, standard_values, extra_config_str):
+        """用已保存的数据填充动态表单。"""
+        import json as _json
+
+        extra = {}
+        if extra_config_str:
+            try:
+                extra = _json.loads(extra_config_str)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        for field_name, (form_field, widget) in self._dynamic_fields.items():
+            val = standard_values.get(field_name, "")
+            if not val and field_name in extra:
+                val = extra[field_name]
+            if val:
+                self._set_widget_value(widget, str(val))
+
+    def _get_widget_value(self, widget):
+        """从控件中获取值。"""
+        if hasattr(widget, 'text'):
+            return widget.text().strip()
+        elif hasattr(widget, 'isChecked'):
+            return widget.isChecked()
+        elif hasattr(widget, 'currentText'):
+            return widget.currentText().strip()
+        elif hasattr(widget, 'currentData'):
+            return widget.currentData() or ""
+        # voice 复合控件
+        if hasattr(widget, '_voice_input'):
+            return widget._voice_input.text().strip()
+        # file 复合控件
+        children = widget.findChildren(LineEdit)
+        if children:
+            return children[0].text().strip()
+        return ""
+
+    def _set_widget_value(self, widget, value):
+        """设置控件的值。"""
+        if hasattr(widget, 'setText'):
+            widget.setText(str(value))
+        elif hasattr(widget, 'setChecked'):
+            widget.setChecked(bool(value))
+        elif hasattr(widget, 'setCurrentText'):
+            widget.setCurrentText(str(value))
+        elif hasattr(widget, '_voice_input'):
+            widget._voice_input.setText(str(value))
+        else:
+            children = widget.findChildren(LineEdit)
+            if children:
+                children[0].setText(str(value))
 
     # ---------- 模型列表加载 ----------
 
@@ -1104,12 +1414,17 @@ class ConfigInterface(QWidget):
             self.voice_input.setText(target[6])
             proxy = target[8] if len(target) > 8 else ''
             self.proxy_input.setText(proxy)
-            api_name = target[9] if len(target) > 9 else '/tts_request'
-            self.api_name_input.setText(api_name)
-            prompt_audio = target[10] if len(target) > 10 else ''
-            self.prompt_audio_input.setText(prompt_audio)
-            prompt_text = target[11] if len(target) > 11 else ''
-            self.prompt_text_input.setText(prompt_text)
+
+            # 用动态表单填充 provider 专属字段
+            standard_vals = {
+                "api_key": target[3] if len(target) > 3 else "",
+                "base_url": target[4] if len(target) > 4 else "",
+                "model": target[5] if len(target) > 5 else "",
+                "voice": target[6] if len(target) > 6 else "",
+            }
+            # 也把 proxy 加入标准值（如果是标准字段）
+            extra_config_str = target[12] if len(target) > 12 else "{}"
+            self._populate_tts_form(standard_vals, extra_config_str)
         elif self.current_mode == "LLM":
             if len(target) > 7:
                 self.chk_visual.setChecked(bool(target[7]))
@@ -1124,19 +1439,11 @@ class ConfigInterface(QWidget):
 
     def on_provider_changed(self, index):
         if self.current_mode != "LLM":
-            # TTS/IMAGE 保持原有逻辑
+            # TTS/IMAGE: 根据 config_fields 动态重建表单
             provider_type = self.provider_combo.currentData()
             self.provider_help_link.setVisible(False)
             if provider_type:
-                metadata = get_provider_metadata(provider_type)
-                if metadata and metadata.default_config_tmpl:
-                    dc = metadata.default_config_tmpl
-                    if "base_url" in dc:
-                        self.base_url_input.setText(dc["base_url"])
-                    if "model" in dc:
-                        self.model_id_input.setText(dc["model"])
-                    if "voice" in dc:
-                        self.voice_input.setText(dc["voice"])
+                self._rebuild_tts_form()
             return
 
         provider_id = self.provider_combo.currentData()
@@ -1213,16 +1520,17 @@ class ConfigInterface(QWidget):
         self.api_key_input.clear()
         self.base_url_input.clear()
         self.model_id_input.clear()
-        self.voice_input.clear()
-        self.api_name_input.clear()
-        self.api_name_input.setText("/tts_request")
-        self.prompt_audio_input.clear()
-        self.prompt_text_input.clear()
         self.proxy_input.clear()
         self.chk_visual.setChecked(False)
         self.chk_thinking.setChecked(False)
         self.advanced_card.set_collapsed(True)
         self.quick_fill_combo.setCurrentIndex(0)
+
+        # 重置动态 TTS 表单
+        self._clear_dynamic_fields()
+        if self.current_mode == "TTS":
+            self._rebuild_tts_form()
+
         self.name_input.setFocus()
 
     def quick_add_model(self):
@@ -1414,14 +1722,25 @@ class ConfigInterface(QWidget):
         proxy = self.proxy_input.text().strip()
 
         if self.current_mode == "TTS":
-            voice = self.voice_input.text().strip()
-            api_name = self.api_name_input.text().strip() or "/tts_request"
-            prompt_audio = self.prompt_audio_input.text().strip()
-            prompt_text = self.prompt_text_input.text().strip()
+            # 从动态表单收集数据
+            standard, extra_config = self._collect_tts_form_data()
+            voice = standard.get("voice", "")
+            api_key = standard.get("api_key", api_key)  # 优先用动态表单的，否则用上面读取的
+            base_url_t = standard.get("base_url", base_url)
+            model_name_t = standard.get("model", model_name)
+
+            # 兼容从旧字段读取
+            if not voice:
+                voice = self.voice_input.text().strip() if hasattr(self, 'voice_input') else ""
+
             if self.current_model_id:
-                self.db.update_tts_model(self.current_model_id, name, provider, api_key, base_url, model_name, voice, proxy, api_name, prompt_audio, prompt_text)
+                self.db.update_tts_model(self.current_model_id, name, provider,
+                                         api_key or "", base_url_t or "", model_name_t or "",
+                                         voice, proxy, extra_config=extra_config)
             else:
-                self.current_model_id = self.db.add_tts_model(name, provider, api_key, base_url, model_name, voice, proxy, api_name, prompt_audio, prompt_text)
+                self.current_model_id = self.db.add_tts_model(name, provider,
+                                                              api_key or "", base_url_t or "", model_name_t or "",
+                                                              voice, proxy, extra_config=extra_config)
         elif self.current_mode == "IMAGE":
             if self.current_model_id:
                 self.db.update_image_model(self.current_model_id, name, provider, base_url, api_key, model_name, proxy)

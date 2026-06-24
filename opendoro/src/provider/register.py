@@ -81,6 +81,59 @@ TTS_CONFIG_FIELDS = [
     {"name": "voice", "label": "语音包", "type": "text", "required": True, "placeholder": "例如: alloy"},
 ]
 
+# ---- 各 TTS Provider 专属 config_fields（用于动态表单渲染）----
+
+EDGE_TTS_CONFIG_FIELDS = [
+    {"name": "name",  "label": "配置名称", "type": "text", "required": True,  "placeholder": "例如: Edge TTS"},
+    {"name": "voice", "label": "语音包",   "type": "text", "required": True,  "placeholder": "例如: zh-CN-XiaoxiaoNeural"},
+]
+
+OPENAI_TTS_CONFIG_FIELDS = [
+    {"name": "name",    "label": "配置名称", "type": "text",     "required": True,  "placeholder": "例如: OpenAI TTS"},
+    {"name": "api_key", "label": "API Key",  "type": "password", "required": True,  "placeholder": "sk-..."},
+    {"name": "base_url","label": "Base URL", "type": "text",     "required": False, "placeholder": "https://api.openai.com/v1"},
+    {"name": "model",   "label": "模型 ID",  "type": "text",     "required": False, "placeholder": "例如: tts-1"},
+    {"name": "voice",   "label": "语音包",   "type": "text",     "required": True,  "placeholder": "例如: alloy"},
+]
+
+QWEN_TTS_CONFIG_FIELDS = [
+    {"name": "name",    "label": "配置名称", "type": "text",     "required": True,  "placeholder": "例如: 千问 TTS"},
+    {"name": "api_key", "label": "API Key",  "type": "password", "required": False, "placeholder": "或设置环境变量 DASHSCOPE_API_KEY"},
+    {"name": "base_url","label": "Base URL", "type": "text",     "required": False, "placeholder": "https://dashscope.aliyuncs.com/api/v1"},
+    {"name": "model",   "label": "模型 ID",  "type": "text",     "required": False, "placeholder": "例如: qwen3-tts-flash"},
+    {"name": "voice",   "label": "语音包",   "type": "text",     "required": True,  "placeholder": "例如: Cherry"},
+]
+
+GEMINI_TTS_CONFIG_FIELDS = [
+    {"name": "name",    "label": "配置名称", "type": "text",     "required": True,  "placeholder": "例如: Gemini TTS"},
+    {"name": "api_key", "label": "API Key",  "type": "password", "required": False, "placeholder": "或设置环境变量 GEMINI_API_KEY"},
+    {"name": "model",   "label": "模型 ID",  "type": "text",     "required": False, "placeholder": "例如: gemini-2.5-flash-preview-tts"},
+    {"name": "voice",   "label": "语音包",   "type": "text",     "required": True,  "placeholder": "例如: Kore"},
+]
+
+GRADIO_TTS_CONFIG_FIELDS = [
+    {"name": "name",         "label": "配置名称",       "type": "text", "required": True,  "placeholder": "例如: 本地Gradio TTS"},
+    {"name": "base_url",     "label": "Gradio 服务地址", "type": "text", "required": True,  "placeholder": "例如: http://localhost:7860"},
+    {"name": "voice",        "label": "语音包",         "type": "text", "required": False, "placeholder": "语音包名称"},
+    {"name": "api_name",     "label": "API 端点名称",   "type": "text", "required": False, "placeholder": "例如: /predict"},
+    {"name": "prompt_audio", "label": "参考音频路径",   "type": "file", "required": False, "placeholder": "参考音频文件路径"},
+    {"name": "prompt_text",  "label": "参考音频文本",   "type": "text", "required": False, "placeholder": "参考音频对应文本"},
+    {"name": "speed",        "label": "语速",           "type": "text", "required": False, "placeholder": "例如: 1.0"},
+]
+
+MIMO_TTS_CONFIG_FIELDS = [
+    {"name": "name",    "label": "配置名称", "type": "text",     "required": True,  "placeholder": "例如: 小米 MiMo TTS"},
+    {"name": "api_key", "label": "API Key",  "type": "password", "required": True,  "placeholder": "或设置环境变量 MIMO_API_KEY"},
+    {"name": "base_url","label": "Base URL", "type": "text",     "required": False, "placeholder": "https://api.xiaomimimo.com/v1"},
+    {"name": "model",   "label": "模型 ID",  "type": "combo",   "required": True,
+     "choices": [
+         {"label": "MiMo-V2.5-TTS (预置音色)",        "value": "mimo-v2.5-tts"},
+         {"label": "MiMo-V2.5-TTS-VoiceDesign (音色设计)", "value": "mimo-v2.5-tts-voicedesign"},
+     ]},
+    {"name": "voice",   "label": "音色 / 音色描述", "type": "text", "required": True,
+     "placeholder": "预置音色: 冰糖/茉莉/苏打/白桦/Mia/Chloe/Milo/Dean, 或音色描述文本"},
+]
+
 IMAGE_CONFIG_FIELDS = [
     {"name": "name", "label": "配置名称", "type": "text", "required": True, "placeholder": "例如: DALL-E 3"},
     {"name": "api_key", "label": "API Key", "type": "password", "required": True, "placeholder": "sk-..."},

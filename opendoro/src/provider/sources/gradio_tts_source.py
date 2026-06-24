@@ -3,7 +3,7 @@ import tempfile
 from typing import Optional, List, Dict
 from ..provider import TTSProvider
 from ..entities import TTSResponse, ProviderConfig, ProviderType
-from ..register import register_provider_adapter
+from ..register import register_provider_adapter, GRADIO_TTS_CONFIG_FIELDS
 from src.core.logger import logger
 
 try:
@@ -12,15 +12,6 @@ try:
 except ImportError:
     HAS_GRADIO_CLIENT = False
     Client = None
-
-
-GRADIO_TTS_CONFIG_FIELDS = [
-    {"name": "name", "label": "配置名称", "type": "text", "required": True, "placeholder": "例如: 本地Gradio TTS"},
-    {"name": "base_url", "label": "Gradio服务地址", "type": "text", "required": True, "placeholder": "例如: http://localhost:7860"},
-    {"name": "voice", "label": "语音包", "type": "text", "required": False, "placeholder": "语音包名称"},
-    {"name": "api_name", "label": "API端点名称", "type": "text", "required": False, "placeholder": "例如: /tts (默认为/predict)"},
-    {"name": "speed", "label": "语速", "type": "text", "required": False, "placeholder": "例如: 1.0"},
-]
 
 
 @register_provider_adapter(

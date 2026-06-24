@@ -6,7 +6,7 @@
 
 ### Your Smart Desktop Companion
 
-[![Version](https://img.shields.io/badge/version-3.6.6-blue.svg)](https://gitee.com/waterfeet/DoroPet_V3/releases)
+[![Version](https://img.shields.io/badge/version-3.6.7-blue.svg)](https://gitee.com/waterfeet/DoroPet_V3/releases)
 [![Python](https://img.shields.io/badge/Python-3.12+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)

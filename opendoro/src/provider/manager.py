@@ -157,6 +157,12 @@ class ProviderManager:
                 'proxy': row[9] if len(row) > 9 else '',
             }
         elif provider_cat == 'tts':
+            extra_str = row[12] if len(row) > 12 else '{}'
+            import json as _json
+            try:
+                extra = _json.loads(extra_str) if extra_str else {}
+            except (json.JSONDecodeError, TypeError):
+                extra = {}
             return {
                 'id': str(row[0]),
                 'name': row[1],
@@ -168,6 +174,7 @@ class ProviderManager:
                 'voice': row[6] if len(row) > 6 else '',
                 'is_active': bool(row[7]) if len(row) > 7 else False,
                 'proxy': row[8] if len(row) > 8 else '',
+                'extra_config': extra,
             }
         elif provider_cat == 'image':
             return {
@@ -211,6 +218,8 @@ class ProviderManager:
                 'siliconflow': 'openai_tts',
                 'fishaudio': 'openai_tts',
                 'gemini': 'gemini_tts',
+                'mimo': 'mimo_tts',
+                'xiaomi': 'mimo_tts',
                 'custom': 'openai_tts',
             }
             default_type = 'edge_tts'
@@ -258,6 +267,8 @@ class ProviderManager:
                 from .sources.openai_tts_source import ProviderOpenAITTS
             elif provider_type == 'gemini_tts':
                 from .sources.gemini_tts_source import ProviderGeminiTTS
+            elif provider_type == 'mimo_tts':
+                from .sources.mimo_tts_source import ProviderMimoTTS
             elif provider_type == 'openai_image':
                 from .sources.openai_image_source import ProviderOpenAIImage
         except ImportError as e:
