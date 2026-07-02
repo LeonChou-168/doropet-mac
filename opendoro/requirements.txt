@@ -15,7 +15,6 @@ markdown
 pygments
 beautifulsoup4
 live2d-py
-pyopengl
 packaging
 edge-tts
 musicdl

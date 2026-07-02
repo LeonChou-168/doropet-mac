@@ -730,7 +730,6 @@ class UpdateInstallWorker(QThread):
         self._is_cancelled = False
         
         self.app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.project_root = os.path.dirname(self.app_dir)
         self.temp_dir = tempfile.gettempdir()
     
     def run(self):
@@ -758,6 +757,12 @@ class UpdateInstallWorker(QThread):
             else:
                 source_dir = extract_dir
             
+            # If the source_dir contains a nested opendoro folder (e.g. DoroPet_V3/opendoro/),
+            # enter it so that xcopy copies the actual app files into TARGET, not a subfolder.
+            nested_opendoro = os.path.join(source_dir, "opendoro")
+            if os.path.isdir(nested_opendoro):
+                source_dir = nested_opendoro
+            
             self.progress.emit("正在复制文件...", self.STEP_COPY)
             
             python_exe = sys.executable
@@ -770,7 +775,7 @@ class UpdateInstallWorker(QThread):
             script_content = f'''@echo off
 chcp 65001 >nul
 set "SOURCE={source_dir}"
-set "TARGET={self.project_root}"
+set "TARGET={self.app_dir}"
 
 timeout /t 3 /nobreak >nul
 
@@ -822,7 +827,6 @@ exit /b 0
 class UpdateInstaller:
     def __init__(self):
         self.app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.project_root = os.path.dirname(self.app_dir)
         self.temp_dir = tempfile.gettempdir()
     
     def prepare_installation(self, zip_path: str, version: str) -> str:
@@ -839,6 +843,12 @@ class UpdateInstaller:
             source_dir = os.path.join(extract_dir, items[0])
         else:
             source_dir = extract_dir
+        
+        # If the source_dir contains a nested opendoro folder (e.g. DoroPet_V3/opendoro/),
+        # enter it so that xcopy copies the actual app files into TARGET, not a subfolder.
+        nested_opendoro = os.path.join(source_dir, "opendoro")
+        if os.path.isdir(nested_opendoro):
+            source_dir = nested_opendoro
         
         return source_dir
     
@@ -920,7 +930,7 @@ exit /b 0
             else:
                 restart_cmd = f'cd /d "{self.app_dir}" & "{python_exe}" "{main_script}"'
             
-            script_path = self.create_updater_script(source_dir, self.project_root, restart_cmd, silent)
+            script_path = self.create_updater_script(source_dir, self.app_dir, restart_cmd, silent)
             
             if silent:
                 subprocess.Popen(
