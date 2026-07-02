@@ -6,14 +6,16 @@ from datetime import datetime, timedelta
 from src.core.logger import logger
 
 
+def _get_cache_dir():
+    from src.core.database import get_user_data_dir
+    return os.path.join(get_user_data_dir(), "cache", "images")
+
+
 class ImageCacheManager:
     _instance = None
     _initialized = False
 
-    CACHE_DIR_NAME = os.path.join(
-        os.getenv('LOCALAPPDATA', os.path.expanduser('~')),
-        "DoroPet", "cache", "images"
-    )
+    CACHE_DIR_NAME = _get_cache_dir()
     MAX_CACHE_SIZE_MB = 500
     MAX_CACHE_AGE_DAYS = 7
     CLEANUP_THRESHOLD_RATIO = 0.8

@@ -450,7 +450,7 @@ class UpdateWidget(CardWidget):
             box = MessageBox(
                 tr("update.confirm_update"),
                 tr("update.confirm_message").replace("{version}", str(version.version)),
-                self
+                self.window()
             )
             box.yesButton.setText(tr("update.start_update"))
             box.cancelButton.setText(tr("general.cancel"))
@@ -735,18 +735,11 @@ class UpdateNotificationDialog(QWidget):
         # ---- 标题栏 ----
         header_layout = QHBoxLayout()
 
-        self.title_icon = QLabel("🎁")
-        self.title_icon.setFixedSize(28, 28)
-        self.title_icon.setStyleSheet("font-size: 20px; background: transparent;")
-        header_layout.addWidget(self.title_icon)
-
-        self.title_label = TitleLabel(tr("update.new_version_found"), self._container)
+        self.title_label = TitleLabel(
+            tr("update.new_version_found_title").format(version=self.version_info.version),
+            self._container
+        )
         header_layout.addWidget(self.title_label, 1)
-
-        self.close_btn = PushButton(FIF.CANCEL, "", self._container)
-        self.close_btn.setFixedSize(28, 28)
-        self.close_btn.clicked.connect(self._on_close)
-        header_layout.addWidget(self.close_btn)
 
         main_layout.addLayout(header_layout)
 
@@ -892,10 +885,6 @@ class UpdateNotificationDialog(QWidget):
     def _on_remind_later(self):
         self.close()
         self.remind_later.emit()
-
-    def _on_close(self):
-        self.remind_later.emit()
-        self.close()
 
     # 拖拽支持
     def mousePressEvent(self, event):

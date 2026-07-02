@@ -165,12 +165,14 @@ class ChapterOpeningWorker(QThread):
         generator: StoryGenerator,
         story_cache: StoryCache,
         current_state: GameState,
+        memory_manager=None,
         model_id: Optional[str] = None
     ):
         super().__init__()
         self.generator = generator
         self.story_cache = story_cache
         self.current_state = current_state
+        self.memory_manager = memory_manager
         self.model_id = model_id
         self._is_stopped = False
         self._full_text = ""
@@ -180,7 +182,8 @@ class ChapterOpeningWorker(QThread):
             gen = self.generator.generate_chapter_opening(
                 self.story_cache,
                 self.current_state,
-                self.model_id
+                memory_manager=self.memory_manager,
+                model_id=self.model_id
             )
             
             self._full_text = ""
@@ -226,6 +229,8 @@ class ChapterContinuationWorker(QThread):
         choice: str,
         story_cache: StoryCache,
         current_state: GameState,
+        memory_manager=None,
+        event_context: str = None,
         model_id: Optional[str] = None
     ):
         super().__init__()
@@ -234,6 +239,8 @@ class ChapterContinuationWorker(QThread):
         self.choice = choice
         self.story_cache = story_cache
         self.current_state = current_state
+        self.memory_manager = memory_manager
+        self.event_context = event_context
         self.model_id = model_id
         self._is_stopped = False
         self._full_text = ""
@@ -245,7 +252,9 @@ class ChapterContinuationWorker(QThread):
                 self.choice,
                 self.story_cache,
                 self.current_state,
-                self.model_id
+                memory_manager=self.memory_manager,
+                event_context=self.event_context,
+                model_id=self.model_id
             )
             
             self._full_text = ""

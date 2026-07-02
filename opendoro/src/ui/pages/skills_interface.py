@@ -1,5 +1,6 @@
 import os
 import json
+import markdown
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget,
                              QStackedWidget, QLabel, QFrame, QListWidgetItem,
                              QTextEdit, QLineEdit, QSplitter, QScrollArea,
@@ -311,6 +312,19 @@ class SkillDetailPanel(QWidget):
         self.settings = QSettings("DoroPet", "Settings")
         self.setup_ui()
 
+    @staticmethod
+    def _render_markdown(text: str) -> str:
+        """将 Markdown 文本转换为 HTML，用于在 QLabel/QTextEdit 中渲染。"""
+        if not text:
+            return ""
+        try:
+            return markdown.markdown(
+                text,
+                extensions=["fenced_code", "tables", "codehilite", "nl2br"]
+            )
+        except Exception:
+            return text
+
     def setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -344,16 +358,30 @@ class SkillDetailPanel(QWidget):
         self.meta_label.setWordWrap(True)
         dl.addWidget(self.meta_label)
 
-        self.desc_label = BodyLabel("")
+        self.desc_label = QLabel("")
         self.desc_label.setWordWrap(True)
+        self.desc_label.setTextFormat(Qt.RichText)
+        self.desc_label.setOpenExternalLinks(True)
+        self.desc_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
         dl.addWidget(self.desc_label)
 
         dl.addWidget(BodyLabel(tr("skills.full_content", default="完整内容:")))
 
         self.content_text = TextEdit(self)
         self.content_text.setReadOnly(True)
-        self.content_text.setMinimumHeight(200)
-        dl.addWidget(self.content_text)
+        self.content_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # 代码块样式 (Pygments codehilite)
+        self.content_text.document().setDefaultStyleSheet("""
+            .codehilite { background-color: #f4f4f8; border: 1px solid #ddd; 
+                          border-radius: 4px; padding: 8px; margin: 8px 0;
+                          font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; }
+            .codehilite pre { margin: 0; white-space: pre-wrap; }
+            code { background-color: #f0f0f0; padding: 2px 4px; border-radius: 3px; 
+                   font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; }
+            pre { background-color: #f4f4f8; padding: 8px; border-radius: 4px; 
+                  font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; }
+        """)
+        dl.addWidget(self.content_text, stretch=1)
 
         btn_row = QHBoxLayout()
         self.btn_view = PushButton(tr("skills.load_full", default="加载完整内容"))
@@ -372,11 +400,9 @@ class SkillDetailPanel(QWidget):
         btn_row.addWidget(self.btn_remove)
         btn_row.addStretch()
         dl.addLayout(btn_row)
-        dl.addStretch()
 
         self.detail_widget.hide()
-        layout.addWidget(self.detail_widget)
-        layout.addStretch()
+        layout.addWidget(self.detail_widget, stretch=1)
 
     def set_skill(self, skill_info):
         self.current_skill = skill_info
@@ -406,12 +432,17 @@ class SkillDetailPanel(QWidget):
             meta_parts.append(f"{tr('skills.meta_version', default='版本')}: {version}")
         self.meta_label.setText(" | ".join(meta_parts))
 
-        self.desc_label.setText(skill_info.get("description", tr("skills.no_description", default="无描述")))
+        self.desc_label.setText(self._render_markdown(
+            skill_info.get("description", tr("skills.no_description", default="无描述"))
+        ))
 
         content = skill_info.get("content", "")
         if len(content) > 400:
-            content = content[:400] + "...\n\n" + tr("skills.load_full_hint", default="[点击下方按钮加载完整内容]")
-        self.content_text.setPlainText(content or tr("skills.no_extra_content", default="(无额外内容)"))
+            preview = content[:400] + "...\n\n" + tr("skills.load_full_hint", default="[点击下方按钮加载完整内容]")
+        else:
+            preview = content
+        self.content_text.setHtml(self._render_markdown(preview) if preview else
+                                   "<p>" + tr("skills.no_extra_content", default="(无额外内容)") + "</p>")
 
         is_executable = skill_type in ("executable", "hybrid")
         self.btn_execute.setVisible(is_executable)
@@ -456,7 +487,7 @@ class SkillDetailPanel(QWidget):
                     return
             except (json.JSONDecodeError, TypeError):
                 pass
-            self.content_text.setPlainText(content)
+            self.content_text.setHtml(self._render_markdown(content))
 
     def _execute(self):
         if not self.current_skill:
@@ -765,7 +796,7 @@ class SkillsInterface(QWidget):
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(self.stack)
         splitter.addWidget(self.detail_panel)
-        splitter.setSizes([600, 360])
+        splitter.setSizes([550, 410])
 
         main.addWidget(splitter)
 

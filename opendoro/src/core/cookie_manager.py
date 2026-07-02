@@ -15,11 +15,8 @@ class CookieManager:
 
     def __init__(self):
         self._cookies: Dict[str, Dict] = {}
-        self._cookie_dir = os.path.join(
-            os.environ.get('LOCALAPPDATA', os.getcwd()),
-            'DoroPet',
-            'cookies'
-        )
+        from src.core.database import get_user_data_dir
+        self._cookie_dir = os.path.join(get_user_data_dir(), 'cookies')
         self._load_cookies()
 
     def _get_cookie_file(self, platform: str) -> str:

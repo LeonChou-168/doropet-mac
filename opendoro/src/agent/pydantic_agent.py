@@ -17,7 +17,7 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.toolsets import FunctionToolset, CombinedToolset
 
-from src.agent.pydantic_tools import (
+from src.agent.tools import (
     get_filtered_tools,
     get_skill_tool_functions,
     ALL_TOOLS,
@@ -180,6 +180,7 @@ def create_doro_agent(
     capabilities: Optional[list[str]] = None,
     retries: int = 999,
     usage_limits: Optional[UsageLimits] = None,
+    confirmation_manager: Any = None,
 ) -> Agent[DoroDeps]:
     """
     创建配置好的 DoroPet Agent。
@@ -203,7 +204,7 @@ def create_doro_agent(
         配置好的 pydantic-ai Agent 实例
     """
     if enabled_plugins is None:
-        enabled_plugins = ["search", "image", "coding", "file", "expression", "memory"]
+        enabled_plugins = ["search", "image", "coding", "file", "expression", "memory", "bridge"]
 
     if capabilities is None:
         capabilities = list(ALL_CAPABILITIES)
@@ -220,6 +221,11 @@ def create_doro_agent(
 
     # 1. 核心工具（按插件过滤）
     filtered_core = get_filtered_tools(enabled_plugins)
+    # 如果提供了确认管理器，对高风险工具进行包装
+    if confirmation_manager is not None:
+        from src.agent.tool_confirmation import wrap_tools_with_confirmation
+        filtered_core = wrap_tools_with_confirmation(filtered_core, confirmation_manager)
+        logger.info(f"[PydanticAgent] Tools wrapped with confirmation (threshold={confirmation_manager.risk_threshold.value})")
     if filtered_core:
         core_toolset = FunctionToolset(tools=filtered_core)
         toolsets.append(core_toolset)
@@ -227,6 +233,9 @@ def create_doro_agent(
 
     # 2. 技能工具（从 SkillManager 动态加载）
     skill_funcs = get_skill_tool_functions()
+    if confirmation_manager is not None and skill_funcs:
+        from src.agent.tool_confirmation import wrap_tools_with_confirmation
+        skill_funcs = wrap_tools_with_confirmation(skill_funcs, confirmation_manager)
     if skill_funcs:
         skill_toolset = FunctionToolset(tools=skill_funcs)
         toolsets.append(skill_toolset)

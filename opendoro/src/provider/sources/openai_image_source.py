@@ -97,12 +97,9 @@ class ProviderOpenAIImage(ImageProvider):
         return ImageResponse()
     
     def _image_save_dir(self) -> str:
-        """图片保存目录：%LOCALAPPDATA%/DoroPet/generated_images/"""
-        appdata = os.getenv('LOCALAPPDATA')
-        if appdata:
-            save_dir = os.path.join(appdata, "DoroPet", "generated_images")
-        else:
-            save_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "DoroPet", "generated_images")
+        """图片保存目录。"""
+        from src.core.database import get_user_data_dir
+        save_dir = os.path.join(get_user_data_dir(), "generated_images")
         os.makedirs(save_dir, exist_ok=True)
         return save_dir
 

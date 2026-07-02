@@ -24,7 +24,6 @@ from .pages.pet_status_interface import PetStatusInterface
 from .pages.live2d_config_interface import Live2DConfigInterface
 from .pages.memory_interface import MemoryInterface
 from .music import MusicInterface
-from .galgame import GalgameInterface
 from .pomodoro import PomodoroInterface
 from src.core.database import ChatDatabase
 from src.resource_utils import resource_path
@@ -33,6 +32,7 @@ from src.core.font_scale_utils import apply_font_scale
 from src.core.app_theme import THEME_COLOR
 from src.core.orange_manager import OrangeManager
 from src.core.i18n import I18nManager, tr
+from src.core.onboarding import OnboardingManager
 
 class MainWindow(FluentWindow):
     def __init__(self, version_manager=None):
@@ -70,7 +70,6 @@ class MainWindow(FluentWindow):
         self.pomodoro_interface = PomodoroInterface(self)
         self.pet_status_interface = PetStatusInterface(None, self.db, self, self.pomodoro_interface)
         self.music_interface = MusicInterface(self)
-        self.galgame_interface = GalgameInterface(self.db, self)
         self.memory_interface = MemoryInterface(self.db, self)
         QApplication.processEvents()
 
@@ -81,7 +80,10 @@ class MainWindow(FluentWindow):
         self.init_navigation()
         QApplication.processEvents()
 
-        # 5. 初始化标题栏功能 (置顶、主题切换)
+        # 5. 初始化新手引导管理器
+        self._onboarding_manager = OnboardingManager(self, self.db._config)
+
+        # 6. 初始化标题栏功能 (置顶、主题切换、新手指南)
         self.init_title_bar()
 
         setThemeColor(THEME_COLOR)
@@ -100,7 +102,6 @@ class MainWindow(FluentWindow):
         self.addSubInterface(self.pet_status_interface, FIF.HOME, tr("nav.pet_status"))
         self.addSubInterface(self.chat_interface, FIF.CHAT, tr("nav.ai_chat"))
         self.addSubInterface(self.music_interface, FIF.MUSIC, tr("nav.music"))
-        self.addSubInterface(self.galgame_interface, FIF.GAME, tr("nav.galgame"))
         self.addSubInterface(self.config_interface, FIF.ROBOT, tr("nav.model_config"))
         self.addSubInterface(self.voice_config_interface, FIF.MICROPHONE, tr("nav.voice_config"))
         self.addSubInterface(self.live2d_config_interface, FIF.PHOTO, tr("nav.live2d_config"))
@@ -151,11 +152,16 @@ class MainWindow(FluentWindow):
         self.theme_btn.setToolTip(tr("titlebar.toggle_theme"))
         self.theme_btn.clicked.connect(self.toggle_theme)
 
+        self.guide_btn = TransparentToolButton(FIF.HELP, self)
+        self.guide_btn.setToolTip(tr("titlebar.guide"))
+        self.guide_btn.clicked.connect(self._on_guide_clicked)
+
         # 2. 添加到标题栏布局
         # 在最小化按钮之前插入 (通常布局倒数第3个是Min，但要视具体实现而定)
         # 我们插入到 layout 的倒数位置之前
         self.titleBar.layout().insertWidget(self.titleBar.layout().count() - 3, self.pin_btn, 0, Qt.AlignRight)
         self.titleBar.layout().insertWidget(self.titleBar.layout().count() - 3, self.theme_btn, 0, Qt.AlignRight)
+        self.titleBar.layout().insertWidget(self.titleBar.layout().count() - 3, self.guide_btn, 0, Qt.AlignRight)
         
         # 添加间距
         self.titleBar.layout().insertSpacing(self.titleBar.layout().count() - 3, 10)
@@ -166,7 +172,6 @@ class MainWindow(FluentWindow):
             (self.pet_status_interface, "nav.pet_status"),
             (self.chat_interface, "nav.ai_chat"),
             (self.music_interface, "nav.music"),
-            (self.galgame_interface, "nav.galgame"),
             (self.config_interface, "nav.model_config"),
             (self.voice_config_interface, "nav.voice_config"),
             (self.live2d_config_interface, "nav.live2d_config"),
@@ -183,6 +188,7 @@ class MainWindow(FluentWindow):
         # 刷新标题栏提示
         self.pin_btn.setToolTip(tr("titlebar.pin") if not self.pin_btn.isChecked() else tr("titlebar.unpin"))
         self.theme_btn.setToolTip(tr("titlebar.toggle_theme"))
+        self.guide_btn.setToolTip(tr("titlebar.guide"))
 
     def toggle_pinning(self):
         hwnd = int(self.winId())
@@ -254,6 +260,19 @@ class MainWindow(FluentWindow):
             except Exception:
                 pass
 
+    def _on_guide_clicked(self):
+        """标题栏"新手指南"按钮点击 —— 重置进度并重新播放全部引导。"""
+        self._onboarding_manager.reset_and_start()
+
+    def showEvent(self, event):
+        """窗口显示时触发：首次打开自动弹出新手引导。"""
+        super().showEvent(event)
+        if hasattr(self, '_onboarding_manager') and not hasattr(self, '_onboarding_checked'):
+            self._onboarding_checked = True
+            if self._onboarding_manager.has_pending_steps():
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(800, self._onboarding_manager.start_guide)
+
     def _on_doro_level_changed(self, level: int, title: str):
         if hasattr(self, 'live2d_widget') and self.live2d_widget:
             self.live2d_widget.talk(tr("pet.level_up").format(level=level, title=title), 5000)
@@ -294,9 +313,6 @@ class MainWindow(FluentWindow):
         if hasattr(self, 'music_interface'):
             self.music_interface.update_theme(is_dark)
         
-        if hasattr(self, 'galgame_interface'):
-            self.galgame_interface.update_theme()
-
         if hasattr(self, 'pomodoro_interface'):
             self.pomodoro_interface.update_theme()
 
@@ -305,6 +321,9 @@ class MainWindow(FluentWindow):
 
         if hasattr(self, 'memory_interface'):
             self.memory_interface.update_theme()
+
+        if hasattr(self, 'plugin_interface'):
+            self.plugin_interface.update_theme()
 
         if hasattr(self, 'live2d_widget') and hasattr(self.live2d_widget, 'quick_chat_window'):
             if self.live2d_widget.quick_chat_window:

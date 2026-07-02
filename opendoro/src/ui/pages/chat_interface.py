@@ -1498,6 +1498,15 @@ class MessageBubble(QFrame):
             # Add at the beginning (leftmost)
             self.action_layout.insertWidget(0, lbl_model)
 
+        # ── 统计标签（Token + 耗时）──
+        self.stats_label = QLabel("", self.action_widget)
+        self.stats_label.setObjectName("chatStatsLabel")
+        self.stats_label.setStyleSheet("QLabel#chatStatsLabel { color: #808080; font-size: 10px; padding: 0 6px; font-family: 'Segoe UI', sans-serif; }")
+        self.stats_label.hide()
+        # 插入在模型名之后
+        target_idx = 1 if self.model else 0
+        self.action_layout.insertWidget(target_idx, self.stats_label)
+
         self.action_layout.addStretch()
         
         # Add action widget to the MAIN layout (outside the colored bubble)
@@ -1552,6 +1561,35 @@ class MessageBubble(QFrame):
         elif self._playback_state == self.PLAYBACK_PAUSED:
             self.btn_read.setIcon(FluentIcon.PLAY)
             self.btn_read.setToolTip(tr("chat.resume"))
+
+    def set_stats(self, stats_json: str):
+        """设置并显示统计信息（Token + 耗时）。"""
+        if not stats_json or not hasattr(self, 'stats_label'):
+            return
+        try:
+            import json
+            data = json.loads(stats_json)
+        except (json.JSONDecodeError, TypeError):
+            return
+
+        tokens_total = data.get("tokens_in", 0) + data.get("tokens_out", 0)
+        duration_ms = data.get("duration_ms", 0)
+
+        parts = []
+        if tokens_total > 0:
+            if tokens_total >= 1000:
+                parts.append(f"{tokens_total/1000:.1f}k tokens")
+            else:
+                parts.append(f"{tokens_total} tokens")
+        if duration_ms > 0:
+            if duration_ms >= 1000:
+                parts.append(f"{duration_ms/1000:.1f}s")
+            else:
+                parts.append(f"{duration_ms:.0f}ms")
+
+        if parts:
+            self.stats_label.setText("  ·  ".join(parts))
+            self.stats_label.show()
 
     def copy_content(self):
         """复制内容到剪贴板（含图片）并提供视觉反馈"""
@@ -2295,6 +2333,7 @@ class ChatInterface(QWidget):
             "file": True,
             "memory": True,
             "browser": False,
+            "bridge": True,
         }
         
         settings = QSettings("DoroPet", "Settings")
@@ -2305,6 +2344,7 @@ class ChatInterface(QWidget):
         self.tool_states["file"] = settings.value("tool_file_enabled", True, type=bool)
         self.tool_states["memory"] = settings.value("tool_memory_enabled", True, type=bool)
         self.tool_states["browser"] = settings.value("tool_browser_enabled", False, type=bool)
+        self.tool_states["bridge"] = settings.value("tool_bridge_enabled", True, type=bool)
         
         self.skill_states = {}
         skill_mgr = SkillManager()
@@ -2576,7 +2616,10 @@ class ChatInterface(QWidget):
         messages = self.db.get_messages(self.current_session_id)
         for msg_data in messages:
             attachments = []
-            if len(msg_data) >= 11:
+            stats_json = ""
+            if len(msg_data) >= 12:
+                msg_id, role, content, images, parent_id, sibling_ids, current_index, model, reasoning, tool_calls, attachments, stats_json = msg_data[:12]
+            elif len(msg_data) >= 11:
                 msg_id, role, content, images, parent_id, sibling_ids, current_index, model, reasoning, tool_calls, attachments = msg_data[:11]
             elif len(msg_data) >= 10:
                 msg_id, role, content, images, parent_id, sibling_ids, current_index, model, reasoning, tool_calls = msg_data[:10]
@@ -2611,9 +2654,12 @@ class ChatInterface(QWidget):
                 container = BranchContainer()
                 
                 for s_row in siblings_data:
-                    # Unpack: id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments
+                    # Unpack: id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments, stats_json
                     s_attachments_str = None
-                    if len(s_row) >= 11:
+                    s_stats_json = ""
+                    if len(s_row) >= 12:
+                        s_id, s_role, s_content, s_images_str, s_parent_id, s_is_active, s_ts, s_model, s_reasoning, s_tool_calls, s_attachments_str, s_stats_json = s_row[:12]
+                    elif len(s_row) >= 11:
                         s_id, s_role, s_content, s_images_str, s_parent_id, s_is_active, s_ts, s_model, s_reasoning, s_tool_calls, s_attachments_str = s_row[:11]
                     elif len(s_row) >= 10:
                         s_id, s_role, s_content, s_images_str, s_parent_id, s_is_active, s_ts, s_model, s_reasoning, s_tool_calls = s_row[:10]
@@ -2680,11 +2726,13 @@ class ChatInterface(QWidget):
                     bubble.switch_branch_requested.connect(self.switch_branch)
                     bubble.branch_conversation_requested.connect(self.branch_conversation)
                     bubble.context_menu_requested.connect(self._on_bubble_context_menu)
+                    if s_stats_json:
+                        bubble.set_stats(s_stats_json)
                     container.add_bubble(bubble)
                 
                 self.chat_layout.addWidget(container)
             else:
-                self.add_message_to_ui(role, content, msg_id, images, sibling_ids, current_index, model=model, reasoning=reasoning, tool_calls=tool_calls, attachments=attachments)
+                self.add_message_to_ui(role, content, msg_id, images, sibling_ids, current_index, model=model, reasoning=reasoning, tool_calls=tool_calls, attachments=attachments, stats_json=stats_json)
 
         
         self.chat_layout.addStretch()
@@ -2913,7 +2961,7 @@ class ChatInterface(QWidget):
                     return widget
         return None
 
-    def add_message_to_ui(self, role, content, msg_id, images=None, sibling_ids=None, current_index=0, model=None, reasoning=None, tool_calls=None, attachments=None):
+    def add_message_to_ui(self, role, content, msg_id, images=None, sibling_ids=None, current_index=0, model=None, reasoning=None, tool_calls=None, attachments=None, stats_json=""):
         if role == "assistant" and (reasoning or tool_calls):
             exec_widget = ToolExecutionWidget(self)
             if reasoning:
@@ -2963,7 +3011,11 @@ class ChatInterface(QWidget):
         
         if not inserted:
             self.chat_layout.addWidget(bubble)
-            
+
+        # ── 恢复持久化的统计标签（Token + 耗时）──
+        if stats_json:
+            bubble.set_stats(stats_json)
+
     def switch_branch(self, msg_id):
         self.db.switch_branch(msg_id)
         self.load_chat_history()
@@ -3224,11 +3276,47 @@ class ChatInterface(QWidget):
                 self.worker.tool_status_changed.disconnect()
                 self.worker.tool_execution_update.disconnect()
                 self.worker.stopped.disconnect()
+                self.worker.tool_confirmation_requested.disconnect()
             except (TypeError, RuntimeError):
                 pass
             self.worker = None
         
         self.scroll_to_bottom()
+
+    def _on_tool_confirmation(self, msg: str, confirm_id: str, callback):
+        """显示工具确认弹窗，等待用户确认或拒绝。"""
+        from PyQt5.QtWidgets import QMessageBox
+        import json
+
+        try:
+            data = json.loads(msg)
+        except json.JSONDecodeError:
+            callback(True)  # 解析失败则自动确认
+            return
+
+        display_name = data.get("display_name", "")
+        message = data.get("message", "")
+        risk = data.get("risk", "medium")
+
+        # 根据风险等级使用不同的弹窗图标
+        if risk in ("high", "critical"):
+            reply = QMessageBox.warning(
+                self,
+                f"Doro 需要确认 — {display_name}",
+                message,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+        else:
+            reply = QMessageBox.question(
+                self,
+                f"Doro 需要确认 — {display_name}",
+                message,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+        confirmed = (reply == QMessageBox.Yes)
+        callback(confirmed)
 
     def send_message(self):
         user_input = self.input_text.toPlainText().strip()
@@ -3798,6 +3886,11 @@ class ChatInterface(QWidget):
              if "expression" not in enabled_plugins:
                  enabled_plugins.append("expression")
 
+        # 工具确认设置
+        confirm_enabled = settings.value("tool_confirm_enabled", True, type=bool)
+        confirm_threshold = settings.value("tool_confirm_threshold", "medium", type=str)
+        confirm_timeout = settings.value("tool_confirm_timeout", 30, type=int)
+
         self.worker = LLMWorker(
             api_key,
             base_url,
@@ -3810,6 +3903,9 @@ class ChatInterface(QWidget):
             provider_id=provider_id,
             available_images=available_images or [],
             vision_model_data=vision_model_data,
+            user_confirmation_enabled=confirm_enabled,
+            confirmation_threshold=confirm_threshold,
+            confirmation_timeout=confirm_timeout,
         )
         self.worker.chunk_received.connect(self.handle_llm_chunk)
         self.worker.thinking_chunk.connect(self.on_thinking_chunk)
@@ -3818,6 +3914,7 @@ class ChatInterface(QWidget):
         self.worker.tool_status_changed.connect(self.on_tool_status_changed)
         self.worker.tool_execution_update.connect(self.on_tool_execution_update)
         self.worker.stopped.connect(self.on_generation_stopped)
+        self.worker.tool_confirmation_requested.connect(self._on_tool_confirmation)
         
         if self.live2d_widget and is_doro_tools_enabled:
              self.worker.expression_changed.connect(self.on_expression_change_request)
@@ -4132,7 +4229,7 @@ class ChatInterface(QWidget):
                 item.setToolTip(title)
                 break
 
-    def handle_llm_response(self, content, reasoning, tool_calls, generated_images=[]):
+    def handle_llm_response(self, content, reasoning, tool_calls, generated_images=[], stats_json=""):
         self.update_timer.stop()
         if self.streaming_buffer:
             self.update_streaming_display()
@@ -4155,29 +4252,39 @@ class ChatInterface(QWidget):
             used_model = self.worker.model
 
         # Reset current turn state
+        if self.tool_execution_widget:
+            try:
+                self.tool_execution_widget.deleteLater()
+            except RuntimeError:
+                pass
         self.tool_execution_widget = None
         
         session_id = self.worker_session_id
         is_same_session = (session_id == self.current_session_id)
         
         if self.streaming_bubble:
-            msg_id = self.db.add_message(session_id, "assistant", content, generated_images, parent_id=parent_id, model=used_model, reasoning=reasoning, tool_calls=tool_calls)
+            msg_id = self.db.add_message(session_id, "assistant", content, generated_images, parent_id=parent_id, model=used_model, reasoning=reasoning, tool_calls=tool_calls, stats_json=stats_json)
             
             self.streaming_bubble.msg_id = msg_id
-            
-            if is_same_session:
-                self.load_chat_history()
-            
+            # 更新最终内容（包含完整 Markdown 渲染、tool calls 展示等）
+            self.streaming_bubble.update_content(content)
+            # 不再调用 load_chat_history() — streaming bubble 已显示正确内容，
+            # 重建整个聊天区会导致 widget 生命周期问题，内容可能消失
             self.streaming_bubble = None
             self.streaming_content = ""
+            self.streaming_buffer = ""
         else:
-            msg_id = self.db.add_message(session_id, "assistant", content, generated_images, parent_id=parent_id, model=used_model, reasoning=reasoning, tool_calls=tool_calls)
+            msg_id = self.db.add_message(session_id, "assistant", content, generated_images, parent_id=parent_id, model=used_model, reasoning=reasoning, tool_calls=tool_calls, stats_json=stats_json)
             if is_same_session:
                 self.load_chat_history()
         
         if is_same_session:
             QApplication.processEvents()
             self.scroll_to_bottom()
+
+        # ── 设置统计标签（Token + 耗时）──
+        if stats_json and msg_id:
+            self._set_bubble_stats(msg_id, stats_json)
         
         self._is_generating = False
         self.btn_send.setIcon(FluentIcon.SEND)
@@ -4189,6 +4296,20 @@ class ChatInterface(QWidget):
         if is_same_session and content and hasattr(self, '_last_user_input') and self._last_user_input:
             self._trigger_memory_analysis(self._last_user_input, content)
             self._last_user_input = None
+
+    def _set_bubble_stats(self, msg_id: int, stats_json: str):
+        """为指定消息的气泡设置统计标签。"""
+        if not stats_json or not msg_id:
+            return
+        chat_layout = getattr(self, 'chat_layout', None)
+        if not chat_layout:
+            return
+        for i in range(chat_layout.count()):
+            w = chat_layout.itemAt(i).widget()
+            if w is not None and hasattr(w, 'msg_id') and w.msg_id == msg_id:
+                if hasattr(w, 'set_stats'):
+                    w.set_stats(stats_json)
+                break
 
     def handle_llm_error(self, err_msg):
         self.update_timer.stop()

@@ -10,16 +10,21 @@ Agent 自动处理工具调用，通过 event_stream_handler 监控工具执行�
 import asyncio
 import json
 import time
+from datetime import datetime
 from typing import Any, Optional
 
 from PyQt5.QtCore import QThread, pyqtSignal, QSettings, QMutex, QMutexLocker
 
 from src.agent.pydantic_agent import create_doro_agent, DoroDeps
-from src.agent.pydantic_tools import get_filtered_tools, get_skill_tool_functions
+from src.agent.tools import get_filtered_tools, get_skill_tool_functions
+from src.agent.prompt_builder import PromptBuilder, SystemPromptContext
+from src.agent.user_message_builder import UserMessageBuilder, UserMessageContext
+from src.agent.tool_stats import ToolStatsCollector
 from src.core.skill_manager import SkillManager
 from src.core.state_manager import StateManager, GenerationState
 from src.core.memory_manager import MemoryManager
 from src.core.logger import logger
+from src.agent.tools_cache import clear_cache
 from pydantic_ai import UsageLimits
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 
@@ -69,7 +74,7 @@ class LLMWorker(QThread):
     信号与原有版本完全兼容。
     """
 
-    finished = pyqtSignal(str, str, list, list)   # content, reasoning, tool_calls, generated_images
+    finished = pyqtSignal(str, str, list, list, str)   # content, reasoning, tool_calls, generated_images, stats_json
     chunk_received = pyqtSignal(str)               # 流式文本块
     thinking_chunk = pyqtSignal(str)               # 思考内容块
     error = pyqtSignal(str)                        # 错误信息
@@ -78,6 +83,7 @@ class LLMWorker(QThread):
     tool_status_changed = pyqtSignal(str)          # 工具状态文本
     tool_execution_update = pyqtSignal(str, str, str, str, str)  # name, type, status, args, result
     stopped = pyqtSignal()                         # 用户停止
+    tool_confirmation_requested = pyqtSignal(str, str, object)  # msg, confirm_id, callback
 
     def __init__(
         self,
@@ -96,6 +102,9 @@ class LLMWorker(QThread):
         usage_limits: Optional[UsageLimits] = None,
         available_images: Optional[list[str]] = None,
         vision_model_data: Any = None,
+        user_confirmation_enabled: bool = True,
+        confirmation_threshold: str = "medium",
+        confirmation_timeout: int = 30,
     ):
         super().__init__()
         self.api_key = api_key
@@ -106,13 +115,17 @@ class LLMWorker(QThread):
         self.is_thinking_model = bool(is_thinking)
         self.skip_tools_and_max_tokens = skip_tools_and_max_tokens
         self.provider_id = provider_id
-        self.enabled_plugins = enabled_plugins if enabled_plugins is not None else ["search", "image", "coding", "file", "expression"]
+        self.enabled_plugins = enabled_plugins if enabled_plugins is not None else ["search", "image", "coding", "file", "expression", "bridge"]
         self.available_expressions = available_expressions if available_expressions else []
         self.capabilities = capabilities  # None = 启用全部 Capability
         self.retries = retries
         self.usage_limits = usage_limits or UsageLimits(request_limit=50)
         self.available_images = available_images or []
         self.vision_model_data = vision_model_data
+
+        self.user_confirmation_enabled = user_confirmation_enabled
+        self.confirmation_threshold = confirmation_threshold
+        self.confirmation_timeout = confirmation_timeout
 
         self.generated_images: list = []
         self.reasoning_accumulated = ""
@@ -140,6 +153,46 @@ class LLMWorker(QThread):
         with QMutexLocker(self._stop_mutex):
             return self._is_stopped
 
+    # ----- Prompt 辅助方法 -----
+
+    def _get_enabled_skill_descriptions(self) -> list[str]:
+        """获取已启用技能的描述列表。"""
+        descriptions = []
+        try:
+            for name, skill in self.skill_manager.skills.items():
+                descriptions.append(f"{name}: {skill.description}")
+        except Exception:
+            pass
+        return descriptions
+
+    def _get_current_pet_attributes(self) -> dict:
+        """获取当前宠物属性。
+        子类或调用方可覆盖此方法以接入 PetAttributesManager。
+        """
+        return {}
+
+    def _get_memory_summary(self) -> str:
+        """获取用户记忆摘要。
+        子类或调用方可覆盖此方法。
+        """
+        return ""
+
+    def _get_conversation_summary(self) -> str:
+        """获取对话压缩摘要。
+        子类或调用方可覆盖此方法。
+        """
+        return ""
+
+    # ----- 确认管理器辅助 -----
+
+    def _emit_confirmation(self, msg: str, confirm_id: str, callback):
+        """发送确认请求到 UI 线程（线程安全）。"""
+        try:
+            self.tool_confirmation_requested.emit(msg, confirm_id, callback)
+        except RuntimeError:
+            # Qt 信号在跨线程 emit 时偶尔会 RuntimeError，忽略
+            pass
+
     # ----- 主运行入口 -----
 
     def run(self):
@@ -162,11 +215,15 @@ class LLMWorker(QThread):
                     self.state_manager.set_generation_state(GenerationState.COMPLETED)
                 except RuntimeError:
                     pass
+            clear_cache()
 
     # ----- pydantic-ai 核心逻辑 -----
 
     async def _run_pydantic(self):
         """使用 pydantic-ai Agent 运行完整对话。"""
+
+        # 初始化统计收集器
+        stats_collector = ToolStatsCollector(model=self.model, provider=self.provider_id)
 
         # 1. 提取系统提示词、用户输入和对话历史
         system_prompt = ""
@@ -186,8 +243,29 @@ class LLMWorker(QThread):
                 user_prompt = _parse_openai_content(msg.get("content", ""))
                 break
 
-        if not system_prompt:
-            system_prompt = "You are Doro, a helpful desktop pet assistant."
+        # ── 使用 PromptBuilder 构建增强的系统提示词 ──
+        # 只在默认 Doro 人格时才使用 PromptBuilder，自定义 persona 保持原样
+        _is_default_doro = (
+            not system_prompt
+            or "你是一只名叫 Doro" in system_prompt
+            or system_prompt.startswith("You are Doro")
+            or system_prompt == "You are a helpful assistant."
+        )
+        if _is_default_doro:
+            builder = PromptBuilder()
+            system_prompt = builder.build(SystemPromptContext(
+                available_expressions=self.available_expressions or [],
+                skill_descriptions=self._get_enabled_skill_descriptions(),
+            ))
+
+        # ── 在用户消息末尾追加动态上下文 ──
+        user_ctx = UserMessageContext(
+            current_time=datetime.now().strftime("%Y-%m-%d %H:%M"),
+            pet_attributes=self._get_current_pet_attributes(),
+            user_memory_summary=self._get_memory_summary(),
+            conversation_summary=self._get_conversation_summary(),
+        )
+        user_prompt = UserMessageBuilder.build(user_prompt, user_ctx)
 
         logger.info(f"[LLMWorker] Running pydantic-ai: model={self.model}, messages={len(history_messages)}")
 
@@ -270,6 +348,30 @@ class LLMWorker(QThread):
                 system_prompt=system_prompt,
             )
         else:
+            # 创建工具确认管理器（如果启用）
+            confirm_mgr = None
+            if self.user_confirmation_enabled:
+                from src.agent.tool_confirmation import ToolConfirmationManager, RiskLevel
+                _threshold_map = {
+                    "off": RiskLevel.CRITICAL,  # 实际上不会创建
+                    "low": RiskLevel.LOW,
+                    "medium": RiskLevel.MEDIUM,
+                    "high": RiskLevel.HIGH,
+                    "critical": RiskLevel.CRITICAL,
+                }
+                risk_threshold = _threshold_map.get(
+                    self.confirmation_threshold, RiskLevel.MEDIUM
+                )
+                confirm_mgr = ToolConfirmationManager(
+                    confirm_callback=lambda msg, cid, cb: self._emit_confirmation(msg, cid, cb),
+                    default_timeout_seconds=self.confirmation_timeout,
+                    risk_threshold=risk_threshold,
+                )
+                logger.info(
+                    f"[LLMWorker] Tool confirmation enabled: threshold={self.confirmation_threshold}, "
+                    f"timeout={self.confirmation_timeout}s"
+                )
+
             agent = create_doro_agent(
                 model=self.model,
                 base_url=self.base_url,
@@ -280,6 +382,7 @@ class LLMWorker(QThread):
                 deps=deps,
                 capabilities=self.capabilities,
                 retries=self.retries,
+                confirmation_manager=confirm_mgr,
             )
 
         # 4. 流式运行 — 使用 event_stream_handler 实时捕获工具调用和思考
@@ -326,6 +429,9 @@ class LLMWorker(QThread):
                     if hasattr(part, 'args_as_dict'):
                         tool_args = part.args_as_dict()
 
+                    # 统计收集
+                    stats_collector.on_tool_call_start(tool_call_id, tool_name, tool_args)
+
                     args_str = json.dumps(tool_args, ensure_ascii=False) if tool_args else "{}"
                     tool_entry = {
                         "name": tool_name,
@@ -362,6 +468,16 @@ class LLMWorker(QThread):
                 # 工具调用结果返回
                 if isinstance(event, FunctionToolResultEvent):
                     result_tool_call_id = getattr(event, 'tool_call_id', None)
+                    # 统计收集
+                    try:
+                        result_content = event.result.model_response_str()
+                    except Exception:
+                        result_content = str(event.result)
+                    stats_collector.on_tool_call_end(
+                        result_tool_call_id or "",
+                        result_content,
+                        status="success",
+                    )
                     # 优先用 tool_call_id 精确匹配，fallback 到找第一个 running 的
                     matched_entry = None
                     if result_tool_call_id:
@@ -397,20 +513,35 @@ class LLMWorker(QThread):
             if self.is_stopped():
                 return
 
-            # 获取最终输出
-            final_output = run_result.output if hasattr(run_result, 'output') else full_content
+            # 获取最终输出 — 优先使用流式累积的完整内容
+            final_output = full_content or (
+                run_result.output if hasattr(run_result, 'output') else ""
+            )
 
             # 思考内容累积
             if current_reasoning:
                 self.reasoning_accumulated = current_reasoning
 
-            # 完成
+            # Token 用量统计
+            try:
+                usage = getattr(run_result, 'usage', None)
+                if usage:
+                    stats_collector.add_token_usage(
+                        getattr(usage, 'request_tokens', 0) or 0,
+                        getattr(usage, 'response_tokens', 0) or 0,
+                    )
+            except Exception:
+                pass
+
+            # 完成 — 附带统计信息
             logger.info(f"[LLMWorker] Finished. Content length: {len(full_content) or len(final_output or '')}")
+            stats_json = stats_collector.to_ui_json()
             self.finished.emit(
                 final_output or full_content,
                 self.reasoning_accumulated,
                 self.tool_calls_accumulated,
-                self.generated_images
+                self.generated_images,
+                stats_json,
             )
 
         except asyncio.CancelledError:
@@ -426,14 +557,16 @@ class LLMWorker(QThread):
                     full_content + f"\n\n(处理过程中遇到了一些问题，但以下是已获取的信息)",
                     current_reasoning,
                     self.tool_calls_accumulated,
-                    self.generated_images
+                    self.generated_images,
+                    stats_collector.to_ui_json(),
                 )
             else:
                 self.finished.emit(
                     f"抱歉，我在处理时遇到了一些困难: {e}\n\n请稍后重试或换个问法。",
                     "",
                     self.tool_calls_accumulated,
-                    self.generated_images
+                    self.generated_images,
+                    "{}",
                 )
         except Exception as e:
             if self.is_stopped():
@@ -445,7 +578,8 @@ class LLMWorker(QThread):
                     full_content + f"\n\n(遇到错误，但以下是已获取的信息)",
                     current_reasoning,
                     self.tool_calls_accumulated,
-                    self.generated_images
+                    self.generated_images,
+                    stats_collector.to_ui_json(),
                 )
             else:
                 self.error.emit(str(e))
@@ -468,7 +602,7 @@ class ImageGenerationWorker(QThread):
 
     def run(self):
         try:
-            from src.agent.pydantic_tools import generate_image
+            from src.agent.tools import generate_image
 
             result = asyncio.run(generate_image(prompt=self.prompt))
             data = json.loads(result)

@@ -2,7 +2,7 @@ import os
 import sqlite3
 import json
 from typing import List, Optional, Dict
-from src.core.database import BaseDatabase, get_user_data_dir, ensure_data_dir
+from src.core.database import get_user_data_dir, ensure_data_dir
 from src.core.logger import logger
 from .models import (
     GameState, GameConfig, GameItem, StoryMessage, AffectionState,
@@ -14,7 +14,7 @@ from .models import (
 DATA_DIR = os.path.join(get_user_data_dir(), "data")
 
 
-class GalgameDatabase(BaseDatabase):
+class GalgameDatabase:
     def __init__(self):
         ensure_data_dir()
         self.db_path = os.path.join(DATA_DIR, "galgame.db")

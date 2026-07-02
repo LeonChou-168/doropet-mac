@@ -23,8 +23,8 @@ class AttachmentStorage:
         if self._initialized:
             return
         self._initialized = True
-        base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        self.root = os.path.join(base, "DoroPet", "attachments")
+        from src.core.database import get_user_data_dir
+        self.root = os.path.join(get_user_data_dir(), "attachments")
         os.makedirs(self.root, exist_ok=True)
 
     @classmethod

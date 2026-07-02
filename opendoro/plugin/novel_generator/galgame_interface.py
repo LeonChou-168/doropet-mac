@@ -5,7 +5,6 @@ from qfluentwidgets import (
     TitleLabel, BodyLabel, FluentIcon, isDarkTheme, InfoBar, InfoBarPosition
 )
 
-from src.core.database import ChatDatabase
 from src.provider.manager import ProviderManager
 from src.core.logger import logger
 from src.core.i18n import I18nManager, tr
@@ -31,9 +30,8 @@ from .dialogs import ProtagonistDialog, CharacterDialog, WorldDialog, SaveDialog
 
 
 class GalgameInterface(QWidget):
-    def __init__(self, db: ChatDatabase, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self._db = db
         self._galgame_db = GalgameDatabase()
         self._provider_manager = ProviderManager.get_instance()
         self._story_generator = StoryGenerator(self._provider_manager)
@@ -46,6 +44,7 @@ class GalgameInterface(QWidget):
         self._ending_manager = EndingManager(self._galgame_db, self._provider_manager)
         self._current_event_context = EventContext()
         self._has_ended = False
+        self._pending_event_text: Optional[str] = None  # 待注入下一轮Prompt的触发事件文本
         
         self._game_config: Optional[GameConfig] = None
         self._game_state: Optional[GameState] = None
@@ -71,6 +70,7 @@ class GalgameInterface(QWidget):
         
         self.setObjectName("GalgameInterface")
         self.init_ui()
+        self.story_area.set_font_sizes(self._story_size, self._title_size)
         self._load_models()
         self._load_saved_config()
     
@@ -114,7 +114,12 @@ class GalgameInterface(QWidget):
         self.status_bar.refresh_ui(lang_code)
     
     def _load_models(self):
-        models = self._db.get_models()
+        # 从 ProviderManager 获取可用的 LLM 模型列表
+        providers = self._provider_manager.get_all_llm_providers()
+        active_id = self._provider_manager.get_active_llm_id()
+        models = []
+        for pid, p in providers.items():
+            models.append((pid, p.config.name or pid, "", "", "", "", 1 if p.config.is_active else 0, 0, 0, ""))
         self.top_panel.set_models(models)
         self._load_saved_config()
     
@@ -142,7 +147,7 @@ class GalgameInterface(QWidget):
     def _load_font_settings(self):
         import json
         import os
-        config_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'config')
+        config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
         os.makedirs(config_path, exist_ok=True)
         font_config_file = os.path.join(config_path, 'galgame_font.json')
         
@@ -158,7 +163,7 @@ class GalgameInterface(QWidget):
     def _save_font_settings(self):
         import json
         import os
-        config_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'config')
+        config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
         os.makedirs(config_path, exist_ok=True)
         font_config_file = os.path.join(config_path, 'galgame_font.json')
         
@@ -336,7 +341,8 @@ class GalgameInterface(QWidget):
             self._story_generator,
             self._story_cache,
             self._game_state,
-            model_id
+            memory_manager=self._memory_manager,
+            model_id=model_id
         )
         self._current_worker.text_generated.connect(self._on_text_generated)
         self._current_worker.generation_complete.connect(self._on_generation_complete)
@@ -413,8 +419,12 @@ class GalgameInterface(QWidget):
             choice_text,
             self._story_cache,
             self._game_state,
-            model_id
+            memory_manager=self._memory_manager,
+            event_context=self._pending_event_text,
+            model_id=model_id
         )
+        # 事件注入后清除，避免重复注入
+        self._pending_event_text = None
         self._current_worker.text_generated.connect(self._on_text_generated)
         self._current_worker.generation_complete.connect(self._on_generation_complete)
         self._current_worker.error_occurred.connect(self._on_generation_error)
@@ -491,7 +501,8 @@ class GalgameInterface(QWidget):
             self._story_generator,
             self._story_cache,
             self._game_state,
-            model_id
+            memory_manager=self._memory_manager,
+            model_id=model_id
         )
         self._current_worker.text_generated.connect(self._on_text_generated)
         self._current_worker.generation_complete.connect(self._on_generation_complete)
@@ -638,6 +649,19 @@ class GalgameInterface(QWidget):
                 tr("galgame.interface.experienced_event", default="经历了「{event}」事件").format(event=event.event_name),
                 importance=9,
                 context={"chapter": self._game_state.chapter, "exclusive_event": event.id}
+            )
+            
+            # === 构建事件描述文本，注入下一轮生成 ===
+            scene_descs = []
+            for scene in event.scenes:
+                desc = scene.get("description", "")
+                if desc:
+                    scene_descs.append(desc)
+            scene_text = "；".join(scene_descs) if scene_descs else event.event_name
+            self._pending_event_text = (
+                f"事件名称：{event.character_name}的「{event.event_name}」\n"
+                f"事件描述：{scene_text}\n"
+                f"请在本轮故事中自然地展开这个事件，让{event.character_name}成为本段的焦点角色。"
             )
         
         # 检查即将到来的事件

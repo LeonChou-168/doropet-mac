@@ -160,6 +160,16 @@ class QuickChatSessionManager:
         logger.info(f"[QuickChatSessionManager] 添加消息：msg_id={msg_id}, role={role}")
         return msg_id
 
+    def add_message_with_stats(self, role: str, content: str, stats_json: str = "",
+                                images: Optional[List[str]] = None) -> Optional[int]:
+        session_id = self.get_or_create_session()
+        if not session_id:
+            return None
+
+        msg_id = self.chat_db.add_message(session_id, role, content, images=images, stats_json=stats_json)
+        logger.info(f"[QuickChatSessionManager] 添加消息：msg_id={msg_id}, role={role}")
+        return msg_id
+
     def get_messages(self) -> List[Tuple]:
         session_id = self.get_or_create_session()
         if not session_id:
@@ -406,9 +416,10 @@ class QuickChatService:
         self,
         role: str,
         content: str,
-        images: Optional[List[str]] = None
+        images: Optional[List[str]] = None,
+        stats_json: str = "",
     ) -> Optional[int]:
-        return self.session_manager.add_message(role, content, images)
+        return self.session_manager.add_message_with_stats(role, content, stats_json, images)
 
     def get_messages(self) -> List[Tuple]:
         return self.session_manager.get_messages()

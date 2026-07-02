@@ -1174,3 +1174,8 @@ QWidget#musicSegmentedWidget QToolButton:checked {
 QWidget#musicSegmentedWidget QLabel {
     color: rgba(255, 255, 255, 0.9);
 }
+
+/* Chat Stats Label */
+QLabel#chatStatsLabel {
+    color: #6a737d;
+}

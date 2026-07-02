@@ -57,7 +57,7 @@ PYDANTIC_LLM_PROVIDERS = [
         "name": "OpenAI",
         "prefix": "openai:",
         "default_model": "gpt-4o",
-        "default_base_url": "",
+        "default_base_url": "https://api.openai.com/v1",
         "needs_base_url": False,
         "api_key_url": "https://platform.openai.com/api-keys",
         "doc_url": "https://platform.openai.com/docs",
@@ -67,8 +67,8 @@ PYDANTIC_LLM_PROVIDERS = [
         "id": "deepseek",
         "name": "DeepSeek",
         "prefix": "deepseek:",
-        "default_model": "deepseek-chat",
-        "default_base_url": "",
+        "default_model": "deepseek-v4-flash",
+        "default_base_url": "https://api.deepseek.com/v1",
         "needs_base_url": False,
         "api_key_url": "https://platform.deepseek.com/api_keys",
         "doc_url": "https://platform.deepseek.com/docs",
@@ -79,7 +79,7 @@ PYDANTIC_LLM_PROVIDERS = [
         "name": "月之暗面 Moonshot (Kimi)",
         "prefix": "moonshotai:",
         "default_model": "moonshot-v1-8k",
-        "default_base_url": "",
+        "default_base_url": "https://api.moonshot.cn/v1",
         "needs_base_url": False,
         "api_key_url": "https://platform.moonshot.cn/console/api-keys",
         "doc_url": "https://platform.moonshot.cn/docs",
@@ -90,7 +90,7 @@ PYDANTIC_LLM_PROVIDERS = [
         "name": "阿里云百炼 (通义千问)",
         "prefix": "alibaba:",
         "default_model": "qwen-max",
-        "default_base_url": "",
+        "default_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "needs_base_url": False,
         "api_key_url": "https://bailian.console.aliyun.com/",
         "doc_url": "https://help.aliyun.com/zh/model-studio/",
@@ -122,8 +122,8 @@ PYDANTIC_LLM_PROVIDERS = [
         "id": "groq",
         "name": "Groq",
         "prefix": "groq:",
-        "default_model": "llama-3.1-8b-instant",
-        "default_base_url": "",
+        "default_model": "llama-3.3-70b-versatile",
+        "default_base_url": "https://api.groq.com/openai/v1",
         "needs_base_url": False,
         "api_key_url": "https://console.groq.com/keys",
         "doc_url": "https://console.groq.com/docs",
@@ -167,7 +167,7 @@ PYDANTIC_LLM_PROVIDERS = [
         "name": "Cerebras",
         "prefix": "cerebras:",
         "default_model": "llama3.1-8b",
-        "default_base_url": "",
+        "default_base_url": "https://api.cerebras.ai/v1",
         "needs_base_url": False,
         "api_key_url": "https://cloud.cerebras.ai/",
         "doc_url": "https://docs.cerebras.ai/",
@@ -200,7 +200,7 @@ PYDANTIC_LLM_PROVIDERS = [
         "name": "OpenRouter",
         "prefix": "openrouter:",
         "default_model": "openai/gpt-4o",
-        "default_base_url": "",
+        "default_base_url": "https://openrouter.ai/api/v1",
         "needs_base_url": False,
         "api_key_url": "https://openrouter.ai/keys",
         "doc_url": "https://openrouter.ai/docs",
@@ -211,7 +211,7 @@ PYDANTIC_LLM_PROVIDERS = [
         "name": "Together AI",
         "prefix": "together:",
         "default_model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "default_base_url": "",
+        "default_base_url": "https://api.together.xyz/v1",
         "needs_base_url": False,
         "api_key_url": "https://api.together.xyz/settings/api-keys",
         "doc_url": "https://docs.together.ai/",
@@ -222,7 +222,7 @@ PYDANTIC_LLM_PROVIDERS = [
         "name": "Fireworks AI",
         "prefix": "fireworks:",
         "default_model": "accounts/fireworks/models/llama-v3p1-70b-instruct",
-        "default_base_url": "",
+        "default_base_url": "https://api.fireworks.ai/inference/v1",
         "needs_base_url": False,
         "api_key_url": "https://fireworks.ai/account/api-keys",
         "doc_url": "https://docs.fireworks.ai/",
@@ -244,7 +244,7 @@ PYDANTIC_LLM_PROVIDERS = [
         "name": "Ollama (本地)",
         "prefix": "ollama:",
         "default_model": "llama3",
-        "default_base_url": "",
+        "default_base_url": "http://localhost:11434/v1",
         "needs_base_url": False,
         "api_key_url": "",
         "doc_url": "https://ollama.com/",
@@ -280,7 +280,7 @@ PYDANTIC_LLM_PROVIDERS = [
 QUICK_FILL_PROVIDERS = {
     "deepseek": {
         "base_url": "https://api.deepseek.com/v1",
-        "default_model": "deepseek-chat",
+        "default_model": "deepseek-v4-pro",
         "desc": "国产高性价比大模型"
     },
     "ollama": {
@@ -513,20 +513,29 @@ class QuickAddDialog(QDialog):
         hint.setStyleSheet("color: gray;")
         layout.addWidget(hint)
 
-        provider_grid = QWidget(self)
+        # 用 QScrollArea 包裹平台按钮，避免弹窗过高
+        from PyQt5.QtWidgets import QScrollArea
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setMaximumHeight(340)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+
+        provider_grid = QWidget()
         grid_layout = QVBoxLayout(provider_grid)
-        grid_layout.setSpacing(8)
+        grid_layout.setSpacing(6)
 
         self.provider_buttons = []
         for p in PYDANTIC_LLM_PROVIDERS:
             btn = PushButton(p["name"], provider_grid)
-            btn.setFixedHeight(40)
+            btn.setFixedHeight(36)
             btn.setToolTip(p.get("desc", ""))
             btn.clicked.connect(lambda checked, provider=p: self._select_provider(provider))
             self.provider_buttons.append((btn, p))
             grid_layout.addWidget(btn)
 
-        layout.addWidget(provider_grid)
+        scroll_area.setWidget(provider_grid)
+        layout.addWidget(scroll_area)
 
         # API Key
         self.api_section = QWidget(self)
@@ -1466,6 +1475,9 @@ class ConfigInterface(QWidget):
         self.base_url_field.set_visible(pi["needs_base_url"])
         if pi["needs_base_url"] and not self.base_url_input.text():
             self.base_url_input.setText(pi.get("default_base_url", ""))
+        # 即使 base_url 字段隐藏，也要填入默认值，确保数据库保存时有正确的 base_url
+        if not pi["needs_base_url"] and not self.base_url_input.text():
+            self.base_url_input.setText(pi.get("default_base_url", ""))
 
         # 快捷填充可见性
         self.quick_fill_widget.setVisible(pi["needs_base_url"])
@@ -1843,18 +1855,27 @@ class QuickAddLegacyDialog(QDialog):
         hint.setStyleSheet("color: gray;")
         layout.addWidget(hint)
 
-        provider_grid = QWidget(self)
+        # 用 QScrollArea 包裹平台按钮，避免弹窗过高
+        from PyQt5.QtWidgets import QScrollArea
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setMaximumHeight(340)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+
+        provider_grid = QWidget()
         grid_layout = QVBoxLayout(provider_grid)
-        grid_layout.setSpacing(8)
+        grid_layout.setSpacing(6)
         self.provider_buttons = []
         for p in self.providers:
             btn = PushButton(p["name"], provider_grid)
-            btn.setFixedHeight(40)
+            btn.setFixedHeight(36)
             btn.setToolTip(p.get("desc", ""))
             btn.clicked.connect(lambda checked, provider=p: self._select_provider(provider))
             self.provider_buttons.append((btn, p))
             grid_layout.addWidget(btn)
-        layout.addWidget(provider_grid)
+        scroll_area.setWidget(provider_grid)
+        layout.addWidget(scroll_area)
 
         self.api_section = QWidget(self)
         api_layout = QVBoxLayout(self.api_section)

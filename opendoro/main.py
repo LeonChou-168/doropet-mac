@@ -185,6 +185,8 @@ def show_update_dialog(widget, version_info, update_checker):
     
     def on_update_now():
         main_window.switchTo(main_window.update_interface)
+        main_window.raise_()
+        main_window.activateWindow()
         
         update_widget = main_window.update_interface.update_widget
         if update_widget:

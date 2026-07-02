@@ -23,22 +23,16 @@ from src.core.logger import logger
 
 def _get_screenshot_dir() -> str:
     """获取截图保存目录。"""
-    appdata_local = os.getenv('LOCALAPPDATA')
-    if appdata_local:
-        save_dir = os.path.join(appdata_local, "DoroPet", "temp")
-    else:
-        save_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "DoroPet", "temp")
+    from src.core.database import get_user_data_dir
+    save_dir = os.path.join(get_user_data_dir(), "temp")
     os.makedirs(save_dir, exist_ok=True)
     return save_dir
 
 
 def _get_storage_state_path() -> str:
     """获取浏览器状态（cookies/localStorage）持久化文件路径。"""
-    appdata_local = os.getenv('LOCALAPPDATA')
-    if appdata_local:
-        state_dir = os.path.join(appdata_local, "DoroPet")
-    else:
-        state_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "DoroPet")
+    from src.core.database import get_user_data_dir
+    state_dir = get_user_data_dir()
     os.makedirs(state_dir, exist_ok=True)
     return os.path.join(state_dir, "browser_state.json")
 
@@ -251,17 +245,37 @@ class BrowserManager:
         """导航到 URL。"""
         return await self._run_on_loop(self._navigate_impl(url))
 
-    async def _click_impl(self, selector: str) -> str:
+    async def _click_impl(self, selector: str, wait_for_navigation: bool = False,
+                          nav_timeout: int = 15000) -> str:
         if not self._page:
             return json.dumps({"status": "error", "message": "浏览器未启动。"})
         try:
-            await self._page.click(selector, timeout=10000)
-            return json.dumps({"status": "success", "message": f"已点击 {selector}"}, ensure_ascii=False)
+            if wait_for_navigation:
+                # 同时发起点击和等待导航，避免竞态条件
+                async with self._page.expect_navigation(
+                    wait_until="domcontentloaded", timeout=nav_timeout
+                ):
+                    await self._page.click(selector, timeout=10000)
+                current_url = self._page.url
+                title = await self._page.title()
+                return json.dumps({
+                    "status": "success",
+                    "message": f"已点击 {selector}，页面已跳转到 {current_url}",
+                    "navigated": True,
+                    "url": current_url,
+                    "title": title,
+                }, ensure_ascii=False)
+            else:
+                await self._page.click(selector, timeout=10000)
+                return json.dumps({
+                    "status": "success",
+                    "message": f"已点击 {selector}"
+                }, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"status": "error", "message": f"点击失败: {str(e)}"})
 
-    async def click(self, selector: str) -> str:
-        return await self._run_on_loop(self._click_impl(selector))
+    async def click(self, selector: str, wait_for_navigation: bool = False) -> str:
+        return await self._run_on_loop(self._click_impl(selector, wait_for_navigation))
 
     async def _type_text_impl(self, selector: str, text: str) -> str:
         if not self._page:
@@ -377,8 +391,11 @@ async def browser_navigate(url: str) -> str:
     return await manager.navigate(url)
 
 
-async def browser_click(selector: str) -> str:
+async def browser_click(selector: str, wait_for_navigation: bool = False) -> str:
     """点击页面中的元素，使用 CSS 选择器。
+
+    如果点击后会触发页面跳转（如点击链接、提交按钮等），请设置 wait_for_navigation=True，
+    工具会等待新页面加载完成后再返回，这样后续操作能正确识别页面状态。
 
     遇到登录/注册按钮时需谨慎——如果页面是登录状态，先用 browser_get_content 检查
     是否已登录（看页面是否显示用户头像/用户名等）。如果检测到登录页面/弹窗遮挡，
@@ -386,11 +403,12 @@ async def browser_click(selector: str) -> str:
 
     Args:
         selector: CSS 选择器。
+        wait_for_navigation: 是否等待点击后的页面跳转完成（默认 False）。
     """
     manager = get_browser_manager()
     if not manager.is_running:
         return json.dumps({"status": "error", "message": "浏览器未启动，请先调用 browser_open。"})
-    return await manager.click(selector)
+    return await manager.click(selector, wait_for_navigation=wait_for_navigation)
 
 
 async def browser_type(selector: str, text: str) -> str:

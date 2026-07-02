@@ -6,6 +6,7 @@ from qfluentwidgets import (ScrollArea, CheckBox, Slider, TitleLabel,
                             ComboBox, SpinBox, InfoBar, TransparentToolButton)
 from src.core.logger import logger
 from src.core.i18n import I18nManager, tr
+import os
 
 
 class SettingCard(CardWidget):
@@ -692,6 +693,13 @@ class SoundSettingsPage(QWidget):
 
 
 class AISettingsPage(QWidget):
+    RISK_THRESHOLD_OPTIONS = [
+        ("low", "低风险及以上"),
+        ("medium", "中风险及以上（推荐）"),
+        ("high", "仅高风险"),
+        ("critical", "仅严重风险"),
+    ]
+
     def __init__(self, parent=None):
         super().__init__(parent)
         
@@ -728,7 +736,49 @@ class AISettingsPage(QWidget):
 
         self.sliders["memory_max_count"] = mem_slider
 
+        # ── 工具确认设置 ──
+        self._confirm_card = SettingCard(
+            tr("settings.ai.tool_confirm", default="工具操作确认"), self
+        )
+
+        self.check_tool_confirm = CheckBox(
+            tr("settings.ai.tool_confirm_enable", default="启用高风险工具确认"), self
+        )
+        self._confirm_card.addWidget(self.check_tool_confirm)
+
+        # 风险阈值
+        threshold_label = StrongBodyLabel(
+            tr("settings.ai.tool_confirm_threshold", default="确认阈值:"), self
+        )
+        self._confirm_card.addWidget(threshold_label)
+
+        th_layout = QHBoxLayout()
+        self.threshold_combo = ComboBox(self)
+        for val, label in self.RISK_THRESHOLD_OPTIONS:
+            self.threshold_combo.addItem(label, userData=val)
+        self.threshold_combo.setFixedWidth(200)
+        th_layout.addWidget(self.threshold_combo)
+        th_layout.addStretch()
+        self._confirm_card.addLayout(th_layout)
+
+        # 超时时间
+        timeout_label = StrongBodyLabel(
+            tr("settings.ai.tool_confirm_timeout", default="超时时间:"), self
+        )
+        self._confirm_card.addWidget(timeout_label)
+
+        to_layout = QHBoxLayout()
+        self.timeout_spin = SpinBox(self)
+        self.timeout_spin.setRange(5, 120)
+        self.timeout_spin.setValue(30)
+        self.timeout_spin.setSuffix(" 秒")
+        self.timeout_spin.setFixedWidth(120)
+        to_layout.addWidget(self.timeout_spin)
+        to_layout.addStretch()
+        self._confirm_card.addLayout(to_layout)
+
         layout.addWidget(self._card)
+        layout.addWidget(self._confirm_card)
         layout.addStretch()
 
     def refresh_ui(self):
@@ -737,6 +787,352 @@ class AISettingsPage(QWidget):
         self.check_inject_time.setText(tr("settings.ai.inject_time"))
         self.check_expression_response.setText(tr("settings.ai.expression_response"))
         self.check_enable_memory.setText(tr("settings.ai.enable_memory"))
+        self._confirm_card.title_label.setText(
+            tr("settings.ai.tool_confirm", default="工具操作确认")
+        )
+        self.check_tool_confirm.setText(
+            tr("settings.ai.tool_confirm_enable", default="启用高风险工具确认")
+        )
+
+
+class DataPathSettingsPage(QWidget):
+    """数据路径设置页面。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._settings_interface = parent
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(16)
+
+        # 当前数据路径卡片
+        self._path_card = SettingCard(tr("settings.data.title"), self)
+
+        self._path_label = BodyLabel("", self)
+        self._path_label.setWordWrap(True)
+        self._path_card.addWidget(self._path_label)
+
+        # 数据大小信息
+        info_layout = QHBoxLayout()
+        info_layout.setSpacing(16)
+
+        self._size_label = BodyLabel("", self)
+        info_layout.addWidget(self._size_label)
+        info_layout.addStretch()
+        self._path_card.addLayout(info_layout)
+
+        # 选择新路径按钮
+        btn_layout = QHBoxLayout()
+        self.btn_change_path = PushButton(FluentIcon.FOLDER, tr("settings.data.change_path"), self)
+        self.btn_change_path.setFixedWidth(160)
+        self.btn_change_path.clicked.connect(self._on_change_path)
+        btn_layout.addWidget(self.btn_change_path)
+
+        self.btn_reset_path = PushButton(FluentIcon.CANCEL, tr("settings.data.reset_path"), self)
+        self.btn_reset_path.setFixedWidth(160)
+        self.btn_reset_path.clicked.connect(self._on_reset_path)
+        btn_layout.addWidget(self.btn_reset_path)
+        btn_layout.addStretch()
+        self._path_card.addLayout(btn_layout)
+
+        layout.addWidget(self._path_card)
+
+        # 数据迁移卡片
+        self._migrate_card = SettingCard(tr("settings.data.migrate_title"), self)
+        self._migrate_card.setVisible(False)
+
+        self._migrate_desc = CaptionLabel(tr("settings.data.migrate_desc"), self)
+        self._migrate_desc.setWordWrap(True)
+        self._migrate_card.addWidget(self._migrate_desc)
+
+        migrate_btn_layout = QHBoxLayout()
+
+        self.btn_migrate_copy = PushButton(FluentIcon.SAVE, tr("settings.data.migrate_copy"), self)
+        self.btn_migrate_copy.setFixedWidth(200)
+        self.btn_migrate_copy.clicked.connect(self._on_migrate_copy)
+        migrate_btn_layout.addWidget(self.btn_migrate_copy)
+
+        self.btn_migrate_move = PushButton(FluentIcon.SEND, tr("settings.data.migrate_move"), self)
+        self.btn_migrate_move.setFixedWidth(200)
+        self.btn_migrate_move.clicked.connect(self._on_migrate_move)
+        migrate_btn_layout.addWidget(self.btn_migrate_move)
+
+        migrate_btn_layout.addStretch()
+        self._migrate_card.addLayout(migrate_btn_layout)
+
+        # 迁移进度标签
+        self._progress_label = CaptionLabel("", self)
+        self._progress_label.setVisible(False)
+        self._migrate_card.addWidget(self._progress_label)
+
+        layout.addWidget(self._migrate_card)
+
+        layout.addStretch()
+
+        # 初始化信息
+        self._new_data_dir = None
+        self._refresh_info()
+
+    def _refresh_info(self):
+        """刷新数据路径信息。"""
+        from src.core.database import get_user_data_dir
+        current_dir = get_user_data_dir()
+
+        self._path_label.setText(
+            tr("settings.data.current_path") + ": " + current_dir
+        )
+
+        # 获取数据大小
+        from src.core.data_migrator import DataMigrator
+        total_size, file_count = DataMigrator.get_total_data_size(current_dir)
+        self._size_label.setText(
+            tr("settings.data.data_size") + ": " +
+            tr("settings.data.total_size").format(
+                file_count=str(file_count),
+                size=DataMigrator.format_size(total_size)
+            )
+        )
+
+        # 检查迁移相关 UI
+        from src.core.app_config import get_data_dir
+        self._new_data_dir = get_data_dir()
+
+        if self._new_data_dir:
+            # 已设置了自定义路径
+            from src.core.data_migrator import get_default_data_dir
+            old_path = get_default_data_dir()
+            if old_path and DataMigrator.check_migration_needed(old_path, self._new_data_dir):
+                self._migrate_card.setVisible(True)
+                self._migrate_desc.setText(
+                    tr("settings.data.can_migrate").format(
+                        old=old_path, new=self._new_data_dir
+                    )
+                )
+            else:
+                self._migrate_card.setVisible(False)
+        else:
+            self._migrate_card.setVisible(False)
+
+    def _on_change_path(self):
+        """选择新的数据目录。"""
+        from PyQt5.QtWidgets import QFileDialog, QMessageBox
+
+        current_dir = self._get_current_dir()
+        new_dir = QFileDialog.getExistingDirectory(
+            self,
+            tr("settings.data.select_dir"),
+            current_dir,
+            QFileDialog.ShowDirsOnly
+        )
+
+        if not new_dir:
+            return
+
+        # 路径规范化
+        new_dir = os.path.normpath(new_dir)
+
+        from src.core.database import get_user_data_dir
+        if os.path.normpath(new_dir) == os.path.normpath(get_user_data_dir()):
+            InfoBar.warning(
+                tr("settings.data.same_path"),
+                tr("settings.data.same_path_desc"),
+                duration=3000
+            )
+            return
+
+        from src.core.data_migrator import DataMigrator, get_default_data_dir
+        old_path = get_default_data_dir()
+
+        # 检查是否需要迁移
+        if old_path and DataMigrator.check_migration_needed(old_path, new_dir):
+            reply = QMessageBox.question(
+                self,
+                tr("settings.data.migrate_confirm_title"),
+                tr("settings.data.migrate_confirm_msg").format(new=new_dir),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.No:
+                return
+
+        # 保存配置
+        from src.core.app_config import set_data_dir
+        set_data_dir(new_dir)
+
+        InfoBar.success(
+            tr("settings.data.path_saved"),
+            tr("settings.data.path_saved_desc").format(path=new_dir),
+            duration=5000
+        )
+
+        self._refresh_info()
+
+    def _on_reset_path(self):
+        """恢复默认数据目录。"""
+        from PyQt5.QtWidgets import QMessageBox
+        from src.core.data_migrator import DataMigrator, get_default_data_dir
+        from src.core.app_config import get_data_dir, clear_data_dir
+
+        custom_dir = get_data_dir()
+        if not custom_dir:
+            InfoBar.warning(
+                tr("settings.data.already_default"),
+                tr("settings.data.already_default_desc"),
+                duration=3000
+            )
+            return
+
+        reply = QMessageBox.question(
+            self,
+            tr("settings.data.reset_confirm_title"),
+            tr("settings.data.reset_confirm_msg"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.No:
+            return
+
+        # 检查是否需要把自定义路径的数据迁回默认路径
+        default_path = get_default_data_dir()
+        if DataMigrator.check_migration_needed(custom_dir, default_path):
+            reply2 = QMessageBox.question(
+                self,
+                tr("settings.data.migrate_back_title"),
+                tr("settings.data.migrate_back_msg").format(new=default_path),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply2 == QMessageBox.Yes:
+                success, errors = DataMigrator.migrate(custom_dir, default_path, method="copy")
+                if errors:
+                    InfoBar.warning(
+                        tr("settings.data.migrate_partial"),
+                        f"成功: {success}, 错误: {len(errors)} 项",
+                        duration=5000
+                    )
+                else:
+                    InfoBar.success(
+                        tr("settings.data.migrate_done"),
+                        tr("settings.data.migrate_done_desc"),
+                        duration=3000
+                    )
+
+        clear_data_dir()
+        InfoBar.success(
+            tr("settings.data.reset_done"),
+            tr("settings.data.reset_done_desc"),
+            duration=5000
+        )
+
+        self._refresh_info()
+
+    def _on_migrate_copy(self):
+        """复制数据到新路径。"""
+        self._do_migrate("copy")
+
+    def _on_migrate_move(self):
+        """移动数据到新路径。"""
+        from PyQt5.QtWidgets import QMessageBox
+
+        reply = QMessageBox.warning(
+            self,
+            tr("settings.data.move_warning_title"),
+            tr("settings.data.move_warning_msg"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self._do_migrate("move")
+
+    def _do_migrate(self, method: str):
+        """执行数据迁移。"""
+        from src.core.data_migrator import DataMigrator, get_default_data_dir
+
+        old_path = get_default_data_dir()
+        new_path = self._new_data_dir
+
+        if not old_path or not new_path:
+            return
+
+        self._progress_label.setVisible(True)
+        self._progress_label.setText(tr("settings.data.migrating"))
+        self.btn_migrate_copy.setEnabled(False)
+        self.btn_migrate_move.setEnabled(False)
+
+        def progress_callback(current, total, item_name):
+            self._progress_label.setText(
+                tr("settings.data.migrating") +
+                f" ({current}/{total}) {item_name}"
+            )
+
+        # 在后台线程执行迁移
+        from PyQt5.QtCore import QThread, pyqtSignal
+
+        class MigrateThread(QThread):
+            finished_signal = pyqtSignal(int, list)
+
+            def __init__(self, old, new, method, callback):
+                super().__init__()
+                self.old = old
+                self.new = new
+                self.method = method
+                self.callback = callback
+
+            def run(self):
+                success, errors = DataMigrator.migrate(
+                    self.old, self.new, self.method, self.callback
+                )
+                self.finished_signal.emit(success, errors)
+
+        self._migrate_thread = MigrateThread(
+            old_path, new_path, method,
+            lambda c, t, i: progress_callback(c, t, i)
+        )
+        self._migrate_thread.finished_signal.connect(
+            lambda s, e: self._on_migrate_finished(s, e)
+        )
+        self._migrate_thread.start()
+
+    def _on_migrate_finished(self, success: int, errors: list):
+        """迁移完成回调。"""
+        self._progress_label.setVisible(False)
+        self.btn_migrate_copy.setEnabled(True)
+        self.btn_migrate_move.setEnabled(True)
+
+        if errors:
+            error_msg = "\n".join(errors[:5])
+            if len(errors) > 5:
+                error_msg += f"\n... 还有 {len(errors) - 5} 个错误"
+            InfoBar.warning(
+                tr("settings.data.migrate_partial"),
+                tr("settings.data.migrate_partial_desc").format(
+                    success=str(success), total=str(len(errors))
+                ),
+                duration=5000
+            )
+        else:
+            InfoBar.success(
+                tr("settings.data.migrate_done"),
+                tr("settings.data.migrate_done_desc"),
+                duration=3000
+            )
+
+        self._refresh_info()
+
+    def _get_current_dir(self) -> str:
+        from src.core.database import get_user_data_dir
+        return get_user_data_dir()
+
+    def refresh_ui(self):
+        """语言切换时刷新 UI 文本。"""
+        self._path_card.title_label.setText(tr("settings.data.title"))
+        self.btn_change_path.setText(tr("settings.data.change_path"))
+        self.btn_reset_path.setText(tr("settings.data.reset_path"))
+        self._migrate_card.title_label.setText(tr("settings.data.migrate_title"))
+        self.btn_migrate_copy.setText(tr("settings.data.migrate_copy"))
+        self.btn_migrate_move.setText(tr("settings.data.migrate_move"))
+        self._refresh_info()
 
 
 class SettingsInterface(ScrollArea):
@@ -769,11 +1165,13 @@ class SettingsInterface(ScrollArea):
         self.display_page = DisplaySettingsPage(self)
         self.sound_page = SoundSettingsPage(self)
         self.ai_page = AISettingsPage(self)
+        self.data_page = DataPathSettingsPage(self)
         
         self.stacked_widget.addWidget(self.general_page)
         self.stacked_widget.addWidget(self.display_page)
         self.stacked_widget.addWidget(self.sound_page)
         self.stacked_widget.addWidget(self.ai_page)
+        self.stacked_widget.addWidget(self.data_page)
         
         self.pivot.addItem(routeKey="general", text="\u2699\ufe0f " + tr("settings.tab.general"), 
                           onClick=lambda: self.stacked_widget.setCurrentWidget(self.general_page))
@@ -783,6 +1181,8 @@ class SettingsInterface(ScrollArea):
                           onClick=lambda: self.stacked_widget.setCurrentWidget(self.sound_page))
         self.pivot.addItem(routeKey="ai", text="\ud83e\udd16 " + tr("settings.tab.ai"), 
                           onClick=lambda: self.stacked_widget.setCurrentWidget(self.ai_page))
+        self.pivot.addItem(routeKey="data", text="\ud83d\udcc1 " + tr("settings.tab.data"), 
+                          onClick=lambda: self.stacked_widget.setCurrentWidget(self.data_page))
         
         self.pivot.setCurrentItem("general")
         
@@ -803,12 +1203,14 @@ class SettingsInterface(ScrollArea):
         self.pivot.items["display"].setText("\ud83d\udda5\ufe0f " + tr("settings.tab.display"))
         self.pivot.items["sound"].setText("\ud83d\udd0a " + tr("settings.tab.sound"))
         self.pivot.items["ai"].setText("\ud83e\udd16 " + tr("settings.tab.ai"))
+        self.pivot.items["data"].setText("\ud83d\udcc1 " + tr("settings.tab.data"))
         # 刷新各子页面
         logger.info(f"[I18n] Refreshing sub-pages...")
         self.general_page.refresh_ui()
         self.display_page.refresh_ui()
         self.sound_page.refresh_ui()
         self.ai_page.refresh_ui()
+        self.data_page.refresh_ui()
         logger.info(f"[I18n] SettingsInterface refresh complete")
 
     def connect_signals(self):
@@ -834,6 +1236,10 @@ class SettingsInterface(ScrollArea):
         self.ai_page.check_expression_response.stateChanged.connect(self.on_expression_response_changed)
         self.ai_page.check_enable_memory.stateChanged.connect(self.on_enable_memory_changed)
         self.ai_page.sliders["memory_max_count"].valueChanged.connect(self.on_memory_max_count_changed)
+
+        self.ai_page.check_tool_confirm.stateChanged.connect(self.on_tool_confirm_changed)
+        self.ai_page.threshold_combo.currentIndexChanged.connect(self.on_confirm_threshold_changed)
+        self.ai_page.timeout_spin.valueChanged.connect(self.on_confirm_timeout_changed)
 
     def set_live2d_widget(self, widget):
         self.live2d_widget = widget
@@ -981,6 +1387,20 @@ class SettingsInterface(ScrollArea):
     def on_memory_max_count_changed(self, value):
         self.settings.setValue("memory_max_count", value)
 
+    def on_tool_confirm_changed(self, checked):
+        self.settings.setValue("tool_confirm_enabled", checked)
+        # 启用/禁用阈值和超时输入
+        self.ai_page.threshold_combo.setEnabled(checked)
+        self.ai_page.timeout_spin.setEnabled(checked)
+
+    def on_confirm_threshold_changed(self, index):
+        val = self.ai_page.threshold_combo.itemData(index)
+        if val:
+            self.settings.setValue("tool_confirm_threshold", val)
+
+    def on_confirm_timeout_changed(self, value):
+        self.settings.setValue("tool_confirm_timeout", value)
+
     def on_autorun_changed(self, checked):
         import sys
         import os
@@ -1053,6 +1473,19 @@ class SettingsInterface(ScrollArea):
         memory_max_count = self.settings.value("memory_max_count", 10, type=int)
         self.ai_page.check_enable_memory.setChecked(enable_memory)
         self.ai_page.sliders["memory_max_count"].setValue(memory_max_count)
+
+        # 工具确认设置
+        tool_confirm_enabled = self.settings.value("tool_confirm_enabled", True, type=bool)
+        tool_confirm_threshold = self.settings.value("tool_confirm_threshold", "medium", type=str)
+        tool_confirm_timeout = self.settings.value("tool_confirm_timeout", 30, type=int)
+        self.ai_page.check_tool_confirm.setChecked(tool_confirm_enabled)
+        for i in range(self.ai_page.threshold_combo.count()):
+            if self.ai_page.threshold_combo.itemData(i) == tool_confirm_threshold:
+                self.ai_page.threshold_combo.setCurrentIndex(i)
+                break
+        self.ai_page.timeout_spin.setValue(tool_confirm_timeout)
+        self.ai_page.threshold_combo.setEnabled(tool_confirm_enabled)
+        self.ai_page.timeout_spin.setEnabled(tool_confirm_enabled)
 
         self._init_font_buttons_style()
 

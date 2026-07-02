@@ -126,11 +126,13 @@ class CookieSettingsDialog(QDialog):
         try:
             from musicdl import musicdl
             
-            os.makedirs(os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'DoroPet', 'musicdl_outputs'), exist_ok=True)
+            from src.core.database import get_user_data_dir
+            work_dir = os.path.join(get_user_data_dir(), 'musicdl_outputs')
+            os.makedirs(work_dir, exist_ok=True)
             
             init_cfg = {
                 music_client_name: {
-                    'work_dir': os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'DoroPet', 'musicdl_outputs'),
+                    'work_dir': work_dir,
                     'default_search_cookies': cookies,
                     'default_parse_cookies': cookies,
                 }

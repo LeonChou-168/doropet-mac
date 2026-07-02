@@ -18,7 +18,7 @@ from src.agent.pydantic_agent import (
     ALL_CAPABILITIES,
 )
 
-from src.agent.pydantic_tools import (
+from src.agent.tools import (
     get_filtered_tools,
     get_skill_tool_functions,
     ALL_TOOLS,

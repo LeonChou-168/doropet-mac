@@ -20,10 +20,8 @@ BUILTIN_SKILLS_DIR = os.path.join(BASE_DIR, "src", "skills")
 
 
 def _get_user_data_dir():
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        return os.path.join(local_app_data, "DoroPet")
-    return os.path.join(os.path.expanduser("~"), "AppData", "Local", "DoroPet")
+    from src.core.database import get_user_data_dir as _gud
+    return _gud()
 
 
 USER_SKILLS_DIR = os.path.join(_get_user_data_dir(), "skills")

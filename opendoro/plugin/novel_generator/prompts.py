@@ -169,7 +169,13 @@ class SystemPromptBuilder:
         return prompt
     
     @classmethod
-    def build_continuation_prompt(cls, state: GameState) -> str:
+    def build_continuation_prompt(
+        cls,
+        state: GameState,
+        story_cache=None,
+        memory_contexts: dict = None,
+        event_context: str = None
+    ) -> str:
         prompt = cls.BASE_SYSTEM_PROMPT + "\n\n"
         
         prompt += f"""## 当前游戏状态
@@ -182,10 +188,42 @@ class SystemPromptBuilder:
         if state.world_setting and state.world_setting.writing_style:
             prompt += f"**写作风格**：{state.world_setting.writing_style}\n"
         
+        # === 注入故事缓存信息（伏笔、关键情节、前章摘要） ===
+        if story_cache:
+            from .story_cache_manager import StoryCacheManager
+            
+            if story_cache.story_synopsis:
+                prompt += f"\n### 故事大纲\n{story_cache.story_synopsis}\n"
+            
+            if story_cache.current_chapter and story_cache.current_chapter.chapter_outline:
+                prompt += f"\n### 当前章节大纲\n{story_cache.current_chapter.chapter_outline}\n"
+            
+            prev_summaries = StoryCacheManager.get_previous_summaries_text(story_cache)
+            if prev_summaries != "无":
+                prompt += f"\n### 前情提要\n{prev_summaries}\n"
+            
+            key_plots = StoryCacheManager.get_key_plots_text(story_cache)
+            if key_plots != "暂无":
+                prompt += f"\n### 关键情节节点（请推进以下情节）\n{key_plots}\n"
+            
+            foreshadowing = StoryCacheManager.get_foreshadowing_text(story_cache)
+            if foreshadowing != "暂无":
+                prompt += f"\n### 待回收伏笔（请在合适的时机回收）\n{foreshadowing}\n"
+        
         prompt += "\n### 角色好感度\n"
         for aff in state.affections:
             attitude = cls._get_attitude_description(aff.affection)
             prompt += f"- {aff.character_name}：{aff.affection} ({aff.relationship}) - {attitude}\n"
+        
+        # === 注入角色记忆 ===
+        if memory_contexts:
+            for char_name, mem_text in memory_contexts.items():
+                if mem_text:
+                    prompt += f"\n{mem_text}"
+        
+        # === 注入触发事件 ===
+        if event_context:
+            prompt += f"\n## ⚠️ 当前触发的特殊事件（请在本次故事中围绕此事件展开）\n{event_context}\n"
         
         if state.inventory:
             prompt += "\n### 背包物品\n"
@@ -206,6 +244,8 @@ class SystemPromptBuilder:
 5. 可以适当加入好感度变化或货币变化
 6. **如果玩家有物品，必须考虑在选项中加入使用物品的选择**
 7. 某些选择可以花费金币或获得金币，请在选项文本中说明
+8. **如果上面有「待回收伏笔」，请在本轮故事中自然地回收至少一个伏笔**
+9. **如果上面有「触发事件」，请围绕该事件展开本次故事**
 
 **选择示例**：
 - [选择1]用礼物盒送给TA（消耗礼物盒，大幅增加好感度）[/选择1]

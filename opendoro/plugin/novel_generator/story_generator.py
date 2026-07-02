@@ -56,13 +56,23 @@ class StoryGenerator:
         context: List[Dict],
         choice: str,
         current_state: GameState,
+        story_cache: StoryCache = None,
+        memory_manager=None,
+        event_context: str = None,
         model_id: Optional[str] = None
     ) -> Generator[str, None, Dict]:
         provider = self.provider_manager.get_llm_provider(model_id)
         if not provider:
             raise ValueError("No LLM provider available")
         
-        system_prompt = self.prompt_builder.build_continuation_prompt(current_state)
+        memory_contexts = self._build_memory_contexts(memory_manager, current_state) if memory_manager else None
+        
+        system_prompt = self.prompt_builder.build_continuation_prompt(
+            current_state,
+            story_cache=story_cache,
+            memory_contexts=memory_contexts,
+            event_context=event_context
+        )
         
         messages = [{"role": "system", "content": system_prompt}]
         
@@ -390,6 +400,7 @@ class StoryGenerator:
         self,
         story_cache: StoryCache,
         current_state: GameState,
+        memory_manager=None,
         model_id: Optional[str] = None
     ) -> Generator[str, None, Dict]:
         provider = self.provider_manager.get_llm_provider(model_id)
@@ -403,6 +414,9 @@ class StoryGenerator:
         foreshadowing = StoryCacheManager.get_foreshadowing_text(story_cache)
         
         chapter = story_cache.current_chapter
+        
+        # 构建角色记忆上下文
+        memory_contexts = self._build_memory_contexts(memory_manager, current_state) if memory_manager else None
         
         user_prompt = f"""## 故事大纲
 {story_cache.story_synopsis}
@@ -423,9 +437,18 @@ class StoryGenerator:
 {key_plots}
 
 ## 待回收伏笔
-{foreshadowing}
+{foreshadowing}"""
 
-请根据以上设定，创作第{chapter.chapter_number}章的开场。严格遵循开场设定中的场景和氛围，自然地引入主角和关键角色。"""
+        # 注入角色记忆
+        if memory_contexts:
+            for char_name, mem_text in memory_contexts.items():
+                if mem_text:
+                    user_prompt += f"\n\n{mem_text}"
+
+        user_prompt += f"""
+
+请根据以上设定，创作第{chapter.chapter_number}章的开场。严格遵循开场设定中的场景和氛围，自然地引入主角和关键角色。
+如果有「待回收伏笔」，请在合适的时机回收。如果角色有记忆，请让角色展现出对过去事件的回忆。"""
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -454,6 +477,8 @@ class StoryGenerator:
         choice: str,
         story_cache: StoryCache,
         current_state: GameState,
+        memory_manager=None,
+        event_context: str = None,
         model_id: Optional[str] = None
     ) -> Generator[str, None, Dict]:
         provider = self.provider_manager.get_llm_provider(model_id)
@@ -466,6 +491,9 @@ class StoryGenerator:
         prev_summaries = StoryCacheManager.get_previous_summaries_text(story_cache)
         key_plots = StoryCacheManager.get_key_plots_text(story_cache)
         foreshadowing = StoryCacheManager.get_foreshadowing_text(story_cache)
+        
+        # 构建角色记忆上下文
+        memory_contexts = self._build_memory_contexts(memory_manager, current_state) if memory_manager else None
         
         aff_text = ""
         for aff in current_state.affections:
@@ -493,6 +521,16 @@ class StoryGenerator:
 ### 待回收伏笔
 {foreshadowing}"""
 
+        # 注入角色记忆
+        if memory_contexts:
+            for char_name, mem_text in memory_contexts.items():
+                if mem_text:
+                    chapter_prompt += f"\n\n{mem_text}"
+        
+        # 注入触发事件
+        if event_context:
+            chapter_prompt += f"\n\n## ⚠️ 当前触发的特殊事件（请围绕此事件展开故事）\n{event_context}"
+
         messages = [{"role": "system", "content": system_prompt}]
         messages.append({"role": "user", "content": chapter_prompt})
         
@@ -501,7 +539,7 @@ class StoryGenerator:
         
         messages.append({
             "role": "user",
-            "content": f"玩家选择：{choice}\n\n请继续创作当前章节的内容。注意：\n1. 保持与章节大纲的一致性\n2. 承接前文情节，逻辑连贯\n3. 适当推进章节核心冲突\n4. 给出新的选择分支"
+            "content": f"玩家选择：{choice}\n\n请继续创作当前章节的内容。注意：\n1. 保持与章节大纲的一致性\n2. 承接前文情节，逻辑连贯\n3. 适当推进章节核心冲突\n4. 如果有「待回收伏笔」，请自然地回收至少一个\n5. 如果有「触发事件」，请围绕该事件展开\n6. 如果角色有记忆，请让角色展现出对过去事件的回忆\n7. 给出新的选择分支"
         })
         
         logger.info(f"Generating chapter continuation for choice: {choice[:50]}...")
@@ -519,6 +557,28 @@ class StoryGenerator:
         parsed = ResponseParser.parse(full_response)
         logger.info(f"Chapter continuation complete. Generated {len(parsed['choices'])} choices.")
         return parsed
+    
+    def _build_memory_contexts(self, memory_manager, current_state: GameState) -> dict:
+        """构建所有角色的记忆上下文字典 {角色名: 记忆文本}"""
+        if not memory_manager or not current_state:
+            return {}
+        
+        contexts = {}
+        from .prompts import MemoryPromptBuilder
+        
+        for aff in current_state.affections:
+            char_name = aff.character_name
+            relevant_memories = memory_manager.get_relevant_memories(char_name, limit=3)
+            if relevant_memories:
+                memory_dicts = [
+                    {"memory_type": m.memory_type, "content": m.content}
+                    for m in relevant_memories
+                ]
+                mem_text = MemoryPromptBuilder.build_memory_context(char_name, memory_dicts)
+                if mem_text:
+                    contexts[char_name] = mem_text
+        
+        return contexts
 
 
 class StoryContextManager:

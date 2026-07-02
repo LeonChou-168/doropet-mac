@@ -8,9 +8,24 @@ from pathlib import Path
 
 def get_user_data_dir():
     """
-    Get user data directory for DoroPet.
-    On Windows, this is %LOCALAPPDATA%\\DoroPet
+    获取用户数据目录。
+    优先级：config.json 自定义路径 > 环境变量 DOROPET_DATA_DIR > 默认 %LOCALAPPDATA%\\DoroPet
     """
+    # 1. 从配置文件读取自定义路径
+    try:
+        from src.core.app_config import get_data_dir as _get_cfg_data_dir
+        cfg_dir = _get_cfg_data_dir()
+        if cfg_dir:
+            return cfg_dir
+    except ImportError:
+        pass
+
+    # 2. 从环境变量读取
+    env_path = os.environ.get('DOROPET_DATA_DIR')
+    if env_path:
+        return env_path
+
+    # 3. 默认路径
     local_app_data = os.environ.get('LOCALAPPDATA')
     if local_app_data:
         return os.path.join(local_app_data, 'DoroPet')
@@ -66,6 +81,7 @@ class ChatDatabase(BaseDatabase):
                             reasoning TEXT,
                             tool_calls TEXT,
                             model TEXT,
+                            stats_json TEXT DEFAULT '',
                             FOREIGN KEY(session_id) REFERENCES sessions(id)
                           )''')
         self.conn.commit()
@@ -88,6 +104,8 @@ class ChatDatabase(BaseDatabase):
             cursor.execute("ALTER TABLE messages ADD COLUMN model TEXT")
         if 'attachments' not in columns:
             cursor.execute("ALTER TABLE messages ADD COLUMN attachments TEXT")
+        if 'stats_json' not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN stats_json TEXT DEFAULT ''")
         
         self.conn.commit()
 
@@ -131,7 +149,7 @@ class ChatDatabase(BaseDatabase):
         cursor.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         self.conn.commit()
 
-    def add_message(self, session_id, role, content, images=None, parent_id=None, model=None, reasoning=None, tool_calls=None, attachments=None):
+    def add_message(self, session_id, role, content, images=None, parent_id=None, model=None, reasoning=None, tool_calls=None, attachments=None, stats_json=""):
         cursor = self.conn.cursor()
         images_json = json.dumps(images) if images else None
         tool_calls_json = json.dumps(tool_calls) if tool_calls else None
@@ -146,8 +164,8 @@ class ChatDatabase(BaseDatabase):
         if parent_id is not None:
             cursor.execute("UPDATE messages SET is_active=0 WHERE parent_id=?", (parent_id,))
         
-        cursor.execute("INSERT INTO messages (session_id, role, content, images, attachments, parent_id, is_active, model, reasoning, tool_calls) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)", 
-                       (session_id, role, content, images_json, attachments_json, parent_id, model, reasoning, tool_calls_json))
+        cursor.execute("INSERT INTO messages (session_id, role, content, images, attachments, parent_id, is_active, model, reasoning, tool_calls, stats_json) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)", 
+                       (session_id, role, content, images_json, attachments_json, parent_id, model, reasoning, tool_calls_json, stats_json))
         self.conn.commit()
         return cursor.lastrowid
 
@@ -156,12 +174,12 @@ class ChatDatabase(BaseDatabase):
             return []
         cursor = self.conn.cursor()
         placeholders = ','.join(['?'] * len(msg_ids))
-        cursor.execute(f"SELECT id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments FROM messages WHERE id IN ({placeholders}) ORDER BY id ASC", msg_ids)
+        cursor.execute(f"SELECT id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments, stats_json FROM messages WHERE id IN ({placeholders}) ORDER BY id ASC", msg_ids)
         return cursor.fetchall()
 
     def get_messages(self, session_id):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments FROM messages WHERE session_id=? ORDER BY timestamp ASC, id ASC", (session_id,))
+        cursor.execute("SELECT id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments, stats_json FROM messages WHERE session_id=? ORDER BY timestamp ASC, id ASC", (session_id,))
         rows = cursor.fetchall()
         
         if not rows:
@@ -222,8 +240,12 @@ class ChatDatabase(BaseDatabase):
                     attachments = json.loads(current[10])
                 except:
                     attachments = []
+
+            stats_json = ""
+            if len(current) > 11 and current[11]:
+                stats_json = current[11]
             
-            active_path.append((current[0], current[1], current[2], images, current[4], sibling_ids, current_index, model, reasoning, tool_calls, attachments))
+            active_path.append((current[0], current[1], current[2], images, current[4], sibling_ids, current_index, model, reasoning, tool_calls, attachments, stats_json))
             
             children = parent_to_children.get(current[0], [])
             next_node = None
@@ -331,6 +353,10 @@ class ConfigDatabase(BaseDatabase):
         cursor.execute(
             "INSERT OR IGNORE INTO live2d_config (id) VALUES (1)"
         )
+        cursor.execute('''CREATE TABLE IF NOT EXISTS onboarding_progress (
+                            step_id TEXT PRIMARY KEY,
+                            completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                          )''')
         self.conn.commit()
         
         cursor.execute("SELECT count(*) FROM voice_settings")
@@ -600,6 +626,28 @@ class ConfigDatabase(BaseDatabase):
     def delete_quick_reply(self, reply_id: int):
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM quick_replies WHERE id=?", (reply_id,))
+        self.conn.commit()
+
+    # Onboarding Progress Methods
+    def get_completed_onboarding_steps(self):
+        """获取已完成的引导步骤 ID 集合。"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT step_id FROM onboarding_progress")
+        return {row["step_id"] for row in cursor.fetchall()}
+
+    def mark_onboarding_step_completed(self, step_id: str):
+        """标记某个引导步骤为已完成。"""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO onboarding_progress (step_id, completed_at) VALUES (?, CURRENT_TIMESTAMP)",
+            (step_id,)
+        )
+        self.conn.commit()
+
+    def reset_onboarding(self):
+        """清除所有引导进度（用于\"新手指南\"重新播放）。"""
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM onboarding_progress")
         self.conn.commit()
 
 class PersonaDatabase(BaseDatabase):
@@ -1151,5 +1199,10 @@ class ChatDatabase:
     # Cache methods
     def get_image_description(self, *args, **kwargs): return self._cache.get_image_description(*args, **kwargs)
     def save_image_description(self, *args, **kwargs): return self._cache.save_image_description(*args, **kwargs)
+
+    # Onboarding methods
+    def get_completed_onboarding_steps(self): return self._config.get_completed_onboarding_steps()
+    def mark_onboarding_step_completed(self, *args, **kwargs): return self._config.mark_onboarding_step_completed(*args, **kwargs)
+    def reset_onboarding(self): return self._config.reset_onboarding()
 
     

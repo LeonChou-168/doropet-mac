@@ -554,6 +554,13 @@ class QuickMessageBubble(QFrame):
             self.btn_read.customContextMenuRequested.connect(self._show_read_context_menu)
             self.action_layout.addWidget(self.btn_read)
 
+        # ── 统计标签（Token + 耗时）──
+        self.stats_label = QLabel("", self.action_widget)
+        self.stats_label.setObjectName("chatStatsLabel")
+        self.stats_label.setStyleSheet("QLabel#chatStatsLabel { color: #888; font-size: 10px; padding: 0 6px; }")
+        self.stats_label.hide()
+        self.action_layout.addWidget(self.stats_label)
+
         self.action_layout.addStretch()
 
     def _on_read_button_clicked(self):
@@ -639,6 +646,35 @@ class QuickMessageBubble(QFrame):
         self._fade_anim.setEasingCurve(QEasingCurve.OutCubic)
         self._fade_anim.start()
         super().leaveEvent(event)
+
+    def set_stats(self, stats_json: str):
+        """设置并显示统计信息（Token + 耗时）。"""
+        if not stats_json or not hasattr(self, 'stats_label'):
+            return
+        try:
+            import json
+            data = json.loads(stats_json)
+        except (json.JSONDecodeError, TypeError):
+            return
+
+        tokens_total = data.get("tokens_in", 0) + data.get("tokens_out", 0)
+        duration_ms = data.get("duration_ms", 0)
+
+        parts = []
+        if tokens_total > 0:
+            if tokens_total >= 1000:
+                parts.append(f"{tokens_total/1000:.1f}k tokens")
+            else:
+                parts.append(f"{tokens_total} tokens")
+        if duration_ms > 0:
+            if duration_ms >= 1000:
+                parts.append(f"{duration_ms/1000:.1f}s")
+            else:
+                parts.append(f"{duration_ms:.0f}ms")
+
+        if parts:
+            self.stats_label.setText("  ·  ".join(parts))
+            self.stats_label.show()
 
     def copy_content(self):
         if isinstance(self.content, list):
@@ -1320,6 +1356,7 @@ class QuickChatWindow(QWidget):
             role = msg[1]
             content = msg[2] if msg[2] else ""
             images = msg[3] if len(msg) > 3 and msg[3] else None
+            stats_json = msg[11] if len(msg) > 11 and msg[11] else ""
 
             logger.info(f"[QuickChat] 加载消息 msg_id={msg_id}, images={images}")
 
@@ -1335,6 +1372,8 @@ class QuickChatWindow(QWidget):
                 bubble.speak_pause_requested.connect(self.speak_pause_message)
                 bubble.speak_resume_requested.connect(self.speak_resume_message)
                 bubble.speak_restart_requested.connect(self.speak_restart_message)
+                if stats_json:
+                    bubble.set_stats(stats_json)
                 self.message_widgets[msg_id] = bubble
 
                 insert_index = self.chat_layout.count() - 1
@@ -1936,7 +1975,7 @@ class QuickChatWindow(QWidget):
             self._streaming_bubble = None
         self._streaming_buffer = ""
 
-    def on_response_received(self, content, reasoning, tool_calls, generated_images):
+    def on_response_received(self, content, reasoning, tool_calls, generated_images, stats_json=""):
         self._streaming_timer.stop()
         self._flush_streaming()  # 消费剩余缓冲区
         logger.info(f"[QuickChat] on_response_received: _streaming_bubble = {self._streaming_bubble}")
@@ -1984,7 +2023,8 @@ class QuickChatWindow(QWidget):
         msg_id = self._service.add_message(
             "assistant",
             display_content,
-            images=None
+            images=None,
+            stats_json=stats_json,
         )
 
         self._service.add_to_memory("assistant", content, session_id)
@@ -1993,11 +2033,15 @@ class QuickChatWindow(QWidget):
             logger.info(f"[QuickChat] on_response_received: updating existing streaming bubble with final content")
             self._streaming_bubble.update_content(display_content)
             self._streaming_bubble.update_msg_id(msg_id)
+            if stats_json:
+                self._streaming_bubble.set_stats(stats_json)
             self._streaming_bubble = None
             self._streaming_buffer = ""
         else:
             logger.info(f"[QuickChat] on_response_received: creating new bubble")
-            self.add_message_to_ui("assistant", display_content, msg_id)
+            bubble = self.add_message_to_ui("assistant", display_content, msg_id)
+            if stats_json and bubble:
+                bubble.set_stats(stats_json)
 
         if self._auto_play_enabled:
             self._service.speak(msg_id, content)
