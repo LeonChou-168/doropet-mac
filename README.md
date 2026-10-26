@@ -6,6 +6,16 @@
 
 ### 你的智能桌面伴侣
 
+---
+
+```
+本项目以及全面停止更新
+想获取最新版DoroPet，可以去：
+```
+[RUST版本DoroPet](https://gitee.com/waterfeet/doropetrelease/releases)
+
+---
+
 [![Version](https://img.shields.io/badge/version-3.6.8-blue.svg)](https://gitee.com/waterfeet/DoroPet_V3/releases)
 [![Python](https://img.shields.io/badge/Python-3.12+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
