@@ -8,10 +8,10 @@
 
 ---
 
-```
-本项目以及全面停止更新
-想获取最新版DoroPet，可以去：
-```
+
+# 本项目已经全面停止更新
+# 想获取最新版DoroPet，可以去：
+
 [RUST版本DoroPet](https://gitee.com/waterfeet/doropetrelease/releases)
 
 ---
