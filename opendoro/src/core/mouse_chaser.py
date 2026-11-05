@@ -60,9 +60,9 @@ class MouseChaser(QObject):
         self._motion_check_timer: Optional[QTimer] = None
         self._animation_loop_enabled = True
         
-        self._energy_drain_rate = 2.0
-        self._mood_boost_rate = 1.5
-        self._hunger_drain_rate = 1.0
+        self._energy_drain_rate = 0.08
+        self._mood_boost_rate = 0.06
+        self._hunger_drain_rate = 0.04
         self._last_attr_update_time = 0.0
         self._attr_update_interval = 1.0
         

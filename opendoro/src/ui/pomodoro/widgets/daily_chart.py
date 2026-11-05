@@ -3,10 +3,19 @@ from PyQt5.QtCore import Qt, QRectF
 from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QBrush
 from PyQt5.QtWidgets import QWidget
 from qfluentwidgets import isDarkTheme
+from src.core.i18n import tr
 
 
 class DailyChart(QWidget):
-    WEEKDAY_NAMES = ["一", "二", "三", "四", "五", "六", "日"]
+    WEEKDAY_KEYS = [
+        "pomodoro.weekday_mon",
+        "pomodoro.weekday_tue",
+        "pomodoro.weekday_wed",
+        "pomodoro.weekday_thu",
+        "pomodoro.weekday_fri",
+        "pomodoro.weekday_sat",
+        "pomodoro.weekday_sun",
+    ]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -79,14 +88,14 @@ class DailyChart(QWidget):
 
             day_font = QFont("Segoe UI", 10)
             painter.setFont(day_font)
-            day_text = self.WEEKDAY_NAMES[i] if i < 7 else "?"
+            day_text = tr(self.WEEKDAY_KEYS[i]) if i < 7 else "?"
             painter.setPen(QPen(text_color))
             painter.drawText(QRectF(x - 5, h - margin_bottom + 4, bar_width + 10, 22), Qt.AlignCenter, day_text)
 
         title_font = QFont("Segoe UI", 11, QFont.Bold)
         painter.setFont(title_font)
         painter.setPen(QPen(text_color))
-        painter.drawText(QRectF(margin_left, 0, chart_w, margin_top + 8), Qt.AlignLeft, "📊 本周趋势")
+        painter.drawText(QRectF(margin_left, 0, chart_w, margin_top + 8), Qt.AlignLeft, "📊 " + tr("pomodoro.weekly_trend"))
 
     def _is_dark(self):
         try:

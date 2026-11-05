@@ -15,13 +15,13 @@ markdown
 pygments
 beautifulsoup4
 live2d-py
-pyopengl
 packaging
 edge-tts
 musicdl
 gradio_client
-pycryptodomex
 pygame
 python-vlc
 dashscope
 chardet
+pydantic-ai-slim[openai,web-fetch]==1.106.0
+playwright>=1.52.0

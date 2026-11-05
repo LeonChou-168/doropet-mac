@@ -5,6 +5,8 @@ from qfluentwidgets import (ScrollArea, CheckBox, Slider, TitleLabel,
                             isDarkTheme, LineEdit, Pivot, CardWidget, BodyLabel,
                             ComboBox, SpinBox, InfoBar, TransparentToolButton)
 from src.core.logger import logger
+from src.core.i18n import I18nManager, tr
+import os
 
 
 class SettingCard(CardWidget):
@@ -33,47 +35,84 @@ class SettingCard(CardWidget):
 class GeneralSettingsPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._settings_interface = parent
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
         
-        card = SettingCard("常规设置", self)
+        self._card = SettingCard(tr("settings.general.title"), self)
         
-        self.check_autorun = CheckBox("开机自动启动", self)
-        self.check_hide_pet_on_startup = CheckBox("启动时隐藏桌宠 (仅显示主界面)", self)
-        self.check_mouse_interact = CheckBox("启用鼠标交互 (取消勾选以锁定)", self)
+        self.check_autorun = CheckBox(tr("settings.general.autorun"), self)
+        self.check_hide_pet_on_startup = CheckBox(tr("settings.general.hide_pet"), self)
+        self.check_mouse_interact = CheckBox(tr("settings.general.mouse_interact"), self)
         self.check_mouse_interact.setChecked(True)
         
-        card.addWidget(self.check_autorun)
-        card.addWidget(self.check_hide_pet_on_startup)
-        card.addWidget(self.check_mouse_interact)
+        self._card.addWidget(self.check_autorun)
+        self._card.addWidget(self.check_hide_pet_on_startup)
+        self._card.addWidget(self.check_mouse_interact)
         
-        layout.addWidget(card)
+        layout.addWidget(self._card)
         
+        self._setup_language_card(layout)
         self._setup_cache_management(layout)
         
-        shortcut_card = SettingCard("快捷方式", self)
+        self._shortcut_card = SettingCard(tr("settings.general.shortcut"), self)
         
         shortcut_info_layout = QHBoxLayout()
-        shortcut_info_label = BodyLabel("在桌面创建 DoroPet 快捷方式", self)
-        shortcut_info_layout.addWidget(shortcut_info_label)
+        self._shortcut_info_label = BodyLabel(tr("settings.general.create_shortcut_desc"), self)
+        shortcut_info_layout.addWidget(self._shortcut_info_label)
         shortcut_info_layout.addStretch()
-        shortcut_card.addLayout(shortcut_info_layout)
+        self._shortcut_card.addLayout(shortcut_info_layout)
         
-        self.btn_create_shortcut = PushButton(FluentIcon.SHARE, "创建桌面快捷方式", self)
+        self.btn_create_shortcut = PushButton(FluentIcon.SHARE, tr("settings.general.create_shortcut_btn"), self)
         self.btn_create_shortcut.setFixedWidth(160)
         
         btn_shortcut_layout = QHBoxLayout()
         btn_shortcut_layout.addStretch()
         btn_shortcut_layout.addWidget(self.btn_create_shortcut)
-        shortcut_card.addLayout(btn_shortcut_layout)
+        self._shortcut_card.addLayout(btn_shortcut_layout)
         
-        layout.addWidget(shortcut_card)
+        layout.addWidget(self._shortcut_card)
         layout.addStretch()
         
         self.btn_create_shortcut.clicked.connect(self._create_desktop_shortcut)
         self._refresh_all_cache_sizes()
+
+    def _setup_language_card(self, parent_layout):
+        """设置语言选择卡片。"""
+        lang_card = SettingCard(tr("settings.general.language"), self)
+        
+        lang_layout = QHBoxLayout()
+        lang_label = BodyLabel(tr("settings.general.language") + ":", self)
+        lang_layout.addWidget(lang_label)
+        
+        self._lang_label = lang_label
+        self.lang_combo = ComboBox(self)
+        i18n = I18nManager.get_instance()
+        for code, info in i18n.languages.items():
+            self.lang_combo.addItem(info["display"], userData=code)
+        # 设置当前语言
+        current = i18n.current_language
+        for i in range(self.lang_combo.count()):
+            if self.lang_combo.itemData(i) == current:
+                self.lang_combo.setCurrentIndex(i)
+                break
+        self.lang_combo.setFixedWidth(180)
+        self.lang_combo.currentIndexChanged.connect(self._on_language_changed)
+        lang_layout.addWidget(self.lang_combo)
+        lang_layout.addStretch()
+        lang_card.addLayout(lang_layout)
+        
+        parent_layout.addWidget(lang_card)
+
+    def _on_language_changed(self, index):
+        lang_code = self.lang_combo.itemData(index)
+        logger.info(f"[I18n] GeneralSettingsPage._on_language_changed: index={index}, lang_code={lang_code}")
+        if lang_code:
+            i18n = I18nManager.get_instance()
+            logger.info(f"[I18n] Calling i18n.set_language({lang_code}), current={i18n.current_language}")
+            i18n.set_language(lang_code)
 
     def _setup_cache_management(self, parent_layout):
         from PyQt5.QtWidgets import QHBoxLayout, QLabel, QFrame, QSizePolicy
@@ -84,65 +123,71 @@ class GeneralSettingsPage(QWidget):
         self._cache_labels = {}
         self._cache_buttons = {}
         
-        cache_card = SettingCard("缓存管理", self)
+        self._cache_card = SettingCard(tr("settings.general.cache"), self)
         
-        safe_cache_label = StrongBodyLabel("安全缓存（可随时清除）", self)
-        cache_card.addWidget(safe_cache_label)
+        safe_cache_label = StrongBodyLabel(tr("settings.general.safe_cache"), self)
+        self._cache_card.addWidget(safe_cache_label)
+        self._safe_cache_label = safe_cache_label
         
         safe_caches = [
-            ("tts", "TTS 语音缓存", "AI 语音合成的音频缓存", "🔊"),
-            ("image", "网络图片缓存", "聊天中加载的网络图片缓存", "🖼️"),
-            ("temp_images", "临时图片", "Base64 编码的临时图片文件", "📄"),
-            ("musicdl", "musicdl 临时输出", "音乐搜索产生的临时文件", "🎵"),
-            ("old_logs", "旧日志文件", "超过 7 天的日志文件", "📝"),
+            ("tts", "settings.cache.tts", "settings.cache.tts_desc", "\ud83d\udd0a"),
+            ("image", "settings.cache.image", "settings.cache.image_desc", "\ud83d\uddbc\ufe0f"),
+            ("temp_images", "settings.cache.temp_images", "settings.cache.temp_images_desc", "\ud83d\udcc4"),
+            ("musicdl", "settings.cache.musicdl", "settings.cache.musicdl_desc", "\ud83c\udfb5"),
+            ("old_logs", "settings.cache.old_logs", "settings.cache.old_logs_desc", "\ud83d\udcdd"),
         ]
         
-        for cache_key, cache_name, description, icon in safe_caches:
-            self._add_cache_row(cache_card, cache_key, cache_name, description, icon, is_safe=True)
+        self._safe_cache_rows = []
+        for cache_key, name_key, desc_key, icon in safe_caches:
+            row = self._add_cache_row(self._cache_card, cache_key, name_key, desc_key, icon, is_safe=True)
+            self._safe_cache_rows.append(row)
         
         separator = QFrame(self)
         separator.setFrameShape(QFrame.HLine)
         separator.setFrameShadow(QFrame.Sunken)
-        cache_card.addWidget(separator)
+        self._cache_card.addWidget(separator)
         
-        warning_cache_label = StrongBodyLabel("⚠️ 谨慎清除（会丢失用户数据）", self)
-        cache_card.addWidget(warning_cache_label)
+        warning_cache_label = StrongBodyLabel("\u26a0\ufe0f " + tr("settings.general.warning_cache"), self)
+        self._cache_card.addWidget(warning_cache_label)
+        self._warning_cache_label = warning_cache_label
         
         warning_caches = [
-            ("music_downloads", "音乐下载", "已下载的音乐文件（清除后需重新下载）", "⚠️"),
+            ("music_downloads", "settings.cache.music_downloads", "settings.cache.music_downloads_desc", "\u26a0\ufe0f"),
         ]
         
-        for cache_key, cache_name, description, icon in warning_caches:
-            self._add_cache_row(cache_card, cache_key, cache_name, description, icon, is_safe=False)
+        self._warning_cache_rows = []
+        for cache_key, name_key, desc_key, icon in warning_caches:
+            row = self._add_cache_row(self._cache_card, cache_key, name_key, desc_key, icon, is_safe=False)
+            self._warning_cache_rows.append(row)
         
         separator2 = QFrame(self)
         separator2.setFrameShape(QFrame.HLine)
         separator2.setFrameShadow(QFrame.Sunken)
-        cache_card.addWidget(separator2)
+        self._cache_card.addWidget(separator2)
         
         total_layout = QHBoxLayout()
-        total_label = StrongBodyLabel("📊 总缓存大小:", self)
-        total_layout.addWidget(total_label)
+        self._total_label = StrongBodyLabel("\ud83d\udcca " + tr("settings.general.total_cache_size") + ":", self)
+        total_layout.addWidget(self._total_label)
         
         self._total_cache_label = CaptionLabel("0 MB", self)
         self._total_cache_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         total_layout.addWidget(self._total_cache_label)
         total_layout.addStretch()
-        cache_card.addLayout(total_layout)
+        self._cache_card.addLayout(total_layout)
         
         clear_all_layout = QHBoxLayout()
         clear_all_layout.addStretch()
         
-        self.btn_clear_all_safe = PushButton(FluentIcon.DELETE, "一键清除安全缓存", self)
+        self.btn_clear_all_safe = PushButton(FluentIcon.DELETE, tr("settings.general.clear_all_safe"), self)
         self.btn_clear_all_safe.setFixedWidth(160)
         self.btn_clear_all_safe.clicked.connect(self._clear_all_safe_caches)
         clear_all_layout.addWidget(self.btn_clear_all_safe)
         
-        cache_card.addLayout(clear_all_layout)
+        self._cache_card.addLayout(clear_all_layout)
         
-        parent_layout.addWidget(cache_card)
+        parent_layout.addWidget(self._cache_card)
 
-    def _add_cache_row(self, parent_card, cache_key: str, cache_name: str, description: str, icon: str, is_safe: bool):
+    def _add_cache_row(self, parent_card, cache_key: str, name_key: str, desc_key: str, icon: str, is_safe: bool):
         row_layout = QHBoxLayout()
         row_layout.setSpacing(8)
         
@@ -150,7 +195,7 @@ class GeneralSettingsPage(QWidget):
         icon_label.setFixedWidth(20)
         row_layout.addWidget(icon_label)
         
-        name_label = BodyLabel(cache_name, self)
+        name_label = BodyLabel(tr(name_key), self)
         name_label.setFixedWidth(120)
         row_layout.addWidget(name_label)
         
@@ -159,7 +204,7 @@ class GeneralSettingsPage(QWidget):
         self._cache_labels[cache_key] = size_label
         row_layout.addWidget(size_label)
         
-        btn = PushButton("清除", self)
+        btn = PushButton(tr("settings.general.clear_cache"), self)
         btn.setFixedSize(60, 28)
         btn.clicked.connect(lambda checked, k=cache_key: self._clear_cache(k))
         self._cache_buttons[cache_key] = btn
@@ -168,9 +213,17 @@ class GeneralSettingsPage(QWidget):
         row_layout.addStretch()
         parent_card.addLayout(row_layout)
         
-        desc_label = CaptionLabel(description, self)
+        desc_label = CaptionLabel(tr(desc_key), self)
         desc_label.setStyleSheet("color: gray; margin-left: 28px;")
         parent_card.addWidget(desc_label)
+        
+        return {
+            "name_label": name_label,
+            "desc_label": desc_label,
+            "cache_key": cache_key,
+            "name_key": name_key,
+            "desc_key": desc_key,
+        }
 
     def _refresh_all_cache_sizes(self):
         from PyQt5.QtCore import QTimer
@@ -185,13 +238,14 @@ class GeneralSettingsPage(QWidget):
         self._total_cache_label.setText(self._cache_manager.get_total_size_display())
 
     def _get_cache_key_from_name(self, name: str) -> str:
+        # cache_manager.py 中返回的名称始终是中文，不随语言切换
         mapping = {
-            "TTS 语音缓存": "tts",
-            "网络图片缓存": "image",
-            "临时图片": "temp_images",
-            "musicdl 临时输出": "musicdl",
-            "旧日志文件": "old_logs",
-            "音乐下载": "music_downloads",
+            tr("settings.cache_tts", default="TTS 语音缓存"): "tts",
+            tr("settings.cache_images", default="网络图片缓存"): "image",
+            tr("settings.cache_temp_images", default="临时图片"): "temp_images",
+            tr("settings.cache_musicdl", default="musicdl 临时输出"): "musicdl",
+            tr("settings.cache_logs", default="旧日志文件"): "old_logs",
+            tr("settings.cache_music", default="音乐下载"): "music_downloads",
         }
         return mapping.get(name, "")
 
@@ -215,20 +269,20 @@ class GeneralSettingsPage(QWidget):
             
             if deleted > 0:
                 InfoBar.success(
-                    "缓存已清除",
-                    f"已删除 {deleted} 个文件，释放 {freed_mb:.2f} MB",
+                    tr("settings.cache.cleared"),
+                    f"\u5df2\u5220\u9664 {deleted} \u4e2a\u6587\u4ef6\uff0c\u91ca\u653e {freed_mb:.2f} MB",
                     duration=2000
                 )
             else:
                 InfoBar.warning(
-                    "缓存为空",
-                    "没有需要清除的缓存文件",
+                    tr("settings.cache.empty"),
+                    tr("settings.cache.nothing_to_clear"),
                     duration=2000
                 )
         except Exception as e:
             InfoBar.error(
-                "清除失败",
-                f"清除缓存时出错: {str(e)}",
+                tr("settings.cache.failed"),
+                tr("settings.cache.clear_error") + f": {str(e)}",
                 duration=2000
             )
         
@@ -241,20 +295,20 @@ class GeneralSettingsPage(QWidget):
             
             if deleted > 0:
                 InfoBar.success(
-                    "缓存已清除",
-                    f"已删除 {deleted} 个文件，释放 {freed_mb:.2f} MB",
+                    tr("settings.cache.cleared"),
+                    f"\u5df2\u5220\u9664 {deleted} \u4e2a\u6587\u4ef6\uff0c\u91ca\u653e {freed_mb:.2f} MB",
                     duration=2000
                 )
             else:
                 InfoBar.warning(
-                    "缓存为空",
-                    "没有需要清除的缓存文件",
+                    tr("settings.cache.empty"),
+                    tr("settings.cache.nothing_to_clear"),
                     duration=2000
                 )
         except Exception as e:
             InfoBar.error(
-                "清除失败",
-                f"清除缓存时出错: {str(e)}",
+                tr("settings.cache.failed"),
+                tr("settings.cache.clear_error") + f": {str(e)}",
                 duration=2000
             )
         
@@ -269,28 +323,80 @@ class GeneralSettingsPage(QWidget):
         success, message = create_desktop_shortcut(replace_existing=False)
         if success:
             InfoBar.success(
-                "创建成功",
+                tr("settings.shortcut.success"),
                 message,
                 duration=3000
             )
         else:
             InfoBar.error(
-                "创建失败",
+                tr("settings.shortcut.failed"),
                 message,
                 duration=3000
             )
 
+    def refresh_ui(self):
+        """语言切换时刷新所有 UI 文本。"""
+        logger.info(f"[I18n] GeneralSettingsPage.refresh_ui start")
+        self._card.title_label.setText(tr("settings.general.title"))
+        self.check_autorun.setText(tr("settings.general.autorun"))
+        self.check_hide_pet_on_startup.setText(tr("settings.general.hide_pet"))
+        self.check_mouse_interact.setText(tr("settings.general.mouse_interact"))
+        
+        # 语言卡片
+        self._lang_label.setText(tr("settings.general.language") + ":")
+        # 更新语言下拉框
+        i18n = I18nManager.get_instance()
+        current_code = i18n.current_language
+        self.lang_combo.blockSignals(True)
+        self.lang_combo.clear()
+        for code, info in i18n.languages.items():
+            self.lang_combo.addItem(info["display"], userData=code)
+        for i in range(self.lang_combo.count()):
+            if self.lang_combo.itemData(i) == current_code:
+                self.lang_combo.setCurrentIndex(i)
+                break
+        self.lang_combo.blockSignals(False)
+        
+        # 快捷方式卡片
+        self._shortcut_card.title_label.setText(tr("settings.general.shortcut"))
+        self._shortcut_info_label.setText(tr("settings.general.create_shortcut_desc"))
+        self.btn_create_shortcut.setText(tr("settings.general.create_shortcut_btn"))
+        
+        # 缓存管理卡片
+        self._cache_card.title_label.setText(tr("settings.general.cache"))
+        self._safe_cache_label.setText(tr("settings.general.safe_cache"))
+        self._warning_cache_label.setText("\u26a0\ufe0f " + tr("settings.general.warning_cache"))
+        self._total_label.setText("\ud83d\udcca " + tr("settings.general.total_cache_size") + ":")
+        
+        for row in self._safe_cache_rows:
+            row["name_label"].setText(tr(row["name_key"]))
+            row["desc_label"].setText(tr(row["desc_key"]))
+        for row in self._warning_cache_rows:
+            row["name_label"].setText(tr(row["name_key"]))
+            row["desc_label"].setText(tr(row["desc_key"]))
+        
+        for btn in self._cache_buttons.values():
+            btn.setText(tr("settings.general.clear_cache"))
+        self.btn_clear_all_safe.setText(tr("settings.general.clear_all_safe"))
+
 
 class DisplaySettingsPage(QWidget):
     ASPECT_RATIOS = [
-        ("1:1 (正方形)", 1.0),
-        ("4:3 (标准)", 4.0 / 3.0),
-        ("3:4 (竖屏)", 3.0 / 4.0),
-        ("16:9 (宽屏)", 16.0 / 9.0),
-        ("9:16 (竖屏宽屏)", 9.0 / 16.0),
-        ("16:10", 16.0 / 10.0),
-        ("10:16 (竖屏)", 10.0 / 16.0),
-        ("自定义", -1),
+        ("settings.aspect_1_1", 1.0),
+        ("settings.aspect_4_3", 4.0 / 3.0),
+        ("settings.aspect_3_4", 3.0 / 4.0),
+        ("settings.aspect_16_9", 16.0 / 9.0),
+        ("settings.aspect_9_16", 9.0 / 16.0),
+        ("settings.aspect_16_10", 16.0 / 10.0),
+        ("settings.aspect_10_16", 10.0 / 16.0),
+        ("settings.aspect_custom", -1),
+    ]
+    
+    FONT_OPTIONS = [
+        ("settings.display.font_small", 90),
+        ("settings.display.font_medium", 100),
+        ("settings.display.font_large", 115),
+        ("settings.display.font_xlarge", 135),
     ]
     
     def __init__(self, parent=None):
@@ -300,37 +406,37 @@ class DisplaySettingsPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
         
-        card = SettingCard("显示设置", self)
+        self._card = SettingCard(tr("settings.display.title"), self)
         self.sliders = {}
         
-        self.check_show_pet_status = CheckBox("显示宠物属性栏", self)
+        self.check_show_pet_status = CheckBox(tr("settings.display.show_pet_status"), self)
         self.check_show_pet_status.setChecked(True)
-        card.addWidget(self.check_show_pet_status)
+        self._card.addWidget(self.check_show_pet_status)
         
-        self.add_slider_option(card, "模型缩放", 20, 150, 100, "%")
-        self.add_slider_option(card, "窗口透明度", 10, 100, 100, "%")
-        self.add_slider_option(card, "气泡显示时长", 1000, 10000, 3000, " ms")
+        self.add_slider_option(self._card, "settings.display.model_scale", 20, 150, 100, "%")
+        self.add_slider_option(self._card, "settings.display.window_opacity", 10, 100, 100, "%")
+        self.add_slider_option(self._card, "settings.display.bubble_duration", 1000, 10000, 3000, " ms")
         
-        layout.addWidget(card)
+        layout.addWidget(self._card)
         
-        aspect_card = SettingCard("Live2D 窗口比例", self)
+        self._aspect_card = SettingCard(tr("settings.display.aspect_ratio"), self)
         
-        aspect_label = StrongBodyLabel("选择窗口宽高比", self)
-        aspect_card.addWidget(aspect_label)
+        self._aspect_label = StrongBodyLabel(tr("settings.display.aspect_label"), self)
+        self._aspect_card.addWidget(self._aspect_label)
         
         aspect_h_layout = QHBoxLayout()
         self.aspect_combo = ComboBox(self)
-        self.aspect_combo.addItems([ratio[0] for ratio in self.ASPECT_RATIOS])
+        self.aspect_combo.addItems([tr(ratio[0], default=ratio[0]) for ratio in self.ASPECT_RATIOS])
         self.aspect_combo.setCurrentIndex(0)
         self.aspect_combo.setFixedWidth(150)
         self.aspect_combo.currentIndexChanged.connect(self._on_aspect_preset_changed)
         aspect_h_layout.addWidget(self.aspect_combo)
         aspect_h_layout.addStretch()
-        aspect_card.addLayout(aspect_h_layout)
+        self._aspect_card.addLayout(aspect_h_layout)
         
         custom_layout = QHBoxLayout()
-        custom_label = BodyLabel("自定义比例:", self)
-        custom_layout.addWidget(custom_label)
+        self._custom_label = BodyLabel(tr("settings.display.custom_ratio") + ":", self)
+        custom_layout.addWidget(self._custom_label)
         
         self.width_spin = SpinBox(self)
         self.width_spin.setRange(100, 2000)
@@ -339,7 +445,7 @@ class DisplaySettingsPage(QWidget):
         self.width_spin.setEnabled(False)
         custom_layout.addWidget(self.width_spin)
         
-        x_label = BodyLabel("×", self)
+        x_label = BodyLabel("\u00d7", self)
         custom_layout.addWidget(x_label)
         
         self.height_spin = SpinBox(self)
@@ -350,49 +456,45 @@ class DisplaySettingsPage(QWidget):
         custom_layout.addWidget(self.height_spin)
         
         custom_layout.addStretch()
-        aspect_card.addLayout(custom_layout)
+        self._aspect_card.addLayout(custom_layout)
         
         self.width_spin.valueChanged.connect(self._on_custom_size_changed)
         self.height_spin.valueChanged.connect(self._on_custom_size_changed)
         
-        apply_btn = PushButton(FluentIcon.ACCEPT, "应用比例", self)
-        apply_btn.clicked.connect(self._apply_aspect_ratio)
-        aspect_card.addWidget(apply_btn)
+        self._apply_btn = PushButton(FluentIcon.ACCEPT, tr("settings.display.apply_ratio"), self)
+        self._apply_btn.clicked.connect(self._apply_aspect_ratio)
+        self._aspect_card.addWidget(self._apply_btn)
         
-        layout.addWidget(aspect_card)
+        layout.addWidget(self._aspect_card)
         
-        monitor_card = SettingCard("系统监控", self)
+        self._monitor_card = SettingCard(tr("settings.display.monitor"), self)
 
-        self.check_system_monitor = CheckBox("启用系统监控 (CPU/内存),占用过高让doro提示,低配置建议调高阈值", self)
+        self.check_system_monitor = CheckBox(tr("settings.display.monitor_enable"), self)
         self.check_system_monitor.setChecked(True)
-        monitor_card.addWidget(self.check_system_monitor)
+        self._monitor_card.addWidget(self.check_system_monitor)
 
-        self.add_slider_option(monitor_card, "CPU 告警阈值", 50, 100, 70, "%")
-        self.add_slider_option(monitor_card, "内存告警阈值", 50, 100, 80, "%")
+        self.add_slider_option(self._monitor_card, "settings.display.cpu_threshold", 50, 100, 70, "%")
+        self.add_slider_option(self._monitor_card, "settings.display.mem_threshold", 50, 100, 80, "%")
 
-        layout.addWidget(monitor_card)
+        layout.addWidget(self._monitor_card)
 
-        font_card = SettingCard("字体大小", self)
+        self._font_card = SettingCard(tr("settings.display.font_size"), self)
 
-        font_label = StrongBodyLabel("选择字体大小", self)
-        font_card.addWidget(font_label)
+        self._font_label = StrongBodyLabel(tr("settings.display.font_label"), self)
+        self._font_card.addWidget(self._font_label)
 
         font_h_layout = QHBoxLayout()
         font_h_layout.setSpacing(8)
 
         self.font_buttons = {}
-        font_options = [
-            ("小", 90),
-            ("中", 100),
-            ("大", 115),
-            ("特大", 135),
-        ]
+        self._font_button_keys = {}
 
-        for text, value in font_options:
-            btn = PushButton(text, self)
+        for key, value in self.FONT_OPTIONS:
+            btn = PushButton(tr(key), self)
             btn.setFixedSize(60, 32)
             btn.setCursor(Qt.PointingHandCursor)
             self.font_buttons[value] = btn
+            self._font_button_keys[btn] = key
             font_h_layout.addWidget(btn)
 
         font_h_layout.addStretch()
@@ -400,9 +502,9 @@ class DisplaySettingsPage(QWidget):
         for value, btn in self.font_buttons.items():
             btn.clicked.connect(lambda checked, v=value: self._on_font_button_clicked(v))
 
-        font_card.addLayout(font_h_layout)
+        self._font_card.addLayout(font_h_layout)
 
-        layout.addWidget(font_card)
+        layout.addWidget(self._font_card)
         layout.addStretch()
 
         self._update_font_buttons_style(100)
@@ -506,8 +608,8 @@ class DisplaySettingsPage(QWidget):
         self.width_spin.setValue(width)
         self.height_spin.setValue(height)
     
-    def add_slider_option(self, parent_card, text, min_val, max_val, default_val, unit_suffix=""):
-        parent_card.addWidget(StrongBodyLabel(text, self))
+    def add_slider_option(self, parent_card, key, min_val, max_val, default_val, unit_suffix=""):
+        parent_card.addWidget(StrongBodyLabel(tr(key), self))
         
         h_layout = QHBoxLayout()
         slider = Slider(Qt.Horizontal, self)
@@ -523,7 +625,31 @@ class DisplaySettingsPage(QWidget):
         h_layout.addWidget(val_label)
         parent_card.addLayout(h_layout)
         
-        self.sliders[text] = slider
+        self.sliders[key] = slider
+
+    def refresh_ui(self):
+        """语言切换时刷新所有 UI 文本。"""
+        self._card.title_label.setText(tr("settings.display.title"))
+        self.check_show_pet_status.setText(tr("settings.display.show_pet_status"))
+        self._aspect_card.title_label.setText(tr("settings.display.aspect_ratio"))
+        self._aspect_label.setText(tr("settings.display.aspect_label"))
+        self._custom_label.setText(tr("settings.display.custom_ratio") + ":")
+        self._apply_btn.setText(tr("settings.display.apply_ratio"))
+        self._monitor_card.title_label.setText(tr("settings.display.monitor"))
+        self.check_system_monitor.setText(tr("settings.display.monitor_enable"))
+        self._font_card.title_label.setText(tr("settings.display.font_size"))
+        self._font_label.setText(tr("settings.display.font_label"))
+        
+        for btn, key in self._font_button_keys.items():
+            btn.setText(tr(key))
+
+        # 刷新宽高比下拉框
+        self.aspect_combo.blockSignals(True)
+        current_idx = self.aspect_combo.currentIndex()
+        self.aspect_combo.clear()
+        self.aspect_combo.addItems([tr(ratio[0], default=ratio[0]) for ratio in self.ASPECT_RATIOS])
+        self.aspect_combo.setCurrentIndex(current_idx)
+        self.aspect_combo.blockSignals(False)
 
 
 class SoundSettingsPage(QWidget):
@@ -534,16 +660,16 @@ class SoundSettingsPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
         
-        card = SettingCard("声音设置", self)
+        self._card = SettingCard(tr("settings.sound.title"), self)
         self.sliders = {}
         
-        self.add_slider_option(card, "TTS 音量", 0, 100, 80, "%")
+        self.add_slider_option(self._card, "settings.sound.tts_volume", 0, 100, 80, "%")
         
-        layout.addWidget(card)
+        layout.addWidget(self._card)
         layout.addStretch()
     
-    def add_slider_option(self, parent_card, text, min_val, max_val, default_val, unit_suffix=""):
-        parent_card.addWidget(StrongBodyLabel(text, self))
+    def add_slider_option(self, parent_card, key, min_val, max_val, default_val, unit_suffix=""):
+        parent_card.addWidget(StrongBodyLabel(tr(key), self))
         
         h_layout = QHBoxLayout()
         slider = Slider(Qt.Horizontal, self)
@@ -559,10 +685,21 @@ class SoundSettingsPage(QWidget):
         h_layout.addWidget(val_label)
         parent_card.addLayout(h_layout)
         
-        self.sliders[text] = slider
+        self.sliders[key] = slider
+
+    def refresh_ui(self):
+        """语言切换时刷新所有 UI 文本。"""
+        self._card.title_label.setText(tr("settings.sound.title"))
 
 
 class AISettingsPage(QWidget):
+    RISK_THRESHOLD_OPTIONS = [
+        ("low", "低风险及以上"),
+        ("medium", "中风险及以上（推荐）"),
+        ("high", "仅高风险"),
+        ("critical", "仅严重风险"),
+    ]
+
     def __init__(self, parent=None):
         super().__init__(parent)
         
@@ -570,59 +707,432 @@ class AISettingsPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
         
-        card = SettingCard("AI 设置", self)
+        self._card = SettingCard(tr("settings.ai.title"), self)
         self.sliders = {}
         
-        self.check_inject_time = CheckBox("在上下文注入当前时间", self)
-        self.check_expression_response = CheckBox("开启表情响应 (AI自动控制表情)", self)
-        self.check_enable_memory = CheckBox("开启 AI 记忆功能 (记住用户重要信息)", self)
+        self.check_inject_time = CheckBox(tr("settings.ai.inject_time"), self)
+        self.check_expression_response = CheckBox(tr("settings.ai.expression_response"), self)
+        self.check_enable_memory = CheckBox(tr("settings.ai.enable_memory"), self)
         
-        card.addWidget(self.check_inject_time)
-        card.addWidget(self.check_expression_response)
-        card.addWidget(self.check_enable_memory)
+        self._card.addWidget(self.check_inject_time)
+        self._card.addWidget(self.check_expression_response)
+        self._card.addWidget(self.check_enable_memory)
 
-        card.addWidget(StrongBodyLabel("每次注入记忆条数上限", self))
+        self._card.addWidget(StrongBodyLabel(tr("settings.ai.memory_max_count"), self))
 
         h_mem_layout = QHBoxLayout()
         mem_slider = Slider(Qt.Horizontal, self)
         mem_slider.setRange(1, 30)
         mem_slider.setValue(10)
 
-        mem_val_label = CaptionLabel("10 条", self)
-        mem_val_label.setFixedWidth(60)
+        self._mem_val_label = CaptionLabel(f"10 {tr('memory.count_unit')}", self)
+        self._mem_val_label.setFixedWidth(60)
 
-        mem_slider.valueChanged.connect(lambda v: mem_val_label.setText(f"{v} 条"))
+        mem_slider.valueChanged.connect(lambda v: self._mem_val_label.setText(f"{v} {tr('memory.count_unit')}"))
 
         h_mem_layout.addWidget(mem_slider)
-        h_mem_layout.addWidget(mem_val_label)
-        card.addLayout(h_mem_layout)
+        h_mem_layout.addWidget(self._mem_val_label)
+        self._card.addLayout(h_mem_layout)
 
         self.sliders["memory_max_count"] = mem_slider
 
-        card.addWidget(StrongBodyLabel("LLM 最大输出长度", self))
-        
-        h_layout = QHBoxLayout()
-        slider = Slider(Qt.Horizontal, self)
-        slider.setRange(1024, 32768)
-        slider.setValue(8192)
-        
-        val_label = CaptionLabel("8192 tokens", self)
-        val_label.setFixedWidth(80)
-        
-        slider.valueChanged.connect(lambda v: val_label.setText(f"{v} tokens"))
-        
-        h_layout.addWidget(slider)
-        h_layout.addWidget(val_label)
-        card.addLayout(h_layout)
-        
-        self.sliders["LLM 最大输出长度"] = slider
-        
-        hint = CaptionLabel("(值越大，AI可生成的内容越长。代码/页面生成建议≥16384)", self)
-        hint.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        card.addWidget(hint)
-        
-        layout.addWidget(card)
+        # ── 工具确认设置 ──
+        self._confirm_card = SettingCard(
+            tr("settings.ai.tool_confirm", default="工具操作确认"), self
+        )
+
+        self.check_tool_confirm = CheckBox(
+            tr("settings.ai.tool_confirm_enable", default="启用高风险工具确认"), self
+        )
+        self._confirm_card.addWidget(self.check_tool_confirm)
+
+        # 风险阈值
+        threshold_label = StrongBodyLabel(
+            tr("settings.ai.tool_confirm_threshold", default="确认阈值:"), self
+        )
+        self._confirm_card.addWidget(threshold_label)
+
+        th_layout = QHBoxLayout()
+        self.threshold_combo = ComboBox(self)
+        for val, label in self.RISK_THRESHOLD_OPTIONS:
+            self.threshold_combo.addItem(label, userData=val)
+        self.threshold_combo.setFixedWidth(200)
+        th_layout.addWidget(self.threshold_combo)
+        th_layout.addStretch()
+        self._confirm_card.addLayout(th_layout)
+
+        # 超时时间
+        timeout_label = StrongBodyLabel(
+            tr("settings.ai.tool_confirm_timeout", default="超时时间:"), self
+        )
+        self._confirm_card.addWidget(timeout_label)
+
+        to_layout = QHBoxLayout()
+        self.timeout_spin = SpinBox(self)
+        self.timeout_spin.setRange(5, 120)
+        self.timeout_spin.setValue(30)
+        self.timeout_spin.setSuffix(" 秒")
+        self.timeout_spin.setFixedWidth(120)
+        to_layout.addWidget(self.timeout_spin)
+        to_layout.addStretch()
+        self._confirm_card.addLayout(to_layout)
+
+        layout.addWidget(self._card)
+        layout.addWidget(self._confirm_card)
         layout.addStretch()
+
+    def refresh_ui(self):
+        """语言切换时刷新所有 UI 文本。"""
+        self._card.title_label.setText(tr("settings.ai.title"))
+        self.check_inject_time.setText(tr("settings.ai.inject_time"))
+        self.check_expression_response.setText(tr("settings.ai.expression_response"))
+        self.check_enable_memory.setText(tr("settings.ai.enable_memory"))
+        self._confirm_card.title_label.setText(
+            tr("settings.ai.tool_confirm", default="工具操作确认")
+        )
+        self.check_tool_confirm.setText(
+            tr("settings.ai.tool_confirm_enable", default="启用高风险工具确认")
+        )
+
+
+class DataPathSettingsPage(QWidget):
+    """数据路径设置页面。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._settings_interface = parent
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(16)
+
+        # 当前数据路径卡片
+        self._path_card = SettingCard(tr("settings.data.title"), self)
+
+        self._path_label = BodyLabel("", self)
+        self._path_label.setWordWrap(True)
+        self._path_card.addWidget(self._path_label)
+
+        # 数据大小信息
+        info_layout = QHBoxLayout()
+        info_layout.setSpacing(16)
+
+        self._size_label = BodyLabel("", self)
+        info_layout.addWidget(self._size_label)
+        info_layout.addStretch()
+        self._path_card.addLayout(info_layout)
+
+        # 选择新路径按钮
+        btn_layout = QHBoxLayout()
+        self.btn_change_path = PushButton(FluentIcon.FOLDER, tr("settings.data.change_path"), self)
+        self.btn_change_path.setFixedWidth(160)
+        self.btn_change_path.clicked.connect(self._on_change_path)
+        btn_layout.addWidget(self.btn_change_path)
+
+        self.btn_reset_path = PushButton(FluentIcon.CANCEL, tr("settings.data.reset_path"), self)
+        self.btn_reset_path.setFixedWidth(160)
+        self.btn_reset_path.clicked.connect(self._on_reset_path)
+        btn_layout.addWidget(self.btn_reset_path)
+        btn_layout.addStretch()
+        self._path_card.addLayout(btn_layout)
+
+        layout.addWidget(self._path_card)
+
+        # 数据迁移卡片
+        self._migrate_card = SettingCard(tr("settings.data.migrate_title"), self)
+        self._migrate_card.setVisible(False)
+
+        self._migrate_desc = CaptionLabel(tr("settings.data.migrate_desc"), self)
+        self._migrate_desc.setWordWrap(True)
+        self._migrate_card.addWidget(self._migrate_desc)
+
+        migrate_btn_layout = QHBoxLayout()
+
+        self.btn_migrate_copy = PushButton(FluentIcon.SAVE, tr("settings.data.migrate_copy"), self)
+        self.btn_migrate_copy.setFixedWidth(200)
+        self.btn_migrate_copy.clicked.connect(self._on_migrate_copy)
+        migrate_btn_layout.addWidget(self.btn_migrate_copy)
+
+        self.btn_migrate_move = PushButton(FluentIcon.SEND, tr("settings.data.migrate_move"), self)
+        self.btn_migrate_move.setFixedWidth(200)
+        self.btn_migrate_move.clicked.connect(self._on_migrate_move)
+        migrate_btn_layout.addWidget(self.btn_migrate_move)
+
+        migrate_btn_layout.addStretch()
+        self._migrate_card.addLayout(migrate_btn_layout)
+
+        # 迁移进度标签
+        self._progress_label = CaptionLabel("", self)
+        self._progress_label.setVisible(False)
+        self._migrate_card.addWidget(self._progress_label)
+
+        layout.addWidget(self._migrate_card)
+
+        layout.addStretch()
+
+        # 初始化信息
+        self._new_data_dir = None
+        self._refresh_info()
+
+    def _refresh_info(self):
+        """刷新数据路径信息。"""
+        from src.core.database import get_user_data_dir
+        current_dir = get_user_data_dir()
+
+        self._path_label.setText(
+            tr("settings.data.current_path") + ": " + current_dir
+        )
+
+        # 获取数据大小
+        from src.core.data_migrator import DataMigrator
+        total_size, file_count = DataMigrator.get_total_data_size(current_dir)
+        self._size_label.setText(
+            tr("settings.data.data_size") + ": " +
+            tr("settings.data.total_size").format(
+                file_count=str(file_count),
+                size=DataMigrator.format_size(total_size)
+            )
+        )
+
+        # 检查迁移相关 UI
+        from src.core.app_config import get_data_dir
+        self._new_data_dir = get_data_dir()
+
+        if self._new_data_dir:
+            # 已设置了自定义路径
+            from src.core.data_migrator import get_default_data_dir
+            old_path = get_default_data_dir()
+            if old_path and DataMigrator.check_migration_needed(old_path, self._new_data_dir):
+                self._migrate_card.setVisible(True)
+                self._migrate_desc.setText(
+                    tr("settings.data.can_migrate").format(
+                        old=old_path, new=self._new_data_dir
+                    )
+                )
+            else:
+                self._migrate_card.setVisible(False)
+        else:
+            self._migrate_card.setVisible(False)
+
+    def _on_change_path(self):
+        """选择新的数据目录。"""
+        from PyQt5.QtWidgets import QFileDialog, QMessageBox
+
+        current_dir = self._get_current_dir()
+        new_dir = QFileDialog.getExistingDirectory(
+            self,
+            tr("settings.data.select_dir"),
+            current_dir,
+            QFileDialog.ShowDirsOnly
+        )
+
+        if not new_dir:
+            return
+
+        # 路径规范化
+        new_dir = os.path.normpath(new_dir)
+
+        from src.core.database import get_user_data_dir
+        if os.path.normpath(new_dir) == os.path.normpath(get_user_data_dir()):
+            InfoBar.warning(
+                tr("settings.data.same_path"),
+                tr("settings.data.same_path_desc"),
+                duration=3000
+            )
+            return
+
+        from src.core.data_migrator import DataMigrator, get_default_data_dir
+        old_path = get_default_data_dir()
+
+        # 检查是否需要迁移
+        if old_path and DataMigrator.check_migration_needed(old_path, new_dir):
+            reply = QMessageBox.question(
+                self,
+                tr("settings.data.migrate_confirm_title"),
+                tr("settings.data.migrate_confirm_msg").format(new=new_dir),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.No:
+                return
+
+        # 保存配置
+        from src.core.app_config import set_data_dir
+        set_data_dir(new_dir)
+
+        InfoBar.success(
+            tr("settings.data.path_saved"),
+            tr("settings.data.path_saved_desc").format(path=new_dir),
+            duration=5000
+        )
+
+        self._refresh_info()
+
+    def _on_reset_path(self):
+        """恢复默认数据目录。"""
+        from PyQt5.QtWidgets import QMessageBox
+        from src.core.data_migrator import DataMigrator, get_default_data_dir
+        from src.core.app_config import get_data_dir, clear_data_dir
+
+        custom_dir = get_data_dir()
+        if not custom_dir:
+            InfoBar.warning(
+                tr("settings.data.already_default"),
+                tr("settings.data.already_default_desc"),
+                duration=3000
+            )
+            return
+
+        reply = QMessageBox.question(
+            self,
+            tr("settings.data.reset_confirm_title"),
+            tr("settings.data.reset_confirm_msg"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.No:
+            return
+
+        # 检查是否需要把自定义路径的数据迁回默认路径
+        default_path = get_default_data_dir()
+        if DataMigrator.check_migration_needed(custom_dir, default_path):
+            reply2 = QMessageBox.question(
+                self,
+                tr("settings.data.migrate_back_title"),
+                tr("settings.data.migrate_back_msg").format(new=default_path),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply2 == QMessageBox.Yes:
+                success, errors = DataMigrator.migrate(custom_dir, default_path, method="copy")
+                if errors:
+                    InfoBar.warning(
+                        tr("settings.data.migrate_partial"),
+                        f"成功: {success}, 错误: {len(errors)} 项",
+                        duration=5000
+                    )
+                else:
+                    InfoBar.success(
+                        tr("settings.data.migrate_done"),
+                        tr("settings.data.migrate_done_desc"),
+                        duration=3000
+                    )
+
+        clear_data_dir()
+        InfoBar.success(
+            tr("settings.data.reset_done"),
+            tr("settings.data.reset_done_desc"),
+            duration=5000
+        )
+
+        self._refresh_info()
+
+    def _on_migrate_copy(self):
+        """复制数据到新路径。"""
+        self._do_migrate("copy")
+
+    def _on_migrate_move(self):
+        """移动数据到新路径。"""
+        from PyQt5.QtWidgets import QMessageBox
+
+        reply = QMessageBox.warning(
+            self,
+            tr("settings.data.move_warning_title"),
+            tr("settings.data.move_warning_msg"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self._do_migrate("move")
+
+    def _do_migrate(self, method: str):
+        """执行数据迁移。"""
+        from src.core.data_migrator import DataMigrator, get_default_data_dir
+
+        old_path = get_default_data_dir()
+        new_path = self._new_data_dir
+
+        if not old_path or not new_path:
+            return
+
+        self._progress_label.setVisible(True)
+        self._progress_label.setText(tr("settings.data.migrating"))
+        self.btn_migrate_copy.setEnabled(False)
+        self.btn_migrate_move.setEnabled(False)
+
+        def progress_callback(current, total, item_name):
+            self._progress_label.setText(
+                tr("settings.data.migrating") +
+                f" ({current}/{total}) {item_name}"
+            )
+
+        # 在后台线程执行迁移
+        from PyQt5.QtCore import QThread, pyqtSignal
+
+        class MigrateThread(QThread):
+            finished_signal = pyqtSignal(int, list)
+
+            def __init__(self, old, new, method, callback):
+                super().__init__()
+                self.old = old
+                self.new = new
+                self.method = method
+                self.callback = callback
+
+            def run(self):
+                success, errors = DataMigrator.migrate(
+                    self.old, self.new, self.method, self.callback
+                )
+                self.finished_signal.emit(success, errors)
+
+        self._migrate_thread = MigrateThread(
+            old_path, new_path, method,
+            lambda c, t, i: progress_callback(c, t, i)
+        )
+        self._migrate_thread.finished_signal.connect(
+            lambda s, e: self._on_migrate_finished(s, e)
+        )
+        self._migrate_thread.start()
+
+    def _on_migrate_finished(self, success: int, errors: list):
+        """迁移完成回调。"""
+        self._progress_label.setVisible(False)
+        self.btn_migrate_copy.setEnabled(True)
+        self.btn_migrate_move.setEnabled(True)
+
+        if errors:
+            error_msg = "\n".join(errors[:5])
+            if len(errors) > 5:
+                error_msg += f"\n... 还有 {len(errors) - 5} 个错误"
+            InfoBar.warning(
+                tr("settings.data.migrate_partial"),
+                tr("settings.data.migrate_partial_desc").format(
+                    success=str(success), total=str(len(errors))
+                ),
+                duration=5000
+            )
+        else:
+            InfoBar.success(
+                tr("settings.data.migrate_done"),
+                tr("settings.data.migrate_done_desc"),
+                duration=3000
+            )
+
+        self._refresh_info()
+
+    def _get_current_dir(self) -> str:
+        from src.core.database import get_user_data_dir
+        return get_user_data_dir()
+
+    def refresh_ui(self):
+        """语言切换时刷新 UI 文本。"""
+        self._path_card.title_label.setText(tr("settings.data.title"))
+        self.btn_change_path.setText(tr("settings.data.change_path"))
+        self.btn_reset_path.setText(tr("settings.data.reset_path"))
+        self._migrate_card.title_label.setText(tr("settings.data.migrate_title"))
+        self.btn_migrate_copy.setText(tr("settings.data.migrate_copy"))
+        self.btn_migrate_move.setText(tr("settings.data.migrate_move"))
+        self._refresh_info()
 
 
 class SettingsInterface(ScrollArea):
@@ -641,8 +1151,8 @@ class SettingsInterface(ScrollArea):
         main_layout.setContentsMargins(36, 36, 36, 36)
         main_layout.setSpacing(20)
         
-        title = TitleLabel("软件设置", self.view)
-        main_layout.addWidget(title)
+        self._title = TitleLabel(tr("settings.title"), self.view)
+        main_layout.addWidget(self._title)
         
         self.pivot = Pivot(self.view)
         self.pivot.setFixedHeight(40)
@@ -655,25 +1165,53 @@ class SettingsInterface(ScrollArea):
         self.display_page = DisplaySettingsPage(self)
         self.sound_page = SoundSettingsPage(self)
         self.ai_page = AISettingsPage(self)
+        self.data_page = DataPathSettingsPage(self)
         
         self.stacked_widget.addWidget(self.general_page)
         self.stacked_widget.addWidget(self.display_page)
         self.stacked_widget.addWidget(self.sound_page)
         self.stacked_widget.addWidget(self.ai_page)
+        self.stacked_widget.addWidget(self.data_page)
         
-        self.pivot.addItem(routeKey="general", text="⚙️ 常规", 
+        self.pivot.addItem(routeKey="general", text="\u2699\ufe0f " + tr("settings.tab.general"), 
                           onClick=lambda: self.stacked_widget.setCurrentWidget(self.general_page))
-        self.pivot.addItem(routeKey="display", text="🖥️ 显示", 
+        self.pivot.addItem(routeKey="display", text="\ud83d\udda5\ufe0f " + tr("settings.tab.display"), 
                           onClick=lambda: self.stacked_widget.setCurrentWidget(self.display_page))
-        self.pivot.addItem(routeKey="sound", text="🔊 声音", 
+        self.pivot.addItem(routeKey="sound", text="\ud83d\udd0a " + tr("settings.tab.sound"), 
                           onClick=lambda: self.stacked_widget.setCurrentWidget(self.sound_page))
-        self.pivot.addItem(routeKey="ai", text="🤖 AI", 
+        self.pivot.addItem(routeKey="ai", text="\ud83e\udd16 " + tr("settings.tab.ai"), 
                           onClick=lambda: self.stacked_widget.setCurrentWidget(self.ai_page))
+        self.pivot.addItem(routeKey="data", text="\ud83d\udcc1 " + tr("settings.tab.data"), 
+                          onClick=lambda: self.stacked_widget.setCurrentWidget(self.data_page))
         
         self.pivot.setCurrentItem("general")
         
         self.connect_signals()
         self.load_settings()
+
+        # 监听语言切换
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self._on_language_changed)
+
+    def _on_language_changed(self, lang_code: str):
+        """语言切换时刷新整个设置界面。"""
+        logger.info(f"[I18n] SettingsInterface._on_language_changed: lang_code={lang_code}")
+        # 刷新标题
+        self._title.setText(tr("settings.title"))
+        # 刷新 Pivot 标签（PivotItem 是 PushButton，直接 setText）
+        self.pivot.items["general"].setText("\u2699\ufe0f " + tr("settings.tab.general"))
+        self.pivot.items["display"].setText("\ud83d\udda5\ufe0f " + tr("settings.tab.display"))
+        self.pivot.items["sound"].setText("\ud83d\udd0a " + tr("settings.tab.sound"))
+        self.pivot.items["ai"].setText("\ud83e\udd16 " + tr("settings.tab.ai"))
+        self.pivot.items["data"].setText("\ud83d\udcc1 " + tr("settings.tab.data"))
+        # 刷新各子页面
+        logger.info(f"[I18n] Refreshing sub-pages...")
+        self.general_page.refresh_ui()
+        self.display_page.refresh_ui()
+        self.sound_page.refresh_ui()
+        self.ai_page.refresh_ui()
+        self.data_page.refresh_ui()
+        logger.info(f"[I18n] SettingsInterface refresh complete")
 
     def connect_signals(self):
         self.general_page.check_autorun.stateChanged.connect(self.on_autorun_changed)
@@ -681,32 +1219,46 @@ class SettingsInterface(ScrollArea):
         self.general_page.check_mouse_interact.stateChanged.connect(self.on_mouse_interact_changed)
         
         self.display_page.check_show_pet_status.stateChanged.connect(self.on_show_pet_status_changed)
-        self.display_page.sliders["模型缩放"].valueChanged.connect(self.on_scale_changed)
-        self.display_page.sliders["窗口透明度"].valueChanged.connect(self.on_window_opacity_changed)
-        self.display_page.sliders["气泡显示时长"].valueChanged.connect(self.on_bubble_duration_changed)
+        self.display_page.sliders["settings.display.model_scale"].valueChanged.connect(self.on_scale_changed)
+        self.display_page.sliders["settings.display.window_opacity"].valueChanged.connect(self.on_window_opacity_changed)
+        self.display_page.sliders["settings.display.bubble_duration"].valueChanged.connect(self.on_bubble_duration_changed)
         self.display_page.aspect_combo.currentIndexChanged.connect(self.on_aspect_ratio_changed)
         self.display_page.width_spin.valueChanged.connect(self.on_custom_aspect_changed)
         self.display_page.height_spin.valueChanged.connect(self.on_custom_aspect_changed)
         
         self.display_page.check_system_monitor.stateChanged.connect(self.on_system_monitor_changed)
-        self.display_page.sliders["CPU 告警阈值"].valueChanged.connect(self.on_cpu_threshold_changed)
-        self.display_page.sliders["内存告警阈值"].valueChanged.connect(self.on_mem_threshold_changed)
+        self.display_page.sliders["settings.display.cpu_threshold"].valueChanged.connect(self.on_cpu_threshold_changed)
+        self.display_page.sliders["settings.display.mem_threshold"].valueChanged.connect(self.on_mem_threshold_changed)
 
-        self.sound_page.sliders["TTS 音量"].valueChanged.connect(self.on_volume_changed)
+        self.sound_page.sliders["settings.sound.tts_volume"].valueChanged.connect(self.on_volume_changed)
         
         self.ai_page.check_inject_time.stateChanged.connect(self.on_inject_time_changed)
         self.ai_page.check_expression_response.stateChanged.connect(self.on_expression_response_changed)
         self.ai_page.check_enable_memory.stateChanged.connect(self.on_enable_memory_changed)
         self.ai_page.sliders["memory_max_count"].valueChanged.connect(self.on_memory_max_count_changed)
-        self.ai_page.sliders["LLM 最大输出长度"].valueChanged.connect(self.on_max_tokens_changed)
+
+        self.ai_page.check_tool_confirm.stateChanged.connect(self.on_tool_confirm_changed)
+        self.ai_page.threshold_combo.currentIndexChanged.connect(self.on_confirm_threshold_changed)
+        self.ai_page.timeout_spin.valueChanged.connect(self.on_confirm_timeout_changed)
 
     def set_live2d_widget(self, widget):
         self.live2d_widget = widget
-        self.on_scale_changed(self.display_page.sliders["模型缩放"].value())
+        self.on_scale_changed(self.display_page.sliders["settings.display.model_scale"].value())
         self.on_mouse_interact_changed(self.general_page.check_mouse_interact.isChecked())
 
     def update_theme(self):
         pass
+
+    def _sync_live2d_config_to_db(self, scale=None):
+        """同步 Live2D 缩放/宽高比配置到数据库。"""
+        if not self.live2d_widget:
+            return
+        if scale is None:
+            scale = self.display_page.sliders["settings.display.model_scale"].value()
+        aspect_index = self.display_page.aspect_combo.currentIndex()
+        custom_w = self.display_page.width_spin.value()
+        custom_h = self.display_page.height_spin.value()
+        self.live2d_widget.save_size_to_db(scale, aspect_index, custom_w, custom_h)
 
     def on_scale_changed(self, value):
         scale = value / 100.0
@@ -715,6 +1267,8 @@ class SettingsInterface(ScrollArea):
             new_w = int(width * scale)
             new_h = int(height * scale)
             self.live2d_widget.resize(new_w, new_h)
+            # 同步写入数据库
+            self._sync_live2d_config_to_db(value)
         self.settings.setValue("scale", value)
 
     def on_window_opacity_changed(self, value):
@@ -801,7 +1355,7 @@ class SettingsInterface(ScrollArea):
             return
         
         width, height = self.display_page.get_current_aspect_ratio()
-        scale = self.display_page.sliders["模型缩放"].value() / 100.0
+        scale = self.display_page.sliders["settings.display.model_scale"].value() / 100.0
         
         final_width = int(width * scale)
         final_height = int(height * scale)
@@ -818,20 +1372,34 @@ class SettingsInterface(ScrollArea):
             self.settings.setValue("custom_aspect_width", width)
             self.settings.setValue("custom_aspect_height", height)
 
+        # 同步写入数据库
+        self._sync_live2d_config_to_db()
+
     def on_inject_time_changed(self, checked):
         self.settings.setValue("inject_time", checked)
 
     def on_expression_response_changed(self, checked):
         self.settings.setValue("enable_expression_response", checked)
 
-    def on_max_tokens_changed(self, value):
-        self.settings.setValue("llm_max_tokens", value)
-
     def on_enable_memory_changed(self, checked):
         self.settings.setValue("enable_memory", checked)
 
     def on_memory_max_count_changed(self, value):
         self.settings.setValue("memory_max_count", value)
+
+    def on_tool_confirm_changed(self, checked):
+        self.settings.setValue("tool_confirm_enabled", checked)
+        # 启用/禁用阈值和超时输入
+        self.ai_page.threshold_combo.setEnabled(checked)
+        self.ai_page.timeout_spin.setEnabled(checked)
+
+    def on_confirm_threshold_changed(self, index):
+        val = self.ai_page.threshold_combo.itemData(index)
+        if val:
+            self.settings.setValue("tool_confirm_threshold", val)
+
+    def on_confirm_timeout_changed(self, value):
+        self.settings.setValue("tool_confirm_timeout", value)
 
     def on_autorun_changed(self, checked):
         from src.core.platform_integration import set_autorun_enabled
@@ -841,9 +1409,12 @@ class SettingsInterface(ScrollArea):
             self.settings.setValue("autorun", checked)
             logger.info(message)
         else:
-            self.general_page.check_autorun.blockSignals(True)
-            self.general_page.check_autorun.setChecked(not checked)
-            self.general_page.check_autorun.blockSignals(False)
+            try:
+                self.general_page.check_autorun.blockSignals(True)
+                self.general_page.check_autorun.setChecked(not checked)
+                self.general_page.check_autorun.blockSignals(False)
+            except Exception:
+                pass
             logger.warning(message)
 
     def on_hide_pet_on_startup_changed(self, checked):
@@ -858,7 +1429,6 @@ class SettingsInterface(ScrollArea):
         hide_pet_on_startup = self.settings.value("hide_pet_on_startup", False, type=bool)
         inject_time = self.settings.value("inject_time", False, type=bool)
         expression_response = self.settings.value("enable_expression_response", True, type=bool)
-        llm_max_tokens = self.settings.value("llm_max_tokens", 8192, type=int)
         show_pet_status = self.settings.value("show_pet_status", True, type=bool)
         system_monitor_enabled = self.settings.value("system_monitor_enabled", True, type=bool)
         cpu_threshold = self.settings.value("cpu_threshold", 70, type=int)
@@ -873,28 +1443,39 @@ class SettingsInterface(ScrollArea):
         self.general_page.check_mouse_interact.setChecked(mouse_interact)
         
         self.display_page.check_show_pet_status.setChecked(show_pet_status)
-        self.display_page.sliders["模型缩放"].setValue(scale)
+        self.display_page.sliders["settings.display.model_scale"].setValue(scale)
         window_opacity = self.settings.value("window_opacity", 100, type=int)
-        self.display_page.sliders["窗口透明度"].setValue(window_opacity)
-        self.display_page.sliders["气泡显示时长"].setValue(bubble_duration)
+        self.display_page.sliders["settings.display.window_opacity"].setValue(window_opacity)
+        self.display_page.sliders["settings.display.bubble_duration"].setValue(bubble_duration)
         self.display_page.check_system_monitor.setChecked(system_monitor_enabled)
-        self.display_page.sliders["CPU 告警阈值"].setValue(cpu_threshold)
-        self.display_page.sliders["内存告警阈值"].setValue(mem_threshold)
+        self.display_page.sliders["settings.display.cpu_threshold"].setValue(cpu_threshold)
+        self.display_page.sliders["settings.display.mem_threshold"].setValue(mem_threshold)
         
         self.display_page.aspect_combo.setCurrentIndex(aspect_ratio_index)
         self.display_page.width_spin.setValue(custom_aspect_width)
         self.display_page.height_spin.setValue(custom_aspect_height)
         
-        self.sound_page.sliders["TTS 音量"].setValue(volume)
+        self.sound_page.sliders["settings.sound.tts_volume"].setValue(volume)
         
         self.ai_page.check_inject_time.setChecked(inject_time)
         self.ai_page.check_expression_response.setChecked(expression_response)
-        self.ai_page.sliders["LLM 最大输出长度"].setValue(llm_max_tokens)
-
         enable_memory = self.settings.value("enable_memory", True, type=bool)
         memory_max_count = self.settings.value("memory_max_count", 10, type=int)
         self.ai_page.check_enable_memory.setChecked(enable_memory)
         self.ai_page.sliders["memory_max_count"].setValue(memory_max_count)
+
+        # 工具确认设置
+        tool_confirm_enabled = self.settings.value("tool_confirm_enabled", True, type=bool)
+        tool_confirm_threshold = self.settings.value("tool_confirm_threshold", "medium", type=str)
+        tool_confirm_timeout = self.settings.value("tool_confirm_timeout", 30, type=int)
+        self.ai_page.check_tool_confirm.setChecked(tool_confirm_enabled)
+        for i in range(self.ai_page.threshold_combo.count()):
+            if self.ai_page.threshold_combo.itemData(i) == tool_confirm_threshold:
+                self.ai_page.threshold_combo.setCurrentIndex(i)
+                break
+        self.ai_page.timeout_spin.setValue(tool_confirm_timeout)
+        self.ai_page.threshold_combo.setEnabled(tool_confirm_enabled)
+        self.ai_page.timeout_spin.setEnabled(tool_confirm_enabled)
 
         self._init_font_buttons_style()
 

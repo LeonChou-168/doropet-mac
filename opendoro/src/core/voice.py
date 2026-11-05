@@ -3,10 +3,23 @@ import queue
 import sys
 import numpy as np
 import sounddevice as sd
-import sherpa_onnx
-import sentencepiece as spm
 from PyQt5.QtCore import QThread, pyqtSignal, QObject
+
 from src.core.platform_paths import get_voice_models_dir, is_macos
+
+try:
+    import sherpa_onnx
+    _SHERPA_ONNX_AVAILABLE = True
+except ImportError:
+    sherpa_onnx = None
+    _SHERPA_ONNX_AVAILABLE = False
+
+try:
+    import sentencepiece as spm
+    _SPM_AVAILABLE = True
+except ImportError:
+    spm = None
+    _SPM_AVAILABLE = False
 
 class VoiceAssistant(QThread):
     wake_detected = pyqtSignal()
@@ -35,6 +48,8 @@ class VoiceAssistant(QThread):
         # Models will be loaded in run()
 
     def update_keywords_file(self):
+        if not _SPM_AVAILABLE:
+            return
         if not os.path.exists(self.kws_model_dir):
             return
             
@@ -112,6 +127,11 @@ class VoiceAssistant(QThread):
     def run(self):
         self.running = True
         
+        if not _SHERPA_ONNX_AVAILABLE:
+            self.error_occurred.emit("Voice model error: sherpa_onnx is not available (DLL load failed).")
+            self.running = False
+            return
+
         # Load settings from DB if available
         if self.db:
             try:

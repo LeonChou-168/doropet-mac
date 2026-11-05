@@ -15,11 +15,18 @@ from pathlib import Path
 import requests
 
 from src.core.logger import logger
-from src.core.platform_paths import get_app_root, get_user_skills_dir, is_windows
+from src.core.platform_paths import get_app_root, is_windows
 
 BASE_DIR = get_app_root()
 BUILTIN_SKILLS_DIR = os.path.join(BASE_DIR, "src", "skills")
-USER_SKILLS_DIR = get_user_skills_dir()
+
+
+def _get_user_data_dir():
+    from src.core.database import get_user_data_dir as _gud
+    return _gud()
+
+
+USER_SKILLS_DIR = os.path.join(_get_user_data_dir(), "skills")
 
 
 class SkillType(Enum):

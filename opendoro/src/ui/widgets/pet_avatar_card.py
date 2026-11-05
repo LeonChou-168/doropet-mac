@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QProgress
 from PyQt5.QtGui import QPixmap, QFont
 
 from qfluentwidgets import CardWidget
+from src.core.i18n import I18nManager, tr
 
 
 class PetAvatarCard(CardWidget):
@@ -14,6 +15,9 @@ class PetAvatarCard(CardWidget):
         self.attr_manager = attr_manager
         self._current_attributes = {}
         self._avatar_path = self._get_avatar_path()
+
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
 
         self._init_ui()
         self._connect_signals()
@@ -71,14 +75,14 @@ class PetAvatarCard(CardWidget):
         self.quote_label.setObjectName("petAvatarQuoteLabel")
         self.quote_label.setWordWrap(True)
         self.quote_label.setAlignment(Qt.AlignCenter)
-        self.quote_label.setText("今天心情怎么样呢？")
+        self.quote_label.setText(tr("widget.pet_avatar.default_quote", default="今天心情怎么样呢？"))
 
         bubble_layout.addWidget(self.quote_label)
 
         self.status_label = QLabel()
         self.status_label.setObjectName("petAvatarStatusLabel")
         self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setText("状态良好")
+        self.status_label.setText(tr("widget.pet_avatar.default_status", default="状态良好"))
 
         system_section = QWidget()
         system_layout = QHBoxLayout(system_section)
@@ -256,3 +260,8 @@ class PetAvatarCard(CardWidget):
 
     def update_theme(self, is_dark: bool):
         self._update_system_info()
+
+    def refresh_ui(self, lang_code: str = None):
+        """语言切换时刷新 UI 文本。"""
+        self.quote_label.setText(tr("widget.pet_avatar.default_quote", default="今天心情怎么样呢？"))
+        self.status_label.setText(tr("widget.pet_avatar.default_status", default="状态良好"))

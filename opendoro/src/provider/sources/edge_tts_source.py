@@ -3,7 +3,7 @@ import tempfile
 from typing import Optional, List, Dict
 from ..provider import TTSProvider
 from ..entities import TTSResponse, ProviderConfig, ProviderType
-from ..register import register_provider_adapter, TTS_CONFIG_FIELDS
+from ..register import register_provider_adapter, EDGE_TTS_CONFIG_FIELDS
 from src.core.logger import logger
 
 try:
@@ -22,7 +22,7 @@ except ImportError:
         "voice": "zh-CN-XiaoxiaoNeural",
     },
     provider_display_name="Edge TTS",
-    config_fields=TTS_CONFIG_FIELDS
+    config_fields=EDGE_TTS_CONFIG_FIELDS
 )
 class ProviderEdgeTTS(TTSProvider):
     DEFAULT_VOICES = [

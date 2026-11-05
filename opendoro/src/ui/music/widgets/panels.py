@@ -9,6 +9,7 @@ from PyQt5.QtGui import QColor, QPainter, QLinearGradient, QPen, QBrush, QPainte
 from qfluentwidgets import (CardWidget, TransparentToolButton, ListWidget, 
                            StrongBodyLabel, FluentIcon as FIF, isDarkTheme)
 
+from src.core.i18n import tr
 from ..constants import PlaylistConstants, PlayerConstants
 from .song_list_item import SongListItemWidget
 
@@ -391,7 +392,7 @@ class DockablePlaylistWidget(QWidget):
         header_layout.setContentsMargins(20, 16, 12, 12)
         header_layout.setSpacing(8)
         
-        title_label = StrongBodyLabel("播放列表")
+        title_label = StrongBodyLabel(tr("music.panel.playlist", default="播放列表"))
         title_label.setObjectName("playlistDockTitle")
         header_layout.addWidget(title_label)
         
@@ -405,13 +406,13 @@ class DockablePlaylistWidget(QWidget):
         
         clear_btn = TransparentToolButton(FIF.DELETE, self)
         clear_btn.setFixedSize(28, 28)
-        clear_btn.setToolTip("清空播放列表")
+        clear_btn.setToolTip(tr("music.panel.clear_tip", default="清空播放列表"))
         clear_btn.clicked.connect(self.clear_all_clicked.emit)
         header_layout.addWidget(clear_btn)
         
         close_btn = TransparentToolButton(FIF.CLOSE, self)
         close_btn.setFixedSize(28, 28)
-        close_btn.setToolTip("关闭")
+        close_btn.setToolTip(tr("music.panel.close_tip", default="关闭"))
         close_btn.clicked.connect(self.hide_dock)
         header_layout.addWidget(close_btn)
         
@@ -424,7 +425,7 @@ class DockablePlaylistWidget(QWidget):
         info_layout.setContentsMargins(20, 6, 20, 6)
         info_layout.setSpacing(8)
         
-        self._info_label = QLabel("播放队列为空")
+        self._info_label = QLabel(tr("music.panel.empty_queue", default="播放队列为空"))
         self._info_label.setObjectName("musicTimeLabel")
         info_layout.addWidget(self._info_label)
         
@@ -541,7 +542,7 @@ class DockablePlaylistWidget(QWidget):
         self._count_badge.setText(str(count))
         
         if count == 0:
-            self._info_label.setText("播放队列为空")
+            self._info_label.setText(tr("music.panel.empty_queue", default="播放队列为空"))
             self._total_duration_label.setText("")
         else:
             total_seconds = 0
@@ -554,13 +555,13 @@ class DockablePlaylistWidget(QWidget):
             if total_seconds > 3600:
                 total_h = total_min // 60
                 total_m = total_min % 60
-                self._info_label.setText(f"共 {count} 首")
-                self._total_duration_label.setText(f"{total_h}小时{total_m}分钟")
+                self._info_label.setText(tr("music.panel.song_count", default="共 {count} 首").format(count=count))
+                self._total_duration_label.setText(tr("music.panel.duration_format", default="{total_h}小时{total_m}分钟").format(total_h=total_h, total_m=total_m))
             elif total_min > 0:
-                self._info_label.setText(f"共 {count} 首")
-                self._total_duration_label.setText(f"{total_min} 分钟")
+                self._info_label.setText(tr("music.panel.song_count", default="共 {count} 首").format(count=count))
+                self._total_duration_label.setText(tr("music.panel.duration_minutes", default="{total_min} 分钟").format(total_min=total_min))
             else:
-                self._info_label.setText(f"共 {count} 首")
+                self._info_label.setText(tr("music.panel.song_count", default="共 {count} 首").format(count=count))
                 self._total_duration_label.setText("")
         
         for i, song in enumerate(songs):

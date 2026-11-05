@@ -24,7 +24,8 @@ class AttachmentStorage:
         if self._initialized:
             return
         self._initialized = True
-        self.root = get_attachments_dir()
+        from src.core.database import get_user_data_dir
+        self.root = os.path.join(get_user_data_dir(), "attachments")
         os.makedirs(self.root, exist_ok=True)
 
     @classmethod

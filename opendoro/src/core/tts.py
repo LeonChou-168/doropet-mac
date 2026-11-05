@@ -1,7 +1,10 @@
 import os
 import hashlib
+import re
+import emoji
 import requests
 import json
+import base64
 import shutil
 import threading
 import tempfile
@@ -28,6 +31,8 @@ except ImportError:
     HAS_GOOGLE_GENAI = False
     genai = None
     types = None
+
+from src.core.database import get_user_data_dir
 
 class EdgeTTSWorker(QThread):
     finished = pyqtSignal(str)
@@ -404,6 +409,112 @@ class GeminiTTSWorker(QThread):
             self.error.emit(str(e))
 
 
+class MimoTTSWorker(QThread):
+    """小米 MiMo TTS Worker — 使用 OpenAI SDK 调用 chat/completions 端点。"""
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(self, api_key, base_url, model, voice, text, cache_path):
+        super().__init__()
+        self.api_key = api_key
+        self.base_url = base_url
+        self.model = model
+        self.voice = voice
+        self.text = text
+        self.cache_path = cache_path
+
+    def run(self):
+        try:
+            cache_path_wav = os.path.splitext(self.cache_path)[0] + '.wav'
+            if os.path.exists(cache_path_wav):
+                self.finished.emit(cache_path_wav)
+                return
+
+            try:
+                from openai import OpenAI
+            except ImportError:
+                self.error.emit("openai 未安装，请运行：pip install openai")
+                return
+
+            api_key = self.api_key or os.environ.get("MIMO_API_KEY", "")
+            if not api_key:
+                self.error.emit("请配置 MiMo API Key 或设置环境变量 MIMO_API_KEY")
+                return
+
+            base_url = self.base_url or "https://api.xiaomimimo.com/v1"
+            model = self.model or "mimo-v2.5-tts"
+            voice = self.voice or ""
+
+            is_voice_design = "voicedesign" in model.lower()
+
+            client = OpenAI(api_key=api_key, base_url=base_url)
+
+            # 构造 messages
+            messages = []
+            if is_voice_design:
+                voice_prompt = voice or "Give me a natural, clear voice."
+                messages.append({"role": "user", "content": voice_prompt})
+            # 预置音色模式不传 user 消息
+
+            messages.append({"role": "assistant", "content": self.text})
+
+            # 构造 audio 参数
+            audio_params = {"format": "wav"}
+            if not is_voice_design:
+                audio_params["voice"] = voice if voice else "mimo_default"
+            else:
+                audio_params["optimize_text_preview"] = True
+
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                audio=audio_params
+            )
+
+            message = response.choices[0].message
+            if not hasattr(message, 'audio') or not message.audio:
+                self.error.emit("MiMo TTS 未返回音频数据")
+                return
+
+            audio_bytes = base64.b64decode(message.audio.data)
+
+            os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
+            with open(cache_path_wav, 'wb') as f:
+                f.write(audio_bytes)
+
+            self.finished.emit(cache_path_wav)
+
+        except Exception as e:
+            logger.error(f"MiMo TTS 错误: {e}")
+            self.error.emit(str(e))
+
+
+def _clean_markdown_for_tts(text: str) -> str:
+    """清理 Markdown 格式和 Emoji，生成适合 TTS 朗读的纯文本。"""
+    if not text:
+        return ""
+    t = text
+    t = emoji.replace_emoji(t, '')
+    t = re.sub(r'<thinking>.*?</thinking>', '', t, flags=re.DOTALL)
+    t = re.sub(r'!\[.*?\]\([^)]*\)', '', t)
+    t = re.sub(r'<[^>]+>', ' ', t)
+    t = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', t)
+    t = re.sub(r'```[^`]*```', '', t, flags=re.DOTALL)
+    t = re.sub(r'`([^`]+)`', r'\1', t)
+    t = re.sub(r'^[-*_]{3,}\s*$', '', t, flags=re.MULTILINE)
+    t = re.sub(r'\*\*([^*]+)\*\*', r'\1', t)
+    t = re.sub(r'__([^_]+)__', r'\1', t)
+    t = re.sub(r'\*([^*]+)\*', r'\1', t)
+    t = re.sub(r'_([^_]+)_', r'\1', t)
+    t = re.sub(r'^#{1,6}\s+', '', t, flags=re.MULTILINE)
+    t = re.sub(r'^[\s]*[-*+]\s+', '', t, flags=re.MULTILINE)
+    t = re.sub(r'^[\s]*\d+\.\s+', '', t, flags=re.MULTILINE)
+    t = re.sub(r'\|[^\n]*\|', '', t)
+    t = re.sub(r'\n{3,}', '\n\n', t)
+    t = re.sub(r'^>\s?', '', t, flags=re.MULTILINE)
+    return t.strip()
+
+
 class TTSManager(QObject):
     playback_started = pyqtSignal(int)
     playback_stopped = pyqtSignal(int)
@@ -443,6 +554,10 @@ class TTSManager(QObject):
             self._max_retries = 3
         
     def speak(self, msg_id, text, force_restart=False):
+        text = _clean_markdown_for_tts(text)
+        if not text:
+            return
+
         if self._use_pygame and pygame.mixer.music.get_busy():
             pygame.mixer.music.stop()
             self._pygame_playing = False
@@ -462,17 +577,30 @@ class TTSManager(QObject):
             self.current_msg_id = None
             return
         
-        if len(config) >= 12:
+        if len(config) >= 13:
+            provider_id, _, provider, api_key, base_url, model_name, voice, _, proxy, api_name, prompt_audio, prompt_text, extra_config_str = config
+        elif len(config) >= 12:
             provider_id, _, provider, api_key, base_url, model_name, voice, _, proxy, api_name, prompt_audio, prompt_text = config
+            extra_config_str = "{}"
         elif len(config) >= 9:
             provider_id, _, provider, api_key, base_url, model_name, voice, _, api_name = config[:9]
             prompt_audio = ""
             prompt_text = ""
+            extra_config_str = "{}"
         else:
             provider_id, _, provider, api_key, base_url, model_name, voice, _ = config[:8]
             api_name = "/tts_request"
             prompt_audio = ""
             prompt_text = ""
+            extra_config_str = "{}"
+
+        # 解析 extra_config 获取 provider 专属字段
+        extra_config = {}
+        if extra_config_str:
+            try:
+                extra_config = json.loads(extra_config_str)
+            except (json.JSONDecodeError, TypeError):
+                pass
         
         content_hash = hashlib.md5(f"{text}{provider}{voice}".encode()).hexdigest()
         cache_base = os.path.join(self.cache_dir, content_hash)
@@ -491,11 +619,20 @@ class TTSManager(QObject):
             if provider == "edge_tts":
                 self.worker = EdgeTTSWorker(voice or "zh-CN-XiaoxiaoNeural", text, file_path)
             elif provider == "gradio_tts":
-                self.worker = GradioTTSWorker(base_url, voice, api_name, text, file_path, prompt_audio, prompt_text)
+                self.worker = GradioTTSWorker(
+                    base_url,
+                    voice,
+                    extra_config.get("api_name", api_name),
+                    text, file_path,
+                    extra_config.get("prompt_audio", prompt_audio),
+                    extra_config.get("prompt_text", prompt_text)
+                )
             elif provider == "qwen_tts":
                 self.worker = QwenTTSWorker(api_key, base_url, model_name, voice, text, file_path)
             elif provider == "gemini_tts":
                 self.worker = GeminiTTSWorker(api_key, model_name, voice, text, file_path)
+            elif provider == "mimo_tts":
+                self.worker = MimoTTSWorker(api_key, base_url, model_name, voice, text, file_path)
             else:
                 self.worker = OpenAITTSWorker(api_key, base_url, model_name, voice, text, file_path)
             

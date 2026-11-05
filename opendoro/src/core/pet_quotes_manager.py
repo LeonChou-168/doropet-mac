@@ -7,6 +7,7 @@ from src.core.pet_constants import (
     ATTR_HUNGER, ATTR_MOOD, ATTR_CLEANLINESS, ATTR_ENERGY,
     ATTR_NAMES, STATUS_THRESHOLDS
 )
+from src.core.i18n import tr
 
 
 class PetQuotesManager(QObject):
@@ -212,13 +213,20 @@ class PetQuotesManager(QObject):
                     return period
         return "morning"
 
+    def _quote_key(self, attr: str, status: str, index: int) -> str:
+        return f"pet.quote.{attr}.{status}.{index}"
+
+    def _special_quote_key(self, group: str, index: int) -> str:
+        return f"pet.quote.special.{group}.{index}"
+
     def get_greeting(self) -> str:
         period = self.get_time_period()
         greeting_info = self.TIME_GREETINGS.get(period, self.TIME_GREETINGS["morning"])
-        greeting_text = greeting_info[0]
         sub_quotes = greeting_info[2]
-        sub_greeting = random.choice(sub_quotes)
-        return f"{greeting_text}！{sub_greeting}"
+        sub_index = random.randrange(len(sub_quotes))
+        greeting_text = tr(f"pet.greeting.{period}.title", default=greeting_info[0])
+        sub_greeting = tr(f"pet.greeting.{period}.quote_{sub_index}", default=sub_quotes[sub_index])
+        return tr("pet.greeting.format", default="{greeting}！{quote}").format(greeting=greeting_text, quote=sub_greeting)
 
     def get_mood_quote(self, attributes: Dict[str, float]) -> str:
         statuses = {
@@ -244,7 +252,18 @@ class PetQuotesManager(QObject):
             attr = random.choice(list(attributes.keys()))
             quotes = self.QUOTES_LIBRARY[attr]["good"]
 
-        quote = random.choice(quotes)
+        quote_index = random.randrange(len(quotes))
+        quote = quotes[quote_index]
+        if len(critical_attrs) >= 3:
+            quote = tr(self._special_quote_key("all_critical", quote_index), default=quote)
+        elif len(good_attrs) == 4:
+            quote = tr(self._special_quote_key("all_good", quote_index), default=quote)
+        elif critical_attrs:
+            quote = tr(self._quote_key(attr, "critical", quote_index), default=quote)
+        elif warning_attrs:
+            quote = tr(self._quote_key(attr, "warning", quote_index), default=quote)
+        else:
+            quote = tr(self._quote_key(attr, "good", quote_index), default=quote)
         self._current_quote = quote
         self.quote_changed.emit(quote)
         return quote
@@ -256,7 +275,7 @@ class PetQuotesManager(QObject):
         for attr in priority_order:
             if attr in attributes:
                 status = self.get_status(attributes[attr])
-                desc = self.STATUS_DESCRIPTIONS[attr][status]
+                desc = tr(f"pet.status_description.{attr}.{status}", default=self.STATUS_DESCRIPTIONS[attr][status])
                 if status == "critical":
                     descriptions.insert(0, desc)
                 elif status == "warning":
@@ -268,9 +287,9 @@ class PetQuotesManager(QObject):
         if len(descriptions) == 1:
             result = descriptions[0]
         elif len(descriptions) == 2:
-            result = f"{descriptions[0]}，{descriptions[1]}"
+            result = tr("pet.status_description.join_two", default="{first}，{second}").format(first=descriptions[0], second=descriptions[1])
         else:
-            result = f"{descriptions[0]}，还有点{descriptions[1]}"
+            result = tr("pet.status_description.join_many", default="{first}，还有点{second}").format(first=descriptions[0], second=descriptions[1])
 
         self._current_description = result
         self.status_description_changed.emit(result)
@@ -310,7 +329,8 @@ class PetQuotesManager(QObject):
             ],
         }
         quotes = responses.get(interaction_type, ["谢谢！"])
-        return random.choice(quotes)
+        quote_index = random.randrange(len(quotes))
+        return tr(f"pet.interaction_response.{interaction_type}.{quote_index}", default=quotes[quote_index])
 
     def refresh_quote(self, attributes: Dict[str, float]) -> str:
         return self.get_mood_quote(attributes)

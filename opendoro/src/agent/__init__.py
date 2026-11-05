@@ -1,39 +1,41 @@
-from src.agent.core.base import BaseAgent, AgentConfig
-from src.agent.core.tool import Tool, ToolRegistry, ToolResult, ToolCategory, ToolSchema
-from src.agent.core.context import ToolPermission, ExecutionContext, ToolCallContext
-from src.agent.core.permission import PermissionManager, AccessPolicy, PermissionLevel
-from src.agent.core.sandbox import SandboxManager, SecureExecutor, SandboxConfig
-from src.agent.core.errors import AgentError, ToolError, SandboxError, PermissionError as AgentPermissionError
-from src.agent.core.lifecycle import AgentState, AgentLifecycle
-from src.agent.core.pipeline import ExecutionPipeline, PipelineStage, Hook, HookPoint
-from src.agent.core.orchestrator import AgentOrchestrator
+"""
+DoroPet Agent 框架 — 基于 pydantic-ai。
+
+核心模块：
+- pydantic_agent.py: Agent 创建工厂和依赖定义
+- pydantic_tools.py: 工具函数（文件操作、搜索、图片生成、宠物互动、技能管理）
+- skills/: 技能管理（state.py 用于技能启停状态）
+"""
+
+from src.agent.pydantic_agent import (
+    create_doro_agent,
+    create_quick_agent,
+    DoroDeps,
+    DORO_SYSTEM_PROMPT,
+    CAPABILITY_WEB_SEARCH,
+    CAPABILITY_WEB_FETCH,
+    CAPABILITY_THINKING,
+    ALL_CAPABILITIES,
+)
+
+from src.agent.tools import (
+    get_filtered_tools,
+    get_skill_tool_functions,
+    ALL_TOOLS,
+    TOOLS_BY_CATEGORY,
+)
 
 __all__ = [
-    "BaseAgent",
-    "AgentConfig",
-    "Tool",
-    "ToolRegistry",
-    "ToolPermission",
-    "ToolResult",
-    "ToolCategory",
-    "ToolSchema",
-    "PermissionManager",
-    "AccessPolicy",
-    "PermissionLevel",
-    "SandboxManager",
-    "SecureExecutor",
-    "SandboxConfig",
-    "ExecutionContext",
-    "ToolCallContext",
-    "AgentError",
-    "ToolError",
-    "SandboxError",
-    "AgentPermissionError",
-    "AgentState",
-    "AgentLifecycle",
-    "ExecutionPipeline",
-    "PipelineStage",
-    "Hook",
-    "HookPoint",
-    "AgentOrchestrator",
+    "create_doro_agent",
+    "create_quick_agent",
+    "DoroDeps",
+    "DORO_SYSTEM_PROMPT",
+    "CAPABILITY_WEB_SEARCH",
+    "CAPABILITY_WEB_FETCH",
+    "CAPABILITY_THINKING",
+    "ALL_CAPABILITIES",
+    "get_filtered_tools",
+    "get_skill_tool_functions",
+    "ALL_TOOLS",
+    "TOOLS_BY_CATEGORY",
 ]

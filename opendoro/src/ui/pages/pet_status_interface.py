@@ -10,9 +10,14 @@ from src.core.pet_constants import (
     DORO_LEVEL_THRESHOLDS, DORO_LEVEL_TITLES
 )
 from src.core.pet_quotes_manager import PetQuotesManager
+from src.core.i18n import I18nManager, tr
 from src.ui.widgets.greeting_banner import GreetingBanner
 from src.ui.widgets.pet_avatar_card import PetAvatarCard
 from src.ui.widgets.music_player_card import MusicPlayerCard
+
+
+def get_doro_level_title(level: int, default: str = None) -> str:
+    return tr(f"pet.doro_level.{level}", default=default or DORO_LEVEL_TITLES.get(level, "Doro崽"))
 
 
 class AttributeCard(CardWidget):
@@ -42,9 +47,9 @@ class AttributeCard(CardWidget):
         icon_label.setObjectName("petAttrIcon")
         icon_label.setStyleSheet("font-size: 16px; background: transparent;")
         
-        name_label = QLabel(ATTR_NAMES[self.attr_name])
-        name_label.setObjectName("petAttrNameLabel")
-        name_label.setStyleSheet("font-size: 12px; font-weight: bold;")
+        self.name_label = QLabel(self._attr_display_name())
+        self.name_label.setObjectName("petAttrNameLabel")
+        self.name_label.setStyleSheet("font-size: 12px; font-weight: bold;")
         
         self.value_label = QLabel()
         self.value_label.setObjectName(f"value_{self.attr_name}")
@@ -52,7 +57,7 @@ class AttributeCard(CardWidget):
         self.value_label.setStyleSheet("font-size: 12px;")
         
         header_layout.addWidget(icon_label)
-        header_layout.addWidget(name_label)
+        header_layout.addWidget(self.name_label)
         header_layout.addStretch()
         header_layout.addWidget(self.value_label)
         
@@ -71,6 +76,18 @@ class AttributeCard(CardWidget):
         card_layout.addLayout(header_layout)
         card_layout.addWidget(self.progress_bar)
         card_layout.addWidget(self.status_label)
+
+    def _attr_display_name(self) -> str:
+        attr_keys = {
+            ATTR_HUNGER: "pet.attr.hunger",
+            ATTR_MOOD: "pet.attr.mood",
+            ATTR_CLEANLINESS: "pet.attr.cleanliness",
+            ATTR_ENERGY: "pet.attr.energy",
+        }
+        return tr(attr_keys.get(self.attr_name, ""), default=ATTR_NAMES[self.attr_name])
+
+    def refresh_ui(self):
+        self.name_label.setText(self._attr_display_name())
     
     def update_value(self, value: float):
         self.value_label.setText(f"{value:.0f}%")
@@ -78,13 +95,13 @@ class AttributeCard(CardWidget):
     
     def update_status(self, status: str):
         if status == "critical":
-            status_text = "危急"
+            status_text = tr("pet.status.critical")
             self.status_label.setObjectName("petStatusCritical")
         elif status == "warning":
-            status_text = "警告"
+            status_text = tr("pet.status.warning")
             self.status_label.setObjectName("petStatusWarning")
         else:
-            status_text = "良好"
+            status_text = tr("pet.status.good")
             self.status_label.setObjectName("petStatusGood")
         self.status_label.setText(status_text)
         self.status_label.setStyleSheet("")
@@ -111,11 +128,8 @@ class AttributeCard(CardWidget):
         name_label_style = f"font-size: 14px; font-weight: bold; color: {'#e0e0e0' if is_dark else '#333'}; background: transparent;"
         value_label_style = f"font-size: 14px; color: {'#aaa' if is_dark else '#666'};"
         
-        for label in self.findChildren(QLabel):
-            if label.text() == ATTR_NAMES[self.attr_name]:
-                label.setStyleSheet(name_label_style)
-            if label.objectName() == f"value_{self.attr_name}":
-                label.setStyleSheet(value_label_style)
+        self.name_label.setStyleSheet(name_label_style)
+        self.value_label.setStyleSheet(value_label_style)
 
 
 class OrangeStatusCard(CardWidget):
@@ -144,7 +158,7 @@ class OrangeStatusCard(CardWidget):
         level_layout.setContentsMargins(0, 0, 0, 0)
         level_layout.setSpacing(6)
 
-        self._level_label = QLabel("⭐ Lv.1  Doro崽")
+        self._level_label = QLabel(tr("pet.status.title", default="⭐ Lv.{level} {title}").format(level=1, title=get_doro_level_title(1)))
         self._level_label.setObjectName("orangeStatusLevelLabel")
 
         self._level_bar = QProgressBar()
@@ -170,7 +184,7 @@ class OrangeStatusCard(CardWidget):
         self._combo_label.setObjectName("orangeStatusComboLabel")
         self._combo_label.setAlignment(Qt.AlignRight)
 
-        self._total_label = QLabel("累计 0 🍊")
+        self._total_label = QLabel(tr("pet.status.total_earned", default="累计 0 🍊").format(total_earned=0))
         self._total_label.setObjectName("orangeStatusTotalLabel")
         self._total_label.setAlignment(Qt.AlignRight)
 
@@ -184,8 +198,8 @@ class OrangeStatusCard(CardWidget):
     def update_display(self, balance: int, total_earned: int, level: int, 
                        total_pomodoros: int, combo: int, is_dark: bool = False):
         self._orange_label.setText(f"🍊 × {balance}")
-        title = DORO_LEVEL_TITLES.get(level, "Doro崽")
-        self._level_label.setText(f"⭐ Lv.{level} {title}")
+        title = get_doro_level_title(level)
+        self._level_label.setText(tr("pet.status.title", default=f"⭐ Lv.{{level}} {{title}}").format(level=level, title=title))
 
         next_level = level + 1
         if next_level in DORO_LEVEL_THRESHOLDS:
@@ -197,7 +211,7 @@ class OrangeStatusCard(CardWidget):
         else:
             self._level_bar.setValue(100)
 
-        self._total_label.setText(f"累计 {total_earned} 🍊")
+        self._total_label.setText(tr("pet.status.total_earned").format(total_earned=total_earned))
 
         if combo >= 2:
             self._combo_label.setText(f"🔥x{combo}")
@@ -260,6 +274,9 @@ class PetStatusInterface(ScrollArea):
         
         self._init_ui()
         self._connect_signals()
+        
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
 
     def set_orange_manager(self, orange_manager):
         self._orange_manager = orange_manager
@@ -335,10 +352,10 @@ class PetStatusInterface(ScrollArea):
         grid.setContentsMargins(0, 0, 0, 0)
         
         button_configs = [
-            ("feed", "🍖", "投喂"),
-            ("play", "🎮", "玩耍"),
-            ("clean", "🧹", "清洁"),
-            ("rest", "😴", "休息"),
+            ("feed", "🍖", tr("pet.status.feed")),
+            ("play", "🎮", tr("pet.status.play")),
+            ("clean", "🧹", tr("pet.status.clean")),
+            ("rest", "😴", tr("pet.status.rest")),
         ]
         
         self.buttons = {}
@@ -349,9 +366,10 @@ class PetStatusInterface(ScrollArea):
             grid.addWidget(btn, i // 2, i % 2)
             self.buttons[action] = btn
         
-        random_btn = PushButton("💬 对话", self)
+        random_btn = PushButton("💬 " + tr("pet.status.talk"), self)
         random_btn.setFixedHeight(34)
         random_btn.clicked.connect(self._on_start_chat)
+        self._random_btn = random_btn
         grid.addWidget(random_btn, 2, 0, 1, 2)
         
         parent_layout.addLayout(grid)
@@ -368,14 +386,14 @@ class PetStatusInterface(ScrollArea):
             btn.setEnabled(can_afford)
             
             emoji_map = {"feed": "🍖", "play": "🎮", "clean": "🧹", "rest": "😴"}
-            text_map = {"feed": "投喂", "play": "玩耍", "clean": "清洁", "rest": "休息"}
+            text_map = {"feed": tr("pet.status.feed"), "play": tr("pet.status.play"), "clean": tr("pet.status.clean"), "rest": tr("pet.status.rest")}
             emoji = emoji_map.get(action, "")
             text = text_map.get(action, action)
             
             if can_afford:
                 btn.setText(f"{emoji} {text} (-{cost}🍊)")
             else:
-                btn.setText(f"{emoji} {text} (🍊不足)")
+                btn.setText(f"{emoji} {text} (" + tr("pet.status.insufficient") + ")")
 
     def _connect_signals(self):
         if self.attr_manager is None:
@@ -482,6 +500,44 @@ class PetStatusInterface(ScrollArea):
     def _on_start_chat(self):
         self.start_chat_requested.emit()
 
+    def refresh_ui(self, lang_code: str = ""):
+        """Language switch refresh: update all label texts."""
+        # Refresh interaction buttons
+        for action, btn in self.buttons.items():
+            emoji_map = {"feed": "🍖", "play": "🎮", "clean": "🧹", "rest": "😴"}
+            text_map = {"feed": tr("pet.status.feed"), "play": tr("pet.status.play"), "clean": tr("pet.status.clean"), "rest": tr("pet.status.rest")}
+            emoji = emoji_map.get(action, "")
+            text = text_map.get(action, action)
+            cost = ORANGE_INTERACTION_COST.get(action, 1)
+            if self._orange_manager and self._orange_manager.can_afford(action):
+                btn.setText(f"{emoji} {text} (-{cost}🍊)")
+            else:
+                btn.setText(f"{emoji} {text} (" + tr("pet.status.insufficient") + ")")
+        
+        # Refresh attribute cards status labels
+        if self.attr_manager:
+            for attr_name, card in self.attribute_cards.items():
+                card.refresh_ui()
+                status = self.attr_manager.get_status(attr_name)
+                if status == "critical":
+                    card.status_label.setText(tr("pet.status.critical"))
+                elif status == "warning":
+                    card.status_label.setText(tr("pet.status.warning"))
+                else:
+                    card.status_label.setText(tr("pet.status.good"))
+        
+        # Refresh orange card
+        self._refresh_orange_card()
+        
+        if hasattr(self, 'greeting_banner'):
+            self.greeting_banner.refresh_ui(lang_code)
+        if hasattr(self, 'music_player_card'):
+            self.music_player_card.refresh_ui(lang_code)
+        
+        # Refresh talk button
+        if hasattr(self, '_random_btn'):
+            self._random_btn.setText("💬 " + tr("pet.status.talk"))
+
     def update_theme(self, is_dark: bool):
         self.greeting_banner.update_theme(is_dark)
         self.avatar_card.update_theme(is_dark)
@@ -515,15 +571,15 @@ class PetStatusInterface(ScrollArea):
             if self.attr_manager:
                 status = self.attr_manager.get_status(attr_name)
                 if status == "critical":
-                    status_text = "危急"
+                    status_text = tr("pet.status.critical")
                     bg_color = "#4a1c1c" if is_dark else "#ffebee"
                     text_color = "#ef5350" if is_dark else "#f44336"
                 elif status == "warning":
-                    status_text = "警告"
+                    status_text = tr("pet.status.warning")
                     bg_color = "#4a3a1c" if is_dark else "#fff3e0"
                     text_color = "#ffa726" if is_dark else "#ff9800"
                 else:
-                    status_text = "良好"
+                    status_text = tr("pet.status.good")
                     bg_color = "#1c4a2c" if is_dark else "#e8f5e9"
                     text_color = "#66bb6a" if is_dark else "#4caf50"
                 card.status_label.setText(status_text)

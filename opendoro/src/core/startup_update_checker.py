@@ -42,6 +42,12 @@ class StartupUpdateChecker(QObject):
                 self._main_window.update_interface.set_versions(versions)
 
     def start_check(self, delay_ms=None):
+        from src.core.platform_paths import is_macos
+
+        if is_macos():
+            logger.info("Skipping startup update check: the macOS port is updated manually from upstream.")
+            return
+
         if delay_ms is None:
             delay_ms = self.CHECK_DELAY_MS
         

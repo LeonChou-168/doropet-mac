@@ -11,7 +11,7 @@ import html
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QDialog, QFormLayout, QFrame, QSizePolicy, QMenu, QAction,
                              QListWidgetItem, QToolButton, QGraphicsOpacityEffect, QFileDialog, QTextEdit, QTextBrowser)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSettings, QSize, QPropertyAnimation, QEasingCurve, QTimer, QUrl
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSettings, QSize, QPropertyAnimation, QEasingCurve, QTimer, QUrl, QMimeData
 from PyQt5.QtGui import QFont, QDesktopServices, QClipboard, QPixmap, QIcon, QPalette, QColor, QMovie, QImage, QTransform
 import re
 import markdown
@@ -26,12 +26,13 @@ from qfluentwidgets import (ListWidget, TextEdit, LineEdit,
 
 from src.core.database import ChatDatabase
 from src.services.llm_service import LLMWorker, ImageGenerationWorker
-from src.core.voice import VoiceAssistant
 from src.core.tts import TTSManager
 from src.core.skill_manager import SkillManager
 from src.core.state_manager import StateManager, GenerationState, ConnectionState
 from src.resource_utils import resource_path
 from src.core.logger import logger
+from src.core.i18n import I18nManager, tr
+from src.core.platform_integration import open_path
 from src.ui.widgets.screenshot_tool import ScreenCaptureTool
 from src.ui.widgets.attachment_widgets import AttachmentInputBar, AttachmentCard, InlinePreviewPanel
 from src.core.attachments import AttachmentStorage
@@ -43,8 +44,10 @@ from src.core.pet_constants import ATTR_HUNGER, ATTR_MOOD, ATTR_CLEANLINESS, ATT
 # ---------------------------------------------------------
 
 class StatusBubble(QFrame):
-    def __init__(self, text="正在处理...", parent=None):
+    def __init__(self, text=None, parent=None):
         super().__init__(parent)
+        if text is None:
+            text = tr("chat.processing")
         self.setObjectName("statusBubble")
         
         layout = QHBoxLayout(self)
@@ -127,7 +130,7 @@ class ThinkingBubble(QFrame):
         self.container_layout.setSpacing(10)
         
         # Text with animation
-        self.lbl_text = QLabel("正在思考...", self.container)
+        self.lbl_text = QLabel(tr("chat.thinking"), self.container)
         self.lbl_text.setObjectName("thinkingText")
         
         self.container_layout.addWidget(self.lbl_text)
@@ -144,7 +147,7 @@ class ThinkingBubble(QFrame):
     def update_dots(self):
         self.dot_count = (self.dot_count + 1) % 4
         dots = "." * self.dot_count
-        self.lbl_text.setText(f"正在思考{dots}")
+        self.lbl_text.setText(tr("chat.thinking") + dots)
 
 class ThinkingWidget(QFrame):
     def __init__(self, thought_content, parent=None):
@@ -164,7 +167,7 @@ class ThinkingWidget(QFrame):
         self.header_btn.setFixedHeight(28)
         self.header_btn.clicked.connect(self.toggle_content)
         self.header_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.header_btn.setText("思考过程")
+        self.header_btn.setText(tr("chat.thinking_process"))
         self.header_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {bg_color};
@@ -201,11 +204,11 @@ class ThinkingWidget(QFrame):
     def toggle_content(self):
         if self.content_label.isVisible():
             self.content_label.hide()
-            self.header_btn.setText("思考过程")
+            self.header_btn.setText(tr("chat.thinking_process"))
             # self.header_btn.setIcon(FluentIcon.CARE_DOWN_SOLID)
         else:
             self.content_label.show()
-            self.header_btn.setText("思考过程")
+            self.header_btn.setText(tr("chat.thinking_process"))
             # self.header_btn.setIcon(FluentIcon.CARE_UP_SOLID)
         
         # Trigger layout update in parent
@@ -240,9 +243,9 @@ class ToolExecutionWidget(QFrame):
         self.header_btn.setObjectName("toolExecutionHeader")
         self.header_btn.clicked.connect(self.toggle_content)
         self.header_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.header_btn.setText("查看思考与工具")
+        self.header_btn.setText(tr("chat.view_thinking"))
         self.header_btn.setIcon(FluentIcon.PLAY)
-        self.header_btn.setToolTip("点击查看思考与工具执行过程")
+        self.header_btn.setToolTip(tr("chat.view_thinking_hint"))
         
         self.content_frame = QFrame(self)
         self.content_frame.setObjectName("toolExecutionContent")
@@ -256,7 +259,7 @@ class ToolExecutionWidget(QFrame):
         self.thinking_layout = QVBoxLayout(self.thinking_container)
         self.thinking_layout.setContentsMargins(10, 10, 10, 10)
         
-        self.thinking_title = QLabel("思考过程", self.thinking_container)
+        self.thinking_title = QLabel(tr("chat.thinking_process"), self.thinking_container)
         self.thinking_title.setObjectName("thinkingTitle")
         
         self.thinking_label = QLabel(self.thinking_container)
@@ -274,7 +277,7 @@ class ToolExecutionWidget(QFrame):
         self.tools_layout.setContentsMargins(0, 0, 0, 0)
         self.tools_layout.setSpacing(4)
         
-        self.tools_title = QLabel("工具调用", self.tools_container)
+        self.tools_title = QLabel(tr("chat.tool_call"), self.tools_container)
         self.tools_title.setObjectName("toolsTitle")
         self.tools_layout.addWidget(self.tools_title)
         
@@ -310,12 +313,12 @@ class ToolExecutionWidget(QFrame):
         
         text_parts = []
         if has_thinking:
-            text_parts.append("思考过程")
+            text_parts.append(tr("chat.thinking_process"))
         if count > 0:
-            text_parts.append(f"{count} 个工具调用")
+            text_parts.append(tr("chat.x_tool_calls").format(count=count))
             
         if not text_parts:
-            self.header_btn.setText("查看详情")
+            self.header_btn.setText(tr("chat.view_details"))
         else:
             self.header_btn.setText(" + ".join(text_parts))
     
@@ -373,7 +376,7 @@ class ToolExecutionWidget(QFrame):
             result_label.setProperty("error", False)
             if status == self.STATUS_ERROR:
                 result_label.setProperty("error", True)
-            result_label.setText(f"结果: {self._truncate_text(result, 150)}")
+            result_label.setText(tr("chat.result_label", default="结果: {result}").format(result=self._truncate_text(result, 150)))
             result_label.show()
         
         self._update_header()
@@ -430,7 +433,7 @@ class ToolExecutionWidget(QFrame):
         item_layout.addLayout(header_layout)
         
         if args:
-            args_label = QLabel(f"参数: {self._truncate_text(args, 100)}", item_frame)
+            args_label = QLabel(tr("chat.params_label", default="参数: {params}").format(params=self._truncate_text(args, 100)), item_frame)
             args_label.setObjectName("toolArgsLabel")
             args_label.setWordWrap(True)
             item_layout.addWidget(args_label)
@@ -441,7 +444,7 @@ class ToolExecutionWidget(QFrame):
         if result:
             if status == self.STATUS_ERROR:
                 result_label.setProperty("error", True)
-            result_label.setText(f"结果: {self._truncate_text(result, 150)}")
+            result_label.setText(tr("chat.result_label", default="结果: {result}").format(result=self._truncate_text(result, 150)))
             result_label.show()
         else:
             result_label.hide()
@@ -468,10 +471,10 @@ class ToolExecutionWidget(QFrame):
     
     def _get_status_text(self, status):
         return {
-            self.STATUS_RUNNING: "执行中...",
-            self.STATUS_SUCCESS: "完成",
-            self.STATUS_ERROR: "失败"
-        }.get(status, "未知")
+            self.STATUS_RUNNING: tr("chat.executing"),
+            self.STATUS_SUCCESS: tr("chat.completed"),
+            self.STATUS_ERROR: tr("chat.failed")
+        }.get(status, tr("chat.unknown"))
     
     def _get_status_color_key(self, status):
         return {
@@ -510,15 +513,15 @@ class ToolExecutionWidget(QFrame):
         
         text_parts = []
         if has_thinking:
-            text_parts.append("思考过程")
+            text_parts.append(tr("chat.thinking_process"))
         if total_count > 0:
             if running_count > 0:
-                text_parts.append(f"{running_count} 个工具执行中")
+                text_parts.append(f"{running_count} " + tr("chat.executing"))
             else:
-                text_parts.append(f"{total_count} 个工具调用")
+                text_parts.append(tr("chat.total_tool_calls").format(count=total_count))
             
         if not text_parts:
-            self.header_btn.setText("查看详情")
+            self.header_btn.setText(tr("chat.view_details"))
             self.header_btn.setIcon(FluentIcon.PLAY)
         else:
             self.header_btn.setText(" + ".join(text_parts))
@@ -610,8 +613,8 @@ class ChatTextEdit(QTextBrowser):
                         
                         # Show feedback (InfoBar)
                         InfoBar.success(
-                            title='复制成功',
-                            content="代码已复制到剪贴板",
+                            title=tr("chat.copy_success"),
+                            content=tr("chat.copy_success"),
                             orient=Qt.Horizontal,
                             isClosable=True,
                             position=InfoBarPosition.TOP_RIGHT,
@@ -724,7 +727,7 @@ class ChatTextEdit(QTextBrowser):
                     f'<span style="color: {text_color}; font-family: sans-serif; font-size: 12px; font-weight: bold;">{lang_display}</span>'
                     f'</td>'
                     f'<td style="border:none; background:transparent;" align="right">'
-                    f'<a href="codecopy:///{block_idx}" style="text-decoration: none; color: {copy_btn_color}; font-family: sans-serif; font-size: 12px;">复制代码</a>'
+                    f'<a href="codecopy:///{block_idx}" style="text-decoration: none; color: {copy_btn_color}; font-family: sans-serif; font-size: 12px;">{tr("chat.copy_code")}</a>'
                     f'</td>'
                     f'</tr></table>'
                     f'</td></tr>'
@@ -877,12 +880,12 @@ class ClickableImageLabel(QLabel):
         super().__init__(parent)
         self.image_path = image_path
         self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip("点击查看原图")
+        self.setToolTip(tr("chat.view_image"))
         
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             try:
-                os.startfile(self.image_path)
+                open_path(self.image_path)
             except Exception as e:
                 logger.error(f"Error opening image: {e}")
         super().mousePressEvent(event)
@@ -898,8 +901,8 @@ class NetworkImageLabel(QLabel):
         self.max_width = max_width
         self.local_path = None
         self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip("点击查看原图")
-        self.setText("加载图片中...")
+        self.setToolTip(tr("chat.view_image"))
+        self.setText(tr("chat.loading_image"))
         self.setStyleSheet("QLabel { color: #888; padding: 10px; }")
         
         from src.core.image_cache_manager import get_image_cache_manager
@@ -929,7 +932,7 @@ class NetworkImageLabel(QLabel):
                         return
                     else:
                         logger.warning(f"[NetworkImageLabel] ❌ 本地文件不存在：{local_file}")
-                        QTimer.singleShot(0, lambda: self.setText(f"[图片文件不存在]"))
+                        QTimer.singleShot(0, lambda: self.setText(tr("chat.image_not_found")))
                         return
                 
                 if self.image_url.startswith('data:image'):
@@ -996,7 +999,7 @@ class NetworkImageLabel(QLabel):
 
             except Exception as e:
                 logger.error(f"[NetworkImageLabel] Failed to load image: {e}")
-                QTimer.singleShot(0, lambda: self.setText(f"[图片加载失败]"))
+                QTimer.singleShot(0, lambda: self.setText(tr("chat.image_load_failed_short")))
         
         thread = threading.Thread(target=download, daemon=True)
         thread.start()
@@ -1011,13 +1014,13 @@ class NetworkImageLabel(QLabel):
                 self.setStyleSheet("")
                 self.loaded.emit()
             else:
-                self.setText("[图片无法显示]")
+                self.setText(tr("chat.image_display_failed"))
     
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             if self.local_path and os.path.exists(self.local_path):
                 try:
-                    os.startfile(self.local_path)
+                    open_path(self.local_path)
                 except Exception as e:
                     logger.error(f"Error opening image: {e}")
             elif self.image_url:
@@ -1068,13 +1071,13 @@ class CodeBlockWidget(QFrame):
         self.copy_btn = ToolButton(FluentIcon.COPY, self.header)
         self.copy_btn.setFixedSize(24, 24)
         self.copy_btn.setIconSize(QSize(14, 14))
-        self.copy_btn.setToolTip("复制")
+        self.copy_btn.setToolTip(tr("chat.copy"))
         self.copy_btn.clicked.connect(self.copy_code)
         
         self.toggle_btn = ToolButton(FluentIcon.CARE_UP_SOLID, self.header)
         self.toggle_btn.setFixedSize(24, 24)
         self.toggle_btn.setIconSize(QSize(12, 12))
-        self.toggle_btn.setToolTip("折叠")
+        self.toggle_btn.setToolTip(tr("chat.collapse"))
         self.toggle_btn.clicked.connect(self.toggle_expand)
         
         self.header_layout.addWidget(self.lang_label)
@@ -1116,11 +1119,11 @@ class CodeBlockWidget(QFrame):
         
         if self.is_expanded:
             self.toggle_btn.setIcon(FluentIcon.CARE_UP_SOLID)
-            self.toggle_btn.setToolTip("折叠")
+            self.toggle_btn.setToolTip(tr("chat.collapse"))
             self.header.setProperty("collapsed", False)
         else:
             self.toggle_btn.setIcon(FluentIcon.CARE_DOWN_SOLID)
-            self.toggle_btn.setToolTip("展开")
+            self.toggle_btn.setToolTip(tr("chat.expand"))
             self.header.setProperty("collapsed", True)
             
         self.header.style().unpolish(self.header)
@@ -1190,8 +1193,8 @@ class CodeBlockWidget(QFrame):
     def copy_code(self):
         QApplication.clipboard().setText(self.code)
         InfoBar.success(
-            title='已复制',
-            content='代码已复制到剪贴板',
+            title=tr("chat.copied"),
+            content=tr("chat.copy_success"),
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -1224,7 +1227,7 @@ class MessageBubble(QFrame):
     speak_restart_requested = pyqtSignal(int, str)
     switch_branch_requested = pyqtSignal(int)
     branch_conversation_requested = pyqtSignal(int)
-    context_menu_requested = pyqtSignal(int, str, str, object)
+    context_menu_requested = pyqtSignal(int, str, str, object, object)
     
     PLAYBACK_STOPPED = 0
     PLAYBACK_PLAYING = 1
@@ -1297,7 +1300,7 @@ class MessageBubble(QFrame):
                     lbl_img.setPixmap(pixmap)
                     img_layout.addWidget(lbl_img)
                 else:
-                    lbl_err = QLabel(f"[图片无法加载: {img_path}]", img_content)
+                    lbl_err = QLabel(tr("chat.image_load_failed", default="[图片无法加载: {path}]").format(path=img_path), img_content)
                     img_layout.addWidget(lbl_err)
             
             self.container_layout.addWidget(img_content)
@@ -1352,7 +1355,7 @@ class MessageBubble(QFrame):
                     if status_icon:
                         sl = QLabel(status_icon)
                         sl.setStyleSheet("font-size: 12px;background: transparent;border: none;")
-                        sl.setToolTip(f"提取状态: {info.extraction_method}")
+                        sl.setToolTip(tr("chat.extraction_status", default="提取状态: {status}").format(status=info.extraction_method))
                         card_layout.addWidget(sl)
 
                 att_layout.addWidget(card)
@@ -1395,7 +1398,7 @@ class MessageBubble(QFrame):
                             self.container_layout.addWidget(lbl_img)
                             self.content_widgets.append(lbl_img)
                         else:
-                            err_label = QLabel(f"[图片无法加载]", self.container)
+                            err_label = QLabel(tr("chat.image_load_failed_short"), self.container)
                             self.container_layout.addWidget(err_label)
                     else:
                         pixmap = QPixmap(img_url)
@@ -1426,7 +1429,7 @@ class MessageBubble(QFrame):
         # Copy Button
         self.btn_copy = ToolButton(FluentIcon.COPY, self.action_widget)
         self.btn_copy.setFixedSize(20, 20)
-        self.btn_copy.setToolTip("复制")
+        self.btn_copy.setToolTip(tr("chat.copy"))
         self.btn_copy.setObjectName("chatActionButton")
         self.btn_copy.setIconSize(QSize(14, 14))
         self.btn_copy.clicked.connect(self.copy_content)
@@ -1435,7 +1438,7 @@ class MessageBubble(QFrame):
         # Delete Button
         self.btn_delete = ToolButton(FluentIcon.DELETE, self.action_widget)
         self.btn_delete.setFixedSize(20, 20)
-        self.btn_delete.setToolTip("删除")
+        self.btn_delete.setToolTip(tr("chat.delete"))
         self.btn_delete.setObjectName("chatActionButton")
         self.btn_delete.setIconSize(QSize(14, 14))
         self.btn_delete.clicked.connect(lambda: self.delete_requested.emit(self.msg_id))
@@ -1445,7 +1448,7 @@ class MessageBubble(QFrame):
             # Regenerate Button
             self.btn_regen = ToolButton(FluentIcon.SYNC, self.action_widget)
             self.btn_regen.setFixedSize(20, 20)
-            self.btn_regen.setToolTip("重新生成")
+            self.btn_regen.setToolTip(tr("chat.regenerate"))
             self.btn_regen.setObjectName("chatActionButton")
             self.btn_regen.setIconSize(QSize(14, 14))
             self.btn_regen.clicked.connect(lambda: self.regenerate_requested.emit(self.msg_id))
@@ -1454,7 +1457,7 @@ class MessageBubble(QFrame):
             # TTS Read Button
             self.btn_read = ToolButton(FluentIcon.PLAY, self.action_widget)
             self.btn_read.setFixedSize(20, 20)
-            self.btn_read.setToolTip("朗读")
+            self.btn_read.setToolTip(tr("chat.read_aloud"))
             self.btn_read.setObjectName("chatActionButton")
             self.btn_read.setIconSize(QSize(14, 14))
             self.btn_read.clicked.connect(self._on_read_button_clicked)
@@ -1465,7 +1468,7 @@ class MessageBubble(QFrame):
             # Branch Button (Plus) - Now in the same row
             self.btn_branch = ToolButton(FluentIcon.ADD, self.action_widget)
             self.btn_branch.setFixedSize(20, 20)
-            self.btn_branch.setToolTip("生成新分支")
+            self.btn_branch.setToolTip(tr("chat.new_branch"))
             self.btn_branch.setObjectName("chatActionButton")
             self.btn_branch.setIconSize(QSize(14, 14))
             self.btn_branch.clicked.connect(self.on_branch_clicked)
@@ -1476,7 +1479,7 @@ class MessageBubble(QFrame):
         if not self.is_active:
             self.btn_switch = ToolButton(FluentIcon.ACCEPT, self.action_widget) # Checkmark to select
             self.btn_switch.setFixedSize(20, 20)
-            self.btn_switch.setToolTip("切换到此回复")
+            self.btn_switch.setToolTip(tr("chat.switch_reply"))
             self.btn_switch.setObjectName("chatActionButton")
             self.btn_switch.setIconSize(QSize(14, 14))
             self.btn_switch.clicked.connect(self.on_switch_clicked)
@@ -1492,9 +1495,18 @@ class MessageBubble(QFrame):
             lbl_model = QLabel(display_model, self.action_widget)
             lbl_model.setObjectName("chatModelLabel")
             lbl_model.setStyleSheet("QLabel { color: #808080; font-size: 10px; margin-right: 8px; font-family: 'Segoe UI', sans-serif; }")
-            lbl_model.setToolTip(f"生成模型: {self.model}")
+            lbl_model.setToolTip(tr("chat.model_label").format(model=self.model))
             # Add at the beginning (leftmost)
             self.action_layout.insertWidget(0, lbl_model)
+
+        # ── 统计标签（Token + 耗时）──
+        self.stats_label = QLabel("", self.action_widget)
+        self.stats_label.setObjectName("chatStatsLabel")
+        self.stats_label.setStyleSheet("QLabel#chatStatsLabel { color: #808080; font-size: 10px; padding: 0 6px; font-family: 'Segoe UI', sans-serif; }")
+        self.stats_label.hide()
+        # 插入在模型名之后
+        target_idx = 1 if self.model else 0
+        self.action_layout.insertWidget(target_idx, self.stats_label)
 
         self.action_layout.addStretch()
         
@@ -1532,7 +1544,7 @@ class MessageBubble(QFrame):
 
     def _show_read_context_menu(self, pos):
         menu = QMenu(self)
-        restart_action = menu.addAction("从头开始朗读")
+        restart_action = menu.addAction(tr("chat.read_from_start"))
         restart_action.triggered.connect(lambda: self.speak_restart_requested.emit(self.msg_id, self.content))
         menu.exec_(self.btn_read.mapToGlobal(pos))
 
@@ -1543,24 +1555,87 @@ class MessageBubble(QFrame):
     def _update_read_button(self):
         if self._playback_state == self.PLAYBACK_STOPPED:
             self.btn_read.setIcon(FluentIcon.PLAY)
-            self.btn_read.setToolTip("朗读")
+            self.btn_read.setToolTip(tr("chat.read_aloud"))
         elif self._playback_state == self.PLAYBACK_PLAYING:
             self.btn_read.setIcon(FluentIcon.PAUSE)
-            self.btn_read.setToolTip("暂停")
+            self.btn_read.setToolTip(tr("chat.pause"))
         elif self._playback_state == self.PLAYBACK_PAUSED:
             self.btn_read.setIcon(FluentIcon.PLAY)
-            self.btn_read.setToolTip("继续播放")
+            self.btn_read.setToolTip(tr("chat.resume"))
+
+    def set_stats(self, stats_json: str):
+        """设置并显示统计信息（Token + 耗时）。"""
+        if not stats_json or not hasattr(self, 'stats_label'):
+            return
+        try:
+            import json
+            data = json.loads(stats_json)
+        except (json.JSONDecodeError, TypeError):
+            return
+
+        tokens_total = data.get("tokens_in", 0) + data.get("tokens_out", 0)
+        duration_ms = data.get("duration_ms", 0)
+
+        parts = []
+        if tokens_total > 0:
+            if tokens_total >= 1000:
+                parts.append(f"{tokens_total/1000:.1f}k tokens")
+            else:
+                parts.append(f"{tokens_total} tokens")
+        if duration_ms > 0:
+            if duration_ms >= 1000:
+                parts.append(f"{duration_ms/1000:.1f}s")
+            else:
+                parts.append(f"{duration_ms:.0f}ms")
+
+        if parts:
+            self.stats_label.setText("  ·  ".join(parts))
+            self.stats_label.show()
 
     def copy_content(self):
-        """复制内容到剪贴板并提供视觉反馈"""
-        QApplication.clipboard().setText(self.content)
+        """复制内容到剪贴板（含图片）并提供视觉反馈"""
+        self._copy_to_clipboard(self.content, self.images)
         self.btn_copy.setIcon(FluentIcon.ACCEPT)
-        self.btn_copy.setToolTip("已复制")
+        self.btn_copy.setToolTip(tr("chat.copied"))
         QTimer.singleShot(1500, self.reset_copy_icon)
+
+    @staticmethod
+    def _copy_to_clipboard(text: str, image_paths: list):
+        """将文本和图片一起放入剪贴板，支持粘贴到支持富文本的应用和输入框。"""
+        valid_images = [p for p in image_paths if os.path.exists(p)]
+
+        if not valid_images:
+            QApplication.clipboard().setText(text)
+            return
+
+        mime = QMimeData()
+        mime.setText(text)
+
+        # 构建 HTML：文本 + 每张图片
+        escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+        html_parts = [f"<p>{escaped}</p>"]
+        urls: list[QUrl] = []
+        for path in valid_images:
+            uri = pathlib.Path(path).as_uri()
+            html_parts.append(f'<img src="{uri}" style="max-width:400px;"><br>')
+            urls.append(QUrl.fromLocalFile(path))
+
+        mime.setHtml("".join(html_parts))
+
+        # 让输入框的 PasteableTextEdit 能识别到图片：
+        # 1. hasImage() → 放第一张图的 QImage
+        first_img = QImage(valid_images[0])
+        if not first_img.isNull():
+            mime.setImageData(first_img)
+
+        # 2. hasUrls() → 放 file:/// 路径列表
+        mime.setUrls(urls)
+
+        QApplication.clipboard().setMimeData(mime)
 
     def reset_copy_icon(self):
         self.btn_copy.setIcon(FluentIcon.COPY)
-        self.btn_copy.setToolTip("复制")
+        self.btn_copy.setToolTip(tr("chat.copy"))
 
     def resizeEvent(self, event):
         # Limit container max width based on role
@@ -1582,7 +1657,7 @@ class MessageBubble(QFrame):
         super().leaveEvent(event)
 
     def contextMenuEvent(self, event):
-        self.context_menu_requested.emit(self.msg_id, self.role, self.content, event.globalPos())
+        self.context_menu_requested.emit(self.msg_id, self.role, self.content, self.images, event.globalPos())
 
     def update_theme(self):
         for i in range(self.container_layout.count()):
@@ -1758,6 +1833,7 @@ class PasteableTextEdit(TextEdit):
 
         super().insertFromMimeData(source)
 
+
 class ChatInterface(QWidget):
     def __init__(self, db=None, parent=None):
         super().__init__(parent)
@@ -1772,6 +1848,7 @@ class ChatInterface(QWidget):
         self.status_bubble = None
         self.streaming_content = ""
         self.streaming_buffer = "" # Buffer for streaming content
+        self._last_user_msg_id = None
         self.selected_images = []
         self.branching_parent_id = None
         self.live2d_widget = None
@@ -1793,6 +1870,7 @@ class ChatInterface(QWidget):
         self.select_last_active_session()
 
         # Initialize Voice Assistant
+        from src.core.voice import VoiceAssistant
         self.voice_assistant = VoiceAssistant(self.db, self)
         self.voice_assistant.wake_detected.connect(self.on_voice_wake_detected)
         self.voice_assistant.text_recognized.connect(self.on_voice_text_recognized)
@@ -1815,6 +1893,10 @@ class ChatInterface(QWidget):
         from src.core.memory_manager import MemoryManager, init_memory_database
         init_memory_database(self.db)
         self.memory_manager = MemoryManager(self.db)
+
+        # i18n 连接
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
     
     def _connect_state_manager_signals(self):
         self.state_manager.generation_state_changed.connect(self._on_generation_state_changed)
@@ -1823,11 +1905,11 @@ class ChatInterface(QWidget):
         if state in (GenerationState.STREAMING, GenerationState.TOOL_CALLING, GenerationState.THINKING, GenerationState.PREPARING):
             self._is_generating = True
             self.btn_send.setIcon(FluentIcon.CANCEL)
-            self.btn_send.setText("停止")
+            self.btn_send.setText(tr("chat.stop"))
         else:
             self._is_generating = False
             self.btn_send.setIcon(FluentIcon.SEND)
-            self.btn_send.setText("发送")
+            self.btn_send.setText(tr("chat.send"))
 
     def set_live2d_widget(self, widget):
         self.live2d_widget = widget
@@ -1869,8 +1951,9 @@ class ChatInterface(QWidget):
         left_layout = QVBoxLayout(self.left_panel)
         left_layout.setContentsMargins(10, 10, 10, 10)
         
-        btn_new_chat = PushButton(FluentIcon.ADD, "新建会话", self.left_panel)
+        btn_new_chat = PushButton(FluentIcon.ADD, tr("chat.new_session"), self.left_panel)
         btn_new_chat.clicked.connect(self.create_new_session)
+        self.btn_new_chat = btn_new_chat
         
         self.session_list = ListWidget(self.left_panel)
         self.session_list.itemClicked.connect(self.on_session_selected)
@@ -1890,18 +1973,19 @@ class ChatInterface(QWidget):
         
         # 侧边栏切换按钮
         self.btn_toggle_sidebar = ToolButton(FluentIcon.MENU, right_panel)
-        self.btn_toggle_sidebar.setToolTip("显示/隐藏会话列表")
+        self.btn_toggle_sidebar.setToolTip(tr("chat.toggle_sidebar"))
         self.btn_toggle_sidebar.clicked.connect(self.toggle_sidebar)
         
         self.persona_combo = ComboBox(right_panel)
-        self.persona_combo.setPlaceholderText("选择一个人格...")
+        self.persona_combo.setPlaceholderText(tr("chat.select_persona"))
         self.persona_prompts = []  # Store prompts separately to avoid itemData issues
         self.load_personas_to_combo()
         self.persona_combo.currentIndexChanged[int].connect(self.on_persona_changed)
         
-        btn_refresh = PushButton(FluentIcon.SYNC, "刷新", right_panel)
+        btn_refresh = PushButton(FluentIcon.SYNC, tr("chat.refresh"), right_panel)
         btn_refresh.setFixedWidth(80)
         btn_refresh.clicked.connect(self.load_personas_to_combo)
+        self.btn_refresh = btn_refresh
         
         prompt_layout.addWidget(self.btn_toggle_sidebar)
         prompt_layout.addWidget(self.persona_combo, 1)
@@ -1942,7 +2026,7 @@ class ChatInterface(QWidget):
         self.input_text.imagePasted.connect(self.on_image_pasted)
         self.input_text.filesDropped.connect(self._on_files_added)
         self.input_text.setFixedHeight(80)
-        self.input_text.setPlaceholderText("请输入内容...")
+        self.input_text.setPlaceholderText(tr("chat.input_placeholder"))
         
         # 下方：工具栏（模型选择 + 发送按钮）
         bottom_toolbar_layout = QHBoxLayout()
@@ -1951,13 +2035,13 @@ class ChatInterface(QWidget):
 
         # 图片选择按钮
         self.btn_image = ToolButton(FluentIcon.PHOTO, self)
-        self.btn_image.setToolTip("添加图片")
+        self.btn_image.setToolTip(tr("chat.add_image"))
         self.btn_image.clicked.connect(self.select_image)
         bottom_toolbar_layout.addWidget(self.btn_image)
 
         # 截图按钮
         self.btn_screenshot = ToolButton(FluentIcon.CUT, self)
-        self.btn_screenshot.setToolTip("屏幕截图")
+        self.btn_screenshot.setToolTip(tr("chat.screenshot"))
         self.btn_screenshot.clicked.connect(self.take_screenshot)
         bottom_toolbar_layout.addWidget(self.btn_screenshot)
 
@@ -1965,7 +2049,7 @@ class ChatInterface(QWidget):
         self.btn_voice = ToolButton(FluentIcon.MICROPHONE, self)
         # self.btn_voice.setFixedSize(32, 32)
         # self.btn_voice.setIconSize(QSize(16, 16))
-        self.btn_voice.setToolTip("语音助手已关闭 (点击开启)")
+        self.btn_voice.setToolTip(tr("chat.voice_off"))
         # self.btn_voice.setStyleSheet("ToolButton { opacity: 0.5; }")
         self.btn_voice.clicked.connect(self.toggle_voice_assistant)
         bottom_toolbar_layout.addWidget(self.btn_voice)
@@ -1975,7 +2059,7 @@ class ChatInterface(QWidget):
 
         # Agent/工具能力菜单按钮
         self.btn_agent_tools = ToolButton(FluentIcon.IOT, self)
-        self.btn_agent_tools.setToolTip("配置 AI 能力 (联网、画图、编程)")
+        self.btn_agent_tools.setToolTip(tr("chat.agent_tools"))
         self.btn_agent_tools.clicked.connect(self.show_tools_menu)
         bottom_toolbar_layout.addWidget(self.btn_agent_tools)
         
@@ -1983,20 +2067,20 @@ class ChatInterface(QWidget):
         self.init_tools_menu()
 
         # 上下文开关
-        self.chk_no_context = CheckBox("不带上下文", right_panel)
-        self.chk_no_context.setToolTip("开启后，AI将不会收到之前的对话历史，仅根据当前输入和系统提示词进行回复")
+        self.chk_no_context = CheckBox(tr("chat.no_context"), right_panel)
+        self.chk_no_context.setToolTip(tr("chat.no_context_tip"))
         bottom_toolbar_layout.addWidget(self.chk_no_context)
 
         # 模型选择下拉框
         self.model_combo = ComboBox(right_panel)
-        self.model_combo.setPlaceholderText("选择模型")
+        self.model_combo.setPlaceholderText(tr("chat.select_model"))
         self.model_combo.setFixedWidth(150) # 固定宽度
         self.load_models_to_combo()
         self.model_combo.currentIndexChanged.connect(self.on_model_changed)
         
         # 发送/停止按钮
         self._is_generating = False
-        self.btn_send = PrimaryPushButton(FluentIcon.SEND, "发送", right_panel)
+        self.btn_send = PrimaryPushButton(FluentIcon.SEND, tr("chat.send"), right_panel)
         self.btn_send.setFixedSize(100, 32)
         self.btn_send.clicked.connect(self.on_send_button_clicked)
         
@@ -2089,7 +2173,7 @@ class ChatInterface(QWidget):
         if not item: return
         
         if self._is_generating:
-            MessageBox("提示", "正在生成消息，请等待完成或停止后再切换会话。", self).exec_()
+            MessageBox(tr("chat.hint"), tr("chat.switch_wait"), self).exec_()
             return
         
         self.current_session_id = item.data(Qt.UserRole)
@@ -2114,7 +2198,7 @@ class ChatInterface(QWidget):
         self.persona_doro_tools = []
         self.persona_live2d_models = []
         
-        self.persona_combo.addItem("默认助手")
+        self.persona_combo.addItem(tr("chat.default_assistant"))
         self.persona_prompts.append("You are a helpful assistant.")
         self.persona_doro_tools.append(False)
         self.persona_live2d_models.append("")
@@ -2182,9 +2266,9 @@ class ChatInterface(QWidget):
             
             if status in ["critical", "warning"]:
                 if status == "critical":
-                    contexts.append(f"{chinese_name}过低({value:.0f}%)，处于危急状态")
+                    contexts.append(tr("chat.pet_attribute_critical", default="{name}过低({value:.0f}%)，处于危急状态").format(name=chinese_name, value=value))
                 elif status == "warning":
-                    contexts.append(f"{chinese_name}偏低({value:.0f}%)")
+                    contexts.append(tr("chat.pet_attribute_low", default="{name}偏低({value:.0f}%)").format(name=chinese_name, value=value))
         
         if contexts:
             return "\n【桌宠状态】" + "；".join(contexts) + "。请根据此状态调整你的回复风格。"
@@ -2238,30 +2322,30 @@ class ChatInterface(QWidget):
                 logger.warning(f"记忆保存失败：{e}")
 
     def on_model_changed(self, index):
-        if index < 0: return
-        data = self.model_combo.itemData(index)
-        if data:
-            # data: (api_key, base_url, model_name, is_thinking, is_visual, type)
-            # Save user preference
-            settings = QSettings("MyApp", "LLMClient")
-            # data[2] is model_name, data[1] is base_url
-            settings.setValue("last_model_name", data[2])
-            settings.setValue("last_base_url", data[1])
+        pass
 
     def init_tools_menu(self):
         self.tool_actions = {}
         self.tool_states = {
             "search": True,
             "image": True,
+            "vision": False,
             "coding": True,
-            "file": True
+            "file": True,
+            "memory": True,
+            "browser": False,
+            "bridge": True,
         }
         
         settings = QSettings("DoroPet", "Settings")
         self.tool_states["search"] = settings.value("tool_search_enabled", True, type=bool)
         self.tool_states["image"] = settings.value("tool_image_enabled", True, type=bool)
+        self.tool_states["vision"] = settings.value("tool_vision_enabled", False, type=bool)
         self.tool_states["coding"] = settings.value("tool_coding_enabled", True, type=bool)
         self.tool_states["file"] = settings.value("tool_file_enabled", True, type=bool)
+        self.tool_states["memory"] = settings.value("tool_memory_enabled", True, type=bool)
+        self.tool_states["browser"] = settings.value("tool_browser_enabled", False, type=bool)
+        self.tool_states["bridge"] = settings.value("tool_bridge_enabled", True, type=bool)
         
         self.skill_states = {}
         skill_mgr = SkillManager()
@@ -2273,30 +2357,40 @@ class ChatInterface(QWidget):
     def show_tools_menu(self):
         menu = QMenu(self)
         
-        local_tools_label = QAction("── 本地工具 ──", self)
+        local_tools_label = QAction(tr("chat.tools_title"), self)
         local_tools_label.setEnabled(False)
         menu.addAction(local_tools_label)
         
-        action_search = QAction("联网搜索", self, checkable=True)
+        action_search = QAction(tr("chat.tool_search"), self, checkable=True)
         action_search.setChecked(self.tool_states["search"])
         action_search.triggered.connect(lambda checked: self.toggle_tool("search", checked))
         menu.addAction(action_search)
         
-        action_image = QAction("画图能力", self, checkable=True)
+        action_image = QAction(tr("chat.tool_draw"), self, checkable=True)
         action_image.setChecked(self.tool_states["image"])
         action_image.triggered.connect(lambda checked: self.toggle_tool("image", checked))
         menu.addAction(action_image)
+
+        action_vision = QAction(tr("chat.tool_vision", default="视觉读取"), self, checkable=True)
+        action_vision.setChecked(self.tool_states.get("vision", False))
+        action_vision.triggered.connect(lambda checked: self.toggle_tool("vision", checked))
+        menu.addAction(action_vision)
         
-        action_coding = QAction("代码执行", self, checkable=True)
+        action_coding = QAction(tr("chat.tool_code"), self, checkable=True)
         action_coding.setChecked(self.tool_states["coding"])
         action_coding.triggered.connect(lambda checked: self.toggle_tool("coding", checked))
         menu.addAction(action_coding)
         
-        action_file = QAction("文件操作", self, checkable=True)
+        action_file = QAction(tr("chat.tool_file"), self, checkable=True)
         action_file.setChecked(self.tool_states["file"])
         action_file.triggered.connect(lambda checked: self.toggle_tool("file", checked))
         menu.addAction(action_file)
-        
+
+        action_browser = QAction(tr("chat.tool_browser"), self, checkable=True)
+        action_browser.setChecked(self.tool_states.get("browser", False))
+        action_browser.triggered.connect(lambda checked: self.toggle_tool("browser", checked))
+        menu.addAction(action_browser)
+
         skill_mgr = SkillManager()
         settings = QSettings("DoroPet", "Settings")
         
@@ -2305,7 +2399,7 @@ class ChatInterface(QWidget):
         
         if skill_mgr.skills:
             menu.addSeparator()
-            skills_label = QAction("── 技能 (Skills) ──", self)
+            skills_label = QAction(tr("chat.skills_title"), self)
             skills_label.setEnabled(False)
             menu.addAction(skills_label)
             
@@ -2342,17 +2436,19 @@ class ChatInterface(QWidget):
         if active_count > 0:
             self.btn_agent_tools.setIcon(FluentIcon.IOT)
             tool_names = []
-            if self.tool_states["search"]: tool_names.append("搜索")
-            if self.tool_states["image"]: tool_names.append("画图")
-            if self.tool_states["coding"]: tool_names.append("代码")
-            if self.tool_states["file"]: tool_names.append("文件")
+            if self.tool_states["search"]: tool_names.append(tr("chat.tool_name_search"))
+            if self.tool_states["image"]: tool_names.append(tr("chat.tool_name_draw"))
+            if self.tool_states.get("vision", False): tool_names.append(tr("chat.tool_name_vision", default="视觉"))
+            if self.tool_states["coding"]: tool_names.append(tr("chat.tool_name_code"))
+            if self.tool_states["file"]: tool_names.append(tr("chat.tool_name_file"))
+            if self.tool_states.get("browser", False): tool_names.append(tr("chat.tool_name_browser"))
             active_skills = [k for k, v in self.skill_states.items() if v]
             if active_skills:
-                tool_names.append(f"{len(active_skills)}个技能")
-            self.btn_agent_tools.setToolTip(f"已启用: {', '.join(tool_names)}")
+                tool_names.append(tr("chat.x_skills").format(count=len(active_skills)))
+            self.btn_agent_tools.setToolTip(tr("chat.enabled_tools", default="已启用: {tools}").format(tools=", ".join(tool_names)))
         else:
             self.btn_agent_tools.setIcon(FluentIcon.CANCEL)
-            self.btn_agent_tools.setToolTip("所有工具已禁用")
+            self.btn_agent_tools.setToolTip(tr("chat.all_disabled"))
 
     def get_enabled_plugins(self):
         enabled = [k for k, v in self.tool_states.items() if v]
@@ -2363,19 +2459,13 @@ class ChatInterface(QWidget):
         current_data = self.model_combo.currentData()
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
-        
-        # Load settings for preference
-        settings = QSettings("MyApp", "LLMClient")
-        last_model = settings.value("last_model_name", "")
-        last_base_url = settings.value("last_base_url", "")
-        
+
         # 1. Load LLM Models
         models = self.db.get_models()
         # models: id, name, provider, api_key, base_url, model_name, is_active, is_visual, is_thinking
-        
+
         active_index = 0
         target_index = -1
-        pref_index = -1
         current_count = 0
 
         for i, m in enumerate(models):
@@ -2388,17 +2478,13 @@ class ChatInterface(QWidget):
             if len(m) > 8:
                 is_thinking = m[8]
                 
-            # Add "llm" type flag
-            data = (m[3], m[4], m[5], is_thinking, is_visual, "llm") # api_key, base_url, model_name, is_thinking, is_visual, type
+            # Add "llm" type flag + provider
+            data = (m[3], m[4], m[5], is_thinking, is_visual, "llm", m[2]) # api_key, base_url, model_name, is_thinking, is_visual, type, provider
             self.model_combo.addItem(m[1], userData=data)
             
             if m[6] == 1: # is_active
                 active_index = current_count
-            
-            # Check preference (match model name and base_url)
-            if last_model and last_base_url and m[5] == last_model and m[4] == last_base_url:
-                pref_index = current_count
-            
+
             # Compare basic fields for selection stability
             if current_data and len(current_data) >= 3 and data[:3] == current_data[:3]:
                 target_index = current_count
@@ -2418,10 +2504,6 @@ class ChatInterface(QWidget):
             # Only set active if no LLM was active (priority to LLM)
             if m[6] == 1 and active_index == 0:
                  active_index = current_count
-            
-            # Check preference
-            if last_model and last_base_url and m[5] == last_model and m[3] == last_base_url:
-                pref_index = current_count
 
             if current_data and len(current_data) >= 3 and data[:3] == current_data[:3]:
                 target_index = current_count
@@ -2430,19 +2512,12 @@ class ChatInterface(QWidget):
         
         if target_index != -1:
             self.model_combo.setCurrentIndex(target_index)
-        elif pref_index != -1:
-            self.model_combo.setCurrentIndex(pref_index)
         elif current_count > 0:
             self.model_combo.setCurrentIndex(active_index)
         else:
             # Fallback if no models in DB
             self.model_combo.addItem("Default (OpenAI)")
-            # settings already loaded above
-            api_key = settings.value("api_key", "")
-            base_url = settings.value("base_url", "https://api.openai.com/v1")
-            model = settings.value("model", "gpt-3.5-turbo")
-            # Default fallback data: thinking=0, visual=0, type="llm"
-            self.model_combo.setItemData(0, (api_key, base_url, model, 0, 0, "llm"))
+            self.model_combo.setItemData(0, ("", "", "gpt-3.5-turbo", 0, 0, "llm"))
             
         self.model_combo.blockSignals(False)
 
@@ -2451,12 +2526,12 @@ class ChatInterface(QWidget):
     def export_chat_history(self, session_id, session_title):
         messages = self.db.get_messages(session_id)
         if not messages:
-             MessageBox("提示", "该会话没有消息记录", self).exec_()
+             MessageBox(tr("chat.hint"), tr("chat.no_messages"), self).exec_()
              return
 
         content_lines = []
-        content_lines.append(f"会话: {session_title}")
-        content_lines.append(f"导出时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        content_lines.append(tr("chat.session_label", default="会话: {title}").format(title=session_title))
+        content_lines.append(tr("chat.export_time", default="导出时间: {time}").format(time=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         content_lines.append("=" * 50)
         content_lines.append("")
 
@@ -2477,24 +2552,24 @@ class ChatInterface(QWidget):
         safe_title = "".join([c for c in session_title if c.isalnum() or c in (' ', '-', '_')]).strip()
         if not safe_title: safe_title = "chat_export"
         
-        file_path, _ = QFileDialog.getSaveFileName(self, "导出聊天记录", f"{safe_title}.txt", "Text Files (*.txt)")
+        file_path, _ = QFileDialog.getSaveFileName(self, tr("chat.export_file_title"), f"{safe_title}.txt", "Text Files (*.txt)")
         
         if file_path:
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(full_text)
-                MessageBox("成功", f"已导出到: {file_path}", self).exec_()
+                MessageBox(tr("chat.success"), tr("chat.export_success", default="已导出到: {path}").format(path=file_path), self).exec_()
             except Exception as e:
                 logger.error(f"Export error: {e}")
-                MessageBox("错误", f"导出失败: {e}", self).exec_()
+                MessageBox(tr("chat.error"), tr("chat.export_failed", default="导出失败: {error}").format(error=e), self).exec_()
 
     def show_session_context_menu(self, pos):
         item = self.session_list.itemAt(pos)
         if not item: return
         
         menu = QMenu()
-        export_action = menu.addAction("导出聊天记录")
-        delete_action = menu.addAction("删除会话")
+        export_action = menu.addAction(tr("chat.export_chat"))
+        delete_action = menu.addAction(tr("chat.delete_session"))
         action = menu.exec_(self.session_list.mapToGlobal(pos))
         
         sess_id = item.data(Qt.UserRole)
@@ -2503,7 +2578,7 @@ class ChatInterface(QWidget):
             self.export_chat_history(sess_id, item.text())
         elif action == delete_action:
             if self._is_generating and sess_id == self.worker_session_id:
-                MessageBox("提示", "该会话正在生成消息，请等待完成或停止后再删除。", self).exec_()
+                MessageBox(tr("chat.hint"), tr("chat.delete_wait"), self).exec_()
                 return
             self.db.delete_session(sess_id)
             self.load_sessions_list()
@@ -2542,7 +2617,10 @@ class ChatInterface(QWidget):
         messages = self.db.get_messages(self.current_session_id)
         for msg_data in messages:
             attachments = []
-            if len(msg_data) >= 11:
+            stats_json = ""
+            if len(msg_data) >= 12:
+                msg_id, role, content, images, parent_id, sibling_ids, current_index, model, reasoning, tool_calls, attachments, stats_json = msg_data[:12]
+            elif len(msg_data) >= 11:
                 msg_id, role, content, images, parent_id, sibling_ids, current_index, model, reasoning, tool_calls, attachments = msg_data[:11]
             elif len(msg_data) >= 10:
                 msg_id, role, content, images, parent_id, sibling_ids, current_index, model, reasoning, tool_calls = msg_data[:10]
@@ -2577,9 +2655,12 @@ class ChatInterface(QWidget):
                 container = BranchContainer()
                 
                 for s_row in siblings_data:
-                    # Unpack: id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments
+                    # Unpack: id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments, stats_json
                     s_attachments_str = None
-                    if len(s_row) >= 11:
+                    s_stats_json = ""
+                    if len(s_row) >= 12:
+                        s_id, s_role, s_content, s_images_str, s_parent_id, s_is_active, s_ts, s_model, s_reasoning, s_tool_calls, s_attachments_str, s_stats_json = s_row[:12]
+                    elif len(s_row) >= 11:
                         s_id, s_role, s_content, s_images_str, s_parent_id, s_is_active, s_ts, s_model, s_reasoning, s_tool_calls, s_attachments_str = s_row[:11]
                     elif len(s_row) >= 10:
                         s_id, s_role, s_content, s_images_str, s_parent_id, s_is_active, s_ts, s_model, s_reasoning, s_tool_calls = s_row[:10]
@@ -2646,17 +2727,19 @@ class ChatInterface(QWidget):
                     bubble.switch_branch_requested.connect(self.switch_branch)
                     bubble.branch_conversation_requested.connect(self.branch_conversation)
                     bubble.context_menu_requested.connect(self._on_bubble_context_menu)
+                    if s_stats_json:
+                        bubble.set_stats(s_stats_json)
                     container.add_bubble(bubble)
                 
                 self.chat_layout.addWidget(container)
             else:
-                self.add_message_to_ui(role, content, msg_id, images, sibling_ids, current_index, model=model, reasoning=reasoning, tool_calls=tool_calls, attachments=attachments)
+                self.add_message_to_ui(role, content, msg_id, images, sibling_ids, current_index, model=model, reasoning=reasoning, tool_calls=tool_calls, attachments=attachments, stats_json=stats_json)
 
         
         self.chat_layout.addStretch()
         
-        QApplication.processEvents()
-        self.scroll_to_bottom()
+        # 延迟滚动：等布局完成后再滚到底部
+        QTimer.singleShot(50, self.scroll_to_bottom)
 
     # --- Voice Assistant Handlers ---
     def on_voice_wake_detected(self):
@@ -2665,8 +2748,8 @@ class ChatInterface(QWidget):
         self.btn_voice.setIcon(FluentIcon.MICROPHONE)
         # Change color to indicate listening (Blue background)
         # self.btn_voice.setStyleSheet("background-color: rgba(0, 120, 212, 0.2); border-radius: 4px; border: 1px solid rgba(0, 120, 212, 0.3);")
-        self.input_text.setPlaceholderText("正在听...")
-        self.btn_voice.setToolTip("正在聆听...")
+        self.input_text.setPlaceholderText(tr("chat.listening"))
+        self.btn_voice.setToolTip(tr("chat.voice_listening"))
 
     def on_voice_text_recognized(self, text):
         """Handle recognized text"""
@@ -2686,10 +2769,10 @@ class ChatInterface(QWidget):
         # self.btn_voice.setStyleSheet(style)
 
         if status == "idle":
-            self.input_text.setPlaceholderText("请输入内容...")
-            self.btn_voice.setToolTip("语音唤醒: Hey Doro")
+            self.input_text.setPlaceholderText(tr("chat.input_placeholder"))
+            self.btn_voice.setToolTip(tr("chat.voice_hint"))
         elif status == "listening":
-            self.input_text.setPlaceholderText("正在听...")
+            self.input_text.setPlaceholderText(tr("chat.listening"))
 
     def get_voice_button_style(self, state):
         is_dark = isDarkTheme()
@@ -2740,10 +2823,43 @@ class ChatInterface(QWidget):
             if self._pending_theme_widgets:
                 QTimer.singleShot(5, self._process_theme_updates)
 
+    def refresh_ui(self, lang_code: str = None):
+        """语言切换时刷新 UI 文本。"""
+        # 发送/停止按钮
+        self.btn_send.setText(
+            tr("chat.stop") if self._is_generating else tr("chat.send")
+        )
+        
+        # init_ui 中创建的元素
+        if hasattr(self, 'btn_new_chat'):
+            self.btn_new_chat.setText(tr("chat.new_session"))
+        self.btn_toggle_sidebar.setToolTip(tr("chat.toggle_sidebar"))
+        self.persona_combo.setPlaceholderText(tr("chat.select_persona"))
+        if hasattr(self, 'btn_refresh'):
+            self.btn_refresh.setText(tr("chat.refresh"))
+        self.input_text.setPlaceholderText(tr("chat.input_placeholder"))
+        self.btn_image.setToolTip(tr("chat.add_image"))
+        self.btn_screenshot.setToolTip(tr("chat.screenshot"))
+        if hasattr(self, 'btn_voice'):
+            self.btn_voice.setToolTip(tr("chat.voice_off"))
+        self.btn_agent_tools.setToolTip(tr("chat.agent_tools"))
+        self.chk_no_context.setText(tr("chat.no_context"))
+        self.chk_no_context.setToolTip(tr("chat.no_context_tip"))
+        self.model_combo.setPlaceholderText(tr("chat.select_model"))
+        
+        # 重新加载 persona 列表（"默认助手" 文本）
+        current_idx = self.persona_combo.currentIndex()
+        self.load_personas_to_combo()
+        if current_idx >= 0 and current_idx < self.persona_combo.count():
+            self.persona_combo.setCurrentIndex(current_idx)
+        
+        # 更新工具按钮状态
+        self.update_tools_button_icon()
+
     def on_voice_error(self, error_msg):
         """Handle voice errors"""
         logger.error(f"Voice Error: {error_msg}")
-        self.btn_voice.setToolTip(f"语音错误: {error_msg}")
+        self.btn_voice.setToolTip(tr("chat.voice_error", default="语音错误: {msg}").format(msg=error_msg))
         # Optionally disable the button or show an error icon
 
     def toggle_voice_assistant(self):
@@ -2752,13 +2868,13 @@ class ChatInterface(QWidget):
             logger.info("Stopping voice assistant.")
             self.voice_assistant.stop()
             # self.btn_voice.setIcon(FluentIcon.MICROPHONE) 
-            self.btn_voice.setToolTip("语音助手已关闭 (点击开启)")
+            self.btn_voice.setToolTip(tr("chat.voice_off"))
             # self.btn_voice.setStyleSheet("ToolButton { opacity: 0.5; }")
         else:
             logger.info("Starting voice assistant.")
             self.voice_assistant.start()
             # self.btn_voice.setIcon(FluentIcon.MICROPHONE)
-            self.btn_voice.setToolTip("语音唤醒: Hey Doro")
+            self.btn_voice.setToolTip(tr("chat.voice_hint"))
             # Initial active style
             # self.btn_voice.setStyleSheet(self.get_voice_button_style("idle"))
     
@@ -2768,10 +2884,7 @@ class ChatInterface(QWidget):
             return
         
         try:
-            clean_content = re.sub(r'<thinking>.*?</thinking>', '', content, flags=re.DOTALL).strip()
-            
-            if clean_content:
-                self.tts_manager.speak(msg_id, clean_content, force_restart=force_restart)
+            self.tts_manager.speak(msg_id, content, force_restart=force_restart)
         except Exception as e:
             logger.error(f"Error in speak_message: {e}")
 
@@ -2836,7 +2949,7 @@ class ChatInterface(QWidget):
             logger.error(f"TTS Error for msg {msg_id}: {error_msg}")
             bubble = self.get_bubble_by_id(msg_id)
             if bubble and hasattr(bubble, 'btn_read'):
-                 bubble.btn_read.setToolTip(f"错误: {error_msg}")
+                 bubble.btn_read.setToolTip(tr("chat.error") + f": {error_msg}")
         except Exception as e:
             logger.error(f"Error in on_tts_error: {e}")
 
@@ -2849,7 +2962,7 @@ class ChatInterface(QWidget):
                     return widget
         return None
 
-    def add_message_to_ui(self, role, content, msg_id, images=None, sibling_ids=None, current_index=0, model=None, reasoning=None, tool_calls=None, attachments=None):
+    def add_message_to_ui(self, role, content, msg_id, images=None, sibling_ids=None, current_index=0, model=None, reasoning=None, tool_calls=None, attachments=None, stats_json=""):
         if role == "assistant" and (reasoning or tool_calls):
             exec_widget = ToolExecutionWidget(self)
             if reasoning:
@@ -2899,7 +3012,11 @@ class ChatInterface(QWidget):
         
         if not inserted:
             self.chat_layout.addWidget(bubble)
-            
+
+        # ── 恢复持久化的统计标签（Token + 耗时）──
+        if stats_json:
+            bubble.set_stats(stats_json)
+
     def switch_branch(self, msg_id):
         self.db.switch_branch(msg_id)
         self.load_chat_history()
@@ -2987,7 +3104,7 @@ class ChatInterface(QWidget):
     def select_image(self):
         file_paths, _ = QFileDialog.getOpenFileNames(
             self, 
-            "选择图片", 
+            tr("chat.select_image"), 
             "", 
             "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
@@ -3054,7 +3171,7 @@ class ChatInterface(QWidget):
         # Add a clear button if there are images
         if self.selected_images:
             btn_clear = ToolButton(FluentIcon.CLOSE, self.image_preview_widget)
-            btn_clear.setToolTip("清除所有图片")
+            btn_clear.setToolTip(tr("chat.clear_images"))
             btn_clear.clicked.connect(self.clear_images)
             self.image_preview_layout.addWidget(btn_clear)
 
@@ -3076,7 +3193,7 @@ class ChatInterface(QWidget):
         else:
             self._is_generating = False
             self.btn_send.setIcon(FluentIcon.SEND)
-            self.btn_send.setText("发送")
+            self.btn_send.setText(tr("chat.send"))
     
     def _check_stop_timeout(self):
         if hasattr(self, 'worker') and self.worker and self.worker.isRunning():
@@ -3089,18 +3206,46 @@ class ChatInterface(QWidget):
     def on_generation_stopped(self):
         self._is_generating = False
         self.btn_send.setIcon(FluentIcon.SEND)
-        self.btn_send.setText("发送")
+        self.btn_send.setText(tr("chat.send"))
         
         self._stop_timer.stop()
         self.update_timer.stop()
         
-        if self.streaming_bubble:
+        current_content = (self.streaming_content or "").strip()
+
+        if current_content and self.streaming_bubble:
+            # 有部分正文 → 保存到 DB，让重新生成按钮能正常找到 msg_id
             try:
+                used_model = getattr(self.worker, 'model', None) if hasattr(self, 'worker') else None
+                msg_id = self.db.add_message(
+                    self.worker_session_id, "assistant", current_content,
+                    [], parent_id=None, model=used_model,
+                )
+                self.streaming_bubble.msg_id = msg_id
                 self.streaming_content += "\n\n*[已停止]*"
                 self.streaming_bubble.update_content(self.streaming_content)
+                self.load_chat_history()
+            except Exception as e:
+                logger.warning(f"[Stopped] Failed to save partial message: {e}")
+        else:
+            # 还没有任何正文（或气泡未创建）→ 撤回用户消息到输入框
+            try:
+                if self._last_user_msg_id is not None:
+                    self.db.delete_message(self._last_user_msg_id)
+                    self._last_user_msg_id = None
+                if self._last_user_input:
+                    self.input_text.setPlainText(self._last_user_input)
+                self.load_chat_history()
+            except Exception as e:
+                logger.warning(f"[Stopped] Failed to rollback: {e}")
+
+        if self.streaming_bubble:
+            try:
+                self.streaming_bubble.deleteLater()
             except RuntimeError:
                 pass
             self.streaming_bubble = None
+        self.streaming_content = ""
         
         if self.status_bubble:
             try:
@@ -3132,11 +3277,47 @@ class ChatInterface(QWidget):
                 self.worker.tool_status_changed.disconnect()
                 self.worker.tool_execution_update.disconnect()
                 self.worker.stopped.disconnect()
+                self.worker.tool_confirmation_requested.disconnect()
             except (TypeError, RuntimeError):
                 pass
             self.worker = None
         
         self.scroll_to_bottom()
+
+    def _on_tool_confirmation(self, msg: str, confirm_id: str, callback):
+        """显示工具确认弹窗，等待用户确认或拒绝。"""
+        from PyQt5.QtWidgets import QMessageBox
+        import json
+
+        try:
+            data = json.loads(msg)
+        except json.JSONDecodeError:
+            callback(True)  # 解析失败则自动确认
+            return
+
+        display_name = data.get("display_name", "")
+        message = data.get("message", "")
+        risk = data.get("risk", "medium")
+
+        # 根据风险等级使用不同的弹窗图标
+        if risk in ("high", "critical"):
+            reply = QMessageBox.warning(
+                self,
+                f"Doro 需要确认 — {display_name}",
+                message,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+        else:
+            reply = QMessageBox.question(
+                self,
+                f"Doro 需要确认 — {display_name}",
+                message,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+        confirmed = (reply == QMessageBox.Yes)
+        callback(confirmed)
 
     def send_message(self):
         user_input = self.input_text.toPlainText().strip()
@@ -3168,6 +3349,7 @@ class ChatInterface(QWidget):
         self.scroll_to_bottom()
 
         self._last_user_input = user_input
+        self._last_user_msg_id = msg_id
         self.trigger_llm_generation()
 
     def _on_files_added(self, file_paths: list):
@@ -3197,8 +3379,8 @@ class ChatInterface(QWidget):
         if unsupported:
             names = ", ".join(os.path.basename(p) for p in unsupported)
             InfoBar.warning(
-                title="不支持的文件类型",
-                content=f"以下文件暂不支持：{names}",
+                title=tr("chat.unsupported_file"),
+                content=tr("chat.unsupported_files_msg", default="以下文件暂不支持：{names}").format(names=names),
                 orient=Qt.Horizontal, isClosable=True,
                 position=InfoBarPosition.TOP, duration=5000, parent=self
             )
@@ -3209,7 +3391,7 @@ class ChatInterface(QWidget):
                 for p in too_large
             )
             InfoBar.warning(
-                title="文件过大",
+                title=tr("chat.file_too_large"),
                 content=f"超过 {MAX_FILE_SIZE / (1024*1024):.0f}MB 限制：{names}\n请使用技能处理大文件。",
                 orient=Qt.Horizontal, isClosable=True,
                 position=InfoBarPosition.TOP, duration=5000, parent=self
@@ -3232,7 +3414,7 @@ class ChatInterface(QWidget):
             except OSError as e:
                 logger.error(f"Failed to add file {path}: {e}")
                 InfoBar.error(
-                    title="添加失败",
+                    title=tr("chat.add_failed"),
                     content=f"无法添加文件: {os.path.basename(path)}",
                     orient=Qt.Horizontal, isClosable=True,
                     position=InfoBarPosition.TOP, duration=3000, parent=self
@@ -3272,7 +3454,7 @@ class ChatInterface(QWidget):
         logger.info("Starting LLM generation...")
         self._is_generating = True
         self.btn_send.setIcon(FluentIcon.CANCEL)
-        self.btn_send.setText("停止")
+        self.btn_send.setText(tr("chat.stop"))
         
         self.worker_session_id = self.current_session_id
         
@@ -3282,9 +3464,12 @@ class ChatInterface(QWidget):
         is_thinking = 0
         is_visual = 0
         model_type = "llm"
+        provider_id = ""
         
         if model_data:
-            if len(model_data) >= 6:
+            if len(model_data) >= 7:
+                api_key, base_url, model, is_thinking, is_visual, model_type, provider_id = model_data[:7]
+            elif len(model_data) >= 6:
                 api_key, base_url, model, is_thinking, is_visual, model_type = model_data[:6]
             elif len(model_data) >= 5:
                 api_key, base_url, model, is_thinking, is_visual = model_data[:5]
@@ -3293,20 +3478,17 @@ class ChatInterface(QWidget):
             else:
                 api_key, base_url, model = model_data[:3]
         else:
-            # Fallback to QSettings if combo is empty or failed
-            settings = QSettings("MyApp", "LLMClient")
-            api_key = settings.value("api_key", "")
-            base_url = settings.value("base_url", "https://api.openai.com/v1")
-            model = settings.value("model", "gpt-3.5-turbo")
+            # Fallback if combo is empty
+            api_key, base_url, model = "", "", ""
 
         is_ollama = "ollama" in base_url.lower() or "localhost:11434" in base_url
         
         if not api_key and not is_ollama:
-            w = MessageBox("提示", "请先在【模型配置】页面添加并选择一个有效的模型！", self)
+            w = MessageBox(tr("chat.hint"), tr("chat.no_model"), self)
             w.exec_()
             self._is_generating = False
             self.btn_send.setIcon(FluentIcon.SEND)
-            self.btn_send.setText("发送")
+            self.btn_send.setText(tr("chat.send"))
             return
 
         # Check for Direct Image Generation
@@ -3379,6 +3561,11 @@ class ChatInterface(QWidget):
             
             if "image" in enabled_tools:
                 tool_instruction += "2. 画图工具（generate_image）：当用户要求生成图片时调用。\n"
+
+            if "vision" in enabled_tools:
+                tool_instruction += "3. 视觉读取工具（analyze_image）：当当前模型无法直接读取图片、但用户询问图片内容时调用。\n"
+                tool_instruction += "   - image_index 从 1 开始，对应用户消息中的 [图片 N]。\n"
+                tool_instruction += "   - 不要臆测图片内容，必须先调用 analyze_image 获取结果后再回答。\n"
                 
             if "python" in enabled_tools:
                 tool_instruction += "3. 文件/代码操作工具（write_file, run_python_script, read_file, list_files, search_files）：\n"
@@ -3465,6 +3652,7 @@ class ChatInterface(QWidget):
                 history.insert(0, {"role": "system", "content": tool_instruction})
 
         has_images = False
+        available_images = []
         for msg_data in db_msgs:
             if len(msg_data) >= 4:
                 role = msg_data[1]
@@ -3497,11 +3685,19 @@ class ChatInterface(QWidget):
                 history.append({"role": role, "content": full_content})
             else:
                 has_images = True
-                content_list = []
-                if full_content:
-                    content_list.append({"type": "text", "text": full_content})
+                valid_image_paths = []
                 for img_path in images:
                     if img_path and os.path.exists(img_path):
+                        valid_image_paths.append(img_path)
+                        logger.debug(f"[ChatUI] 使用已有图片路径：{img_path}")
+                    else:
+                        logger.warning(f"[ChatUI] 图片路径无效，已跳过：{img_path}")
+
+                if is_visual:
+                    content_list = []
+                    if full_content:
+                        content_list.append({"type": "text", "text": full_content})
+                    for img_path in valid_image_paths:
                         file_uri = pathlib.Path(img_path).as_uri()
                         content_list.append({
                             "type": "image_url",
@@ -3510,26 +3706,39 @@ class ChatInterface(QWidget):
                             },
                             "_file_path": img_path
                         })
-                        logger.debug(f"[ChatUI] 使用已有图片路径：{img_path}")
-                    else:
-                        base64_image = self.encode_image(img_path)
-                        if base64_image:
-                            content_list.append({
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_image}"
-                                },
-                                "_file_path": img_path
-                            })
-                history.append({"role": role, "content": content_list})
+                    history.append({"role": role, "content": content_list})
+                else:
+                    start_index = len(available_images) + 1
+                    available_images.extend(valid_image_paths)
+                    image_notes = [
+                        tr("chat.attached_image_note", default="[图片 {index}: {path}]").format(index=start_index + idx, path=path)
+                        for idx, path in enumerate(valid_image_paths)
+                    ]
+                    vision_hint = tr(
+                        "chat.vision_tool_hint",
+                        default="用户附带了图片，但当前模型不支持直接视觉输入。若需要读取图片，请调用 analyze_image 工具并传入对应图片序号。"
+                    )
+                    text_parts = [full_content or "", vision_hint, "\n".join(image_notes)]
+                    history.append({"role": role, "content": "\n\n".join(part for part in text_parts if part)})
 
-        # Check if we need vision fallback
         if has_images and not is_visual:
-            # Note: process_vision_fallback returns True if it starts async processing
-            if self.process_vision_fallback(history, model_data, parent_id):
+            if not self.tool_states.get("vision", False):
+                MessageBox(tr("chat.hint"), tr("chat.no_vision_tool", default="当前模型不支持视觉。请切换视觉模型，或在工具菜单中启用“视觉读取”。"), self).exec_()
+                self._is_generating = False
+                self.btn_send.setIcon(FluentIcon.SEND)
+                self.btn_send.setText(tr("chat.send"))
                 return
+            vision_model_data = self.get_first_vision_model_data()
+            if not vision_model_data:
+                MessageBox(tr("chat.hint"), tr("chat.no_vision"), self).exec_()
+                self._is_generating = False
+                self.btn_send.setIcon(FluentIcon.SEND)
+                self.btn_send.setText(tr("chat.send"))
+                return
+        else:
+            vision_model_data = None
         
-        self.start_llm_worker(history, model_data, parent_id)
+        self.start_llm_worker(history, model_data, parent_id, provider_id, available_images, vision_model_data)
 
     def trigger_direct_image_generation(self, api_key, base_url, model):
         """Handle direct image generation without LLM worker"""
@@ -3542,7 +3751,7 @@ class ChatInterface(QWidget):
         if not db_msgs:
             self._is_generating = False
             self.btn_send.setIcon(FluentIcon.SEND)
-            self.btn_send.setText("发送")
+            self.btn_send.setText(tr("chat.send"))
             return
             
         # Find last user message
@@ -3555,8 +3764,8 @@ class ChatInterface(QWidget):
         if not last_user_msg:
              self._is_generating = False
              self.btn_send.setIcon(FluentIcon.SEND)
-             self.btn_send.setText("发送")
-             MessageBox("提示", "无法获取有效的图片生成提示词。", self).exec_()
+             self.btn_send.setText(tr("chat.send"))
+             MessageBox(tr("chat.hint"), tr("chat.no_image_prompt"), self).exec_()
              return
              
         # If content is list (e.g. with images), extract text
@@ -3567,8 +3776,8 @@ class ChatInterface(QWidget):
         if not isinstance(last_user_msg, str) or not last_user_msg.strip():
              self._is_generating = False
              self.btn_send.setIcon(FluentIcon.SEND)
-             self.btn_send.setText("发送")
-             MessageBox("提示", "无法获取有效的图片生成提示词。", self).exec_()
+             self.btn_send.setText(tr("chat.send"))
+             MessageBox(tr("chat.hint"), tr("chat.no_image_prompt"), self).exec_()
              return
 
         # Start Image Generation Worker
@@ -3580,7 +3789,7 @@ class ChatInterface(QWidget):
     def on_image_generation_finished(self, result_json_str):
         self._is_generating = False
         self.btn_send.setIcon(FluentIcon.SEND)
-        self.btn_send.setText("发送")
+        self.btn_send.setText(tr("chat.send"))
         
         session_id = self.worker_session_id
         is_same_session = (session_id == self.current_session_id)
@@ -3613,199 +3822,23 @@ class ChatInterface(QWidget):
     def on_image_generation_error(self, error_msg):
         self._is_generating = False
         self.btn_send.setIcon(FluentIcon.SEND)
-        self.btn_send.setText("发送")
-        MessageBox("生成失败", f"图片生成失败: {error_msg}", self).exec_()
+        self.btn_send.setText(tr("chat.send"))
+        MessageBox(tr("chat.gen_failed"), tr("chat.gen_failed_msg", default="图片生成失败: {error}").format(error=error_msg), self).exec_()
 
-    def process_vision_fallback(self, history, model_data, parent_id):
-        """
-        Check if we can find a vision model to describe images.
-        Returns True if fallback started, False if not possible.
-        """
-        # 1. Identify all images in history that need description
-        # We look for image_url blocks in ALL messages (User and Assistant)
-        
-        # Structure to track what needs analysis: list of (msg_idx, content_idx, image_path)
-        self.vision_queue = []
-        
-        # First pass: check cache and collect missing ones
-        has_changes = False
-        
-        for i, msg in enumerate(history):
-            if isinstance(msg['content'], list):
-                new_content = []
-                content_modified = False
-                
-                for j, part in enumerate(msg['content']):
-                    if part.get('type') == 'image_url':
-                        file_path = part.get('_file_path')
-                        if file_path:
-                            # Check cache
-                            cached_desc = self.db.get_image_description(file_path)
-                            if cached_desc:
-                                # Replace with text
-                                new_content.append({
-                                    "type": "text", 
-                                    "text": f"\n[图片描述: {cached_desc}]\n"
-                                })
-                                content_modified = True
-                                has_changes = True
-                            else:
-                                # Needs analysis
-                                self.vision_queue.append((i, j, file_path))
-                                # Keep original for now, will be replaced later
-                                new_content.append(part)
-                        else:
-                             new_content.append(part)
-                    else:
-                        new_content.append(part)
-                
-                if content_modified:
-                    msg['content'] = new_content
-
-        # If no images need analysis, but we did some replacements, 
-        # we return False so trigger_llm_generation proceeds to start_llm_worker (which will sanitize).
-        if not self.vision_queue:
-            return False
-
-        # 2. If we have images to analyze, find a vision model
-        vision_model_data = None
-        
-        # Try current model first (if it were visual, we wouldn't be here, but check anyway)
-        # Actually, we are here because is_visual is False.
-        
-        # Search in combo items (loaded from DB)
-        # We can't access combo items data directly easily without iterating.
-        # But we can query DB or config.
-        # Easier: iterate model_combo items
-        
+    def get_first_vision_model_data(self):
         count = self.model_combo.count()
         for i in range(count):
             data = self.model_combo.itemData(i)
-            # data: (api_key, base_url, model, is_thinking, is_visual)
-            if len(data) >= 5 and data[4]: # is_visual is True
-                vision_model_data = data
-                break
-        
-        if not vision_model_data:
-            # Try to find 'gpt-4o' or 'claude-3' in name as fallback heuristic if data not reliable
-            for i in range(count):
-                data = self.model_combo.itemData(i)
-                model_name = data[2] if len(data) >= 3 else ""
-                if 'gpt-4o' in model_name or 'claude-3' in model_name or 'gemini' in model_name or 'vision' in model_name:
-                    vision_model_data = data
-                    break
+            if data and len(data) >= 5 and data[4]:
+                return data
+        for i in range(count):
+            data = self.model_combo.itemData(i)
+            model_name = data[2] if data and len(data) >= 3 else ""
+            if 'gpt-4o' in model_name or 'claude-3' in model_name or 'gemini' in model_name or 'vision' in model_name:
+                return data
+        return None
 
-        if not vision_model_data:
-            msg = "当前选择的模型不支持视觉理解，且未找到可用的辅助视觉模型。\n请切换到支持视觉的模型，或在【模型配置】中添加支持视觉的模型（勾选'视觉模型'）。"
-            MessageBox("不支持图片", msg, self).exec_()
-            self._is_generating = False
-            self.btn_send.setIcon(FluentIcon.SEND)
-            self.btn_send.setText("发送")
-            return True
-
-        # 3. Start processing queue
-        self.vision_model_data = vision_model_data
-        self.vision_history = history # Store ref to modify
-        self.vision_parent_id = parent_id
-        self.vision_main_model_data = model_data
-        self.vision_total_count = len(self.vision_queue)
-        
-        # Show Status Bubble
-        if not hasattr(self, 'status_bubble') or self.status_bubble is None:
-            self.status_bubble = StatusBubble(f"正在分析图片 (0/{self.vision_total_count})...", self)
-            # Insert at bottom
-            stretch_item = self.chat_layout.takeAt(self.chat_layout.count() - 1)
-            self.chat_layout.addWidget(self.status_bubble)
-            if stretch_item: self.chat_layout.addItem(stretch_item)
-            self.scroll_to_bottom()
-            
-        self.process_next_vision_item()
-        return True
-
-    def process_next_vision_item(self):
-        if not self.vision_queue:
-            self.finish_vision_fallback()
-            return
-
-        msg_idx, content_idx, file_path = self.vision_queue[0]
-        
-        # Update bubble
-        current_idx = self.vision_total_count - len(self.vision_queue) + 1
-        if self.status_bubble:
-            self.status_bubble.update_text(f"正在分析图片 ({current_idx}/{self.vision_total_count})...")
-
-        # Prepare request for vision model
-        # We send: System prompt + User message with JUST this image
-        prompt = "Please describe this image in detail. The description will be provided to a text-only model as context."
-        
-        base64_image = self.encode_image(file_path)
-        
-        vision_messages = [
-            {"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-            ]}
-        ]
-        
-        api_key, base_url, model = self.vision_model_data[:3]
-        
-        logger.info(f"[Vision] Starting vision model: base_url={base_url}, model={model}")
-        
-        # Use LLMWorker with skip_tools_and_max_tokens=True for vision models
-        self.vision_worker = LLMWorker(api_key, base_url, vision_messages, model, self.db, enabled_plugins=[], skip_tools_and_max_tokens=True)
-        self.vision_worker.finished.connect(self.on_vision_item_finished)
-        self.vision_worker.error.connect(self.on_vision_item_error)
-        self.vision_worker.start()
-
-    def on_vision_item_finished(self, content, reasoning, tool_calls, generated_images=[]):
-        logger.info(f"[Vision] Vision model finished, content length: {len(content) if content else 0}")
-        # Save to cache and update history
-        if self.vision_queue:
-            msg_idx, content_idx, file_path = self.vision_queue.pop(0)
-            
-            # Save to DB
-            self.db.save_image_description(file_path, content)
-            
-            # Update history
-            # We need to find the item again because indices might shift if we modified the list?
-            # Actually, we are modifying deep inside dicts, so list structure of 'history' stays same length.
-            # But wait, content list length stays same too, we just replace the item.
-            
-            msg = self.vision_history[msg_idx]
-            if isinstance(msg['content'], list) and len(msg['content']) > content_idx:
-                # Replace image_url with text
-                msg['content'][content_idx] = {
-                    "type": "text", 
-                    "text": f"\n[图片描述: {content}]\n"
-                }
-            
-            # Next
-            self.process_next_vision_item()
-
-    def on_vision_item_error(self, err_msg):
-        logger.error(f"Vision item error: {err_msg}")
-        # Skip this item or retry? For now, skip and leave original (or add error note)
-        if self.vision_queue:
-            msg_idx, content_idx, file_path = self.vision_queue.pop(0)
-            
-            # Optional: Add error note to history?
-            # msg = self.vision_history[msg_idx]
-            # msg['content'][content_idx] = {"type": "text", "text": "[图片分析失败]"}
-            
-            self.process_next_vision_item()
-
-    def finish_vision_fallback(self):
-        logger.info("Vision fallback finished.")
-        
-        # Remove Status Bubble
-        if self.status_bubble:
-            self.status_bubble.deleteLater()
-            self.status_bubble = None
-        
-        # Proceed to main LLM
-        self.start_llm_worker(self.vision_history, self.vision_main_model_data, self.vision_parent_id)
-
-    def start_llm_worker(self, history, model_data, parent_id):
+    def start_llm_worker(self, history, model_data, parent_id, provider_id="", available_images=None, vision_model_data=None):
         # Sanitize history (remove internal _file_path keys)
         clean_history = []
         for msg in history:
@@ -3829,14 +3862,10 @@ class ChatInterface(QWidget):
             else:
                 api_key, base_url, model = model_data[:3]
         else:
-            # Fallback (should be covered in trigger_llm_generation, but good for safety)
-            settings = QSettings("MyApp", "LLMClient")
-            api_key = settings.value("api_key", "")
-            base_url = settings.value("base_url", "https://api.openai.com/v1")
-            model = settings.value("model", "gpt-3.5-turbo")
+            api_key, base_url, model = "", "", ""
 
         self.memory_manager.set_model_config(api_key, base_url, model)
-
+        
         # Determine available expressions
         available_expressions = []
         
@@ -3858,7 +3887,27 @@ class ChatInterface(QWidget):
              if "expression" not in enabled_plugins:
                  enabled_plugins.append("expression")
 
-        self.worker = LLMWorker(api_key, base_url, clean_history, model, self.db, is_thinking=is_thinking, enabled_plugins=enabled_plugins, available_expressions=available_expressions)
+        # 工具确认设置
+        confirm_enabled = settings.value("tool_confirm_enabled", True, type=bool)
+        confirm_threshold = settings.value("tool_confirm_threshold", "medium", type=str)
+        confirm_timeout = settings.value("tool_confirm_timeout", 30, type=int)
+
+        self.worker = LLMWorker(
+            api_key,
+            base_url,
+            clean_history,
+            model,
+            self.db,
+            is_thinking=is_thinking,
+            enabled_plugins=enabled_plugins,
+            available_expressions=available_expressions,
+            provider_id=provider_id,
+            available_images=available_images or [],
+            vision_model_data=vision_model_data,
+            user_confirmation_enabled=confirm_enabled,
+            confirmation_threshold=confirm_threshold,
+            confirmation_timeout=confirm_timeout,
+        )
         self.worker.chunk_received.connect(self.handle_llm_chunk)
         self.worker.thinking_chunk.connect(self.on_thinking_chunk)
         self.worker.finished.connect(self.handle_llm_response)
@@ -3866,6 +3915,7 @@ class ChatInterface(QWidget):
         self.worker.tool_status_changed.connect(self.on_tool_status_changed)
         self.worker.tool_execution_update.connect(self.on_tool_execution_update)
         self.worker.stopped.connect(self.on_generation_stopped)
+        self.worker.tool_confirmation_requested.connect(self._on_tool_confirmation)
         
         if self.live2d_widget and is_doro_tools_enabled:
              self.worker.expression_changed.connect(self.on_expression_change_request)
@@ -3953,7 +4003,7 @@ class ChatInterface(QWidget):
                             break
             
             logger.info(f"Setting expression to: {target_exp}")
-            self.live2d_widget.model.SetExpression(target_exp)
+            self.live2d_widget.set_expression_safe(target_exp)
         except Exception as e:
             logger.error(f"Failed to set expression: {e}")
 
@@ -4180,7 +4230,7 @@ class ChatInterface(QWidget):
                 item.setToolTip(title)
                 break
 
-    def handle_llm_response(self, content, reasoning, tool_calls, generated_images=[]):
+    def handle_llm_response(self, content, reasoning, tool_calls, generated_images=[], stats_json=""):
         self.update_timer.stop()
         if self.streaming_buffer:
             self.update_streaming_display()
@@ -4203,33 +4253,43 @@ class ChatInterface(QWidget):
             used_model = self.worker.model
 
         # Reset current turn state
+        if self.tool_execution_widget:
+            try:
+                self.tool_execution_widget.deleteLater()
+            except RuntimeError:
+                pass
         self.tool_execution_widget = None
         
         session_id = self.worker_session_id
         is_same_session = (session_id == self.current_session_id)
         
         if self.streaming_bubble:
-            msg_id = self.db.add_message(session_id, "assistant", content, generated_images, parent_id=parent_id, model=used_model, reasoning=reasoning, tool_calls=tool_calls)
+            msg_id = self.db.add_message(session_id, "assistant", content, generated_images, parent_id=parent_id, model=used_model, reasoning=reasoning, tool_calls=tool_calls, stats_json=stats_json)
             
             self.streaming_bubble.msg_id = msg_id
-            
-            if is_same_session:
-                self.load_chat_history()
-            
+            # 更新最终内容（包含完整 Markdown 渲染、tool calls 展示等）
+            self.streaming_bubble.update_content(content)
+            # 不再调用 load_chat_history() — streaming bubble 已显示正确内容，
+            # 重建整个聊天区会导致 widget 生命周期问题，内容可能消失
             self.streaming_bubble = None
             self.streaming_content = ""
+            self.streaming_buffer = ""
         else:
-            msg_id = self.db.add_message(session_id, "assistant", content, generated_images, parent_id=parent_id, model=used_model, reasoning=reasoning, tool_calls=tool_calls)
+            msg_id = self.db.add_message(session_id, "assistant", content, generated_images, parent_id=parent_id, model=used_model, reasoning=reasoning, tool_calls=tool_calls, stats_json=stats_json)
             if is_same_session:
                 self.load_chat_history()
         
         if is_same_session:
             QApplication.processEvents()
             self.scroll_to_bottom()
+
+        # ── 设置统计标签（Token + 耗时）──
+        if stats_json and msg_id:
+            self._set_bubble_stats(msg_id, stats_json)
         
         self._is_generating = False
         self.btn_send.setIcon(FluentIcon.SEND)
-        self.btn_send.setText("发送")
+        self.btn_send.setText(tr("chat.send"))
         
         if is_same_session:
             self.check_and_generate_title()
@@ -4237,6 +4297,20 @@ class ChatInterface(QWidget):
         if is_same_session and content and hasattr(self, '_last_user_input') and self._last_user_input:
             self._trigger_memory_analysis(self._last_user_input, content)
             self._last_user_input = None
+
+    def _set_bubble_stats(self, msg_id: int, stats_json: str):
+        """为指定消息的气泡设置统计标签。"""
+        if not stats_json or not msg_id:
+            return
+        chat_layout = getattr(self, 'chat_layout', None)
+        if not chat_layout:
+            return
+        for i in range(chat_layout.count()):
+            w = chat_layout.itemAt(i).widget()
+            if w is not None and hasattr(w, 'msg_id') and w.msg_id == msg_id:
+                if hasattr(w, 'set_stats'):
+                    w.set_stats(stats_json)
+                break
 
     def handle_llm_error(self, err_msg):
         self.update_timer.stop()
@@ -4254,11 +4328,11 @@ class ChatInterface(QWidget):
             self.tool_execution_widget.deleteLater()
             self.tool_execution_widget = None
 
-        w = MessageBox("API 错误", err_msg, self)
+        w = MessageBox(tr("chat.error"), err_msg, self)
         w.exec_()
         self._is_generating = False
         self.btn_send.setIcon(FluentIcon.SEND)
-        self.btn_send.setText("发送")
+        self.btn_send.setText(tr("chat.send"))
 
     def delete_message(self, msg_id):
         self.db.delete_message(msg_id)
@@ -4284,7 +4358,7 @@ class ChatInterface(QWidget):
         # we delete that message and ALL subsequent messages, then trigger LLM based on remaining history.
         # This is a common pattern (e.g. ChatGPT "Edit" or "Regenerate").
         
-        w = MessageBox("确认重新生成", "重新生成将会删除此消息及其之后的所有对话记录，确定要继续吗？", self)
+        w = MessageBox(tr("chat.regenerate_confirm"), tr("chat.regenerate_confirm_msg"), self)
         if w.exec_():
             # Delete this and subsequent
             ids_to_delete = [m[0] for m in msgs[target_idx:]]
@@ -4294,18 +4368,27 @@ class ChatInterface(QWidget):
             self.load_chat_history()
             self.trigger_llm_generation()
 
-    def show_message_context_menu(self, msg_id, role, content, global_pos):
+    def show_message_context_menu(self, msg_id, role, content, global_pos, image_paths=None):
         menu = QMenu()
-        copy_action = menu.addAction("复制")
-        delete_action = menu.addAction("删除")
+        copy_action = menu.addAction(tr("chat.copy"))
+        delete_action = menu.addAction(tr("chat.delete"))
         
         action = menu.exec_(global_pos)
         
         if action == copy_action:
-            QApplication.clipboard().setText(content)
+            # 快捷复制按钮使用 MessageBubble.images；右键菜单也必须使用同一份图片列表。
+            paths = [p for p in (image_paths or []) if p]
+            # 兼容 Markdown ![](file:///...) 中内联图片路径。
+            for m in re.finditer(r'!\[.*?\]\((file:///[^)]+)\)', content):
+                raw = m.group(1)
+                if raw.startswith('file:///'):
+                    paths.append(raw[8:])
+                elif raw.startswith('file://'):
+                    paths.append(raw[7:])
+            MessageBubble._copy_to_clipboard(content, paths)
         elif action == delete_action:
             self.db.delete_message(msg_id)
             self.load_chat_history()
     
-    def _on_bubble_context_menu(self, msg_id, role, content, global_pos):
-        self.show_message_context_menu(msg_id, role, content, global_pos) 
+    def _on_bubble_context_menu(self, msg_id, role, content, image_paths, global_pos):
+        self.show_message_context_menu(msg_id, role, content, global_pos, image_paths) 

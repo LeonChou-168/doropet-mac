@@ -10,6 +10,7 @@ from qfluentwidgets import (
     CardWidget, PushButton, PrimaryPushButton, LineEdit, 
     TransparentToolButton, FluentIcon as FIF, BodyLabel, SubtitleLabel
 )
+from src.core.i18n import I18nManager, tr
 
 
 class SearchResultItem(CardWidget):
@@ -65,7 +66,7 @@ class SearchResultItem(CardWidget):
         self.play_btn = TransparentToolButton(FIF.PLAY, self)
         self.play_btn.setFixedSize(28, 28)
         self.play_btn.setIconSize(self.play_btn.size())
-        self.play_btn.setToolTip("播放")
+        self.play_btn.setToolTip(tr("widget.online_search.play", default="播放"))
         self.play_btn.clicked.connect(lambda: self.play_clicked.emit(self.song_info))
         
         layout.addWidget(self.index_label)
@@ -77,12 +78,12 @@ class SearchResultItem(CardWidget):
     
     def _get_source_name(self, source: str) -> str:
         source_names = {
-            'NeteaseMusicClient': '奈缇斯',
-            'QQMusicClient': '咕嘎',
-            'KugouMusicClient': '酷汪',
-            'KuwoMusicClient': '酷me',
-            'MiguMusicClient': '咪咕',
-            'local': '本地'
+            'NeteaseMusicClient': tr("widget.online_search.source.netease", default="奈缇斯"),
+            'QQMusicClient': tr("widget.online_search.source.qq", default="咕嘎"),
+            'KugouMusicClient': tr("widget.online_search.source.kugou", default="酷汪"),
+            'KuwoMusicClient': tr("widget.online_search.source.kuwo", default="酷me"),
+            'MiguMusicClient': tr("widget.online_search.source.migu", default="咪咕"),
+            'local': tr("widget.online_search.source.local", default="本地")
         }
         return source_names.get(source, source[:4] if len(source) > 4 else source)
     
@@ -155,6 +156,9 @@ class OnlineSearchDialog(CardWidget):
         
         self._song_items = []
         self._is_dark = False
+
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
         
         self._init_ui()
     
@@ -166,16 +170,16 @@ class OnlineSearchDialog(CardWidget):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
         
-        title = SubtitleLabel("🔍 在线搜索", self)
-        title.setAlignment(Qt.AlignLeft)
+        self.title_label = SubtitleLabel(tr("widget.online_search.title", default="🔍 在线搜索"), self)
+        self.title_label.setAlignment(Qt.AlignLeft)
         
         self.close_btn = TransparentToolButton(FIF.CLOSE, self)
         self.close_btn.setFixedSize(20, 20)
         self.close_btn.setIconSize(self.close_btn.size())
-        self.close_btn.setToolTip("关闭")
+        self.close_btn.setToolTip(tr("widget.online_search.close", default="关闭"))
         self.close_btn.clicked.connect(self.hide)
         
-        header_layout.addWidget(title, 1)
+        header_layout.addWidget(self.title_label, 1)
         header_layout.addWidget(self.close_btn)
         
         main_layout.addLayout(header_layout)
@@ -184,11 +188,11 @@ class OnlineSearchDialog(CardWidget):
         search_layout.setSpacing(8)
         
         self.search_input = LineEdit(self)
-        self.search_input.setPlaceholderText("输入歌曲名或歌手名...")
+        self.search_input.setPlaceholderText(tr("widget.online_search.input_placeholder", default="输入歌曲名或歌手名..."))
         self.search_input.setClearButtonEnabled(True)
         self.search_input.returnPressed.connect(self._on_search)
         
-        self.search_btn = PrimaryPushButton("搜索", self)
+        self.search_btn = PrimaryPushButton(tr("widget.online_search.search", default="搜索"), self)
         self.search_btn.setFixedWidth(60)
         self.search_btn.clicked.connect(self._on_search)
         
@@ -197,7 +201,7 @@ class OnlineSearchDialog(CardWidget):
         
         main_layout.addLayout(search_layout)
         
-        self.status_label = BodyLabel("输入关键词搜索在线音乐", self)
+        self.status_label = BodyLabel(tr("widget.online_search.status_default", default="输入关键词搜索在线音乐"), self)
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setStyleSheet("color: #888; font-size: 12px;")
         main_layout.addWidget(self.status_label)
@@ -256,7 +260,7 @@ class OnlineSearchDialog(CardWidget):
     def _on_search(self):
         keyword = self.search_input.text().strip()
         if keyword:
-            self.status_label.setText("正在搜索...")
+            self.status_label.setText(tr("widget.online_search.searching", default="正在搜索..."))
             self.status_label.show()
             self.search_requested.emit(keyword)
     
@@ -266,7 +270,7 @@ class OnlineSearchDialog(CardWidget):
         self._song_items.clear()
         
         if not songs:
-            self.status_label.setText("未找到相关歌曲")
+            self.status_label.setText(tr("widget.online_search.no_results", default="未找到相关歌曲"))
             self.status_label.show()
             return
         
@@ -285,7 +289,7 @@ class OnlineSearchDialog(CardWidget):
     
     def set_loading(self, is_loading: bool):
         if is_loading:
-            self.status_label.setText("正在搜索...")
+            self.status_label.setText(tr("widget.online_search.searching", default="正在搜索..."))
             self.status_label.show()
             self.search_btn.setEnabled(False)
             self.search_input.setEnabled(False)
@@ -294,7 +298,7 @@ class OnlineSearchDialog(CardWidget):
             self.search_input.setEnabled(True)
     
     def set_error(self, error_msg: str):
-        self.status_label.setText(f"搜索失败: {error_msg}")
+        self.status_label.setText(tr("widget.online_search.search_failed", default="搜索失败: {error_msg}").format(error_msg=error_msg))
         self.status_label.show()
     
     def update_theme(self, is_dark: bool):
@@ -308,6 +312,14 @@ class OnlineSearchDialog(CardWidget):
             item.update_theme(is_dark)
         
         self.status_label.setStyleSheet(f"color: {status_color}; font-size: 12px;")
+    
+    def refresh_ui(self, lang_code: str = None):
+        """语言切换时刷新 UI 文本。"""
+        self.title_label.setText(tr("widget.online_search.title", default="🔍 在线搜索"))
+        self.close_btn.setToolTip(tr("widget.online_search.close", default="关闭"))
+        self.search_input.setPlaceholderText(tr("widget.online_search.input_placeholder", default="输入歌曲名或歌手名..."))
+        self.search_btn.setText(tr("widget.online_search.search", default="搜索"))
+        self.status_label.setText(tr("widget.online_search.status_default", default="输入关键词搜索在线音乐"))
     
     def showEvent(self, event):
         super().showEvent(event)

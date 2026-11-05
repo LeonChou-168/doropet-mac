@@ -160,6 +160,16 @@ class QuickChatSessionManager:
         logger.info(f"[QuickChatSessionManager] 添加消息：msg_id={msg_id}, role={role}")
         return msg_id
 
+    def add_message_with_stats(self, role: str, content: str, stats_json: str = "",
+                                images: Optional[List[str]] = None) -> Optional[int]:
+        session_id = self.get_or_create_session()
+        if not session_id:
+            return None
+
+        msg_id = self.chat_db.add_message(session_id, role, content, images=images, stats_json=stats_json)
+        logger.info(f"[QuickChatSessionManager] 添加消息：msg_id={msg_id}, role={role}")
+        return msg_id
+
     def get_messages(self) -> List[Tuple]:
         session_id = self.get_or_create_session()
         if not session_id:
@@ -406,9 +416,10 @@ class QuickChatService:
         self,
         role: str,
         content: str,
-        images: Optional[List[str]] = None
+        images: Optional[List[str]] = None,
+        stats_json: str = "",
     ) -> Optional[int]:
-        return self.session_manager.add_message(role, content, images)
+        return self.session_manager.add_message_with_stats(role, content, stats_json, images)
 
     def get_messages(self) -> List[Tuple]:
         return self.session_manager.get_messages()
@@ -461,7 +472,7 @@ class QuickChatService:
         system_prompt = self._state.current_persona_prompt
         if len(system_prompt) > 1000:
             if "你是 Doro" in system_prompt:
-                system_prompt = "你是 Doro，一个可爱的白色小生物。你性格活泼、黏人，喜欢用可爱的语气和表情符号。请用中文回复，保持简短友好。"
+                system_prompt = "你是 Doro，一个可爱的白色小生物。你性格天真烂漫、超级黏人，喜欢用软萌的语气和拟声词（唔、啊、呀、嗷、哼）。句子要短，不啰嗦，适当用颜文字。请用中文回复。你最爱吃欧润吉（橘子），对'人'永远热情。"
 
         history.insert(0, {"role": "system", "content": system_prompt})
         
@@ -583,9 +594,8 @@ class QuickChatService:
         logger.info(f"[QuickChatService] 重新加载内存：{len(msgs)} 条消息")
 
     def speak(self, msg_id: int, content: str, force_restart: bool = False):
-        clean_content = re.sub(r'<thinking>.*?</thinking>', '', content, flags=re.DOTALL).strip()
-        if clean_content and self._tts_manager:
-            self._tts_manager.speak(str(msg_id), clean_content, force_restart=force_restart)
+        if content and self._tts_manager:
+            self._tts_manager.speak(str(msg_id), content, force_restart=force_restart)
 
     def pause_speak(self, msg_id: int):
         if self._tts_manager and self._tts_manager.current_msg_id == str(msg_id):

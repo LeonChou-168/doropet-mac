@@ -9,6 +9,7 @@ from PyQt5.QtMultimediaWidgets import QVideoWidget
 
 from qfluentwidgets import CardWidget, PushButton, TransparentToolButton, FluentIcon as FIF
 
+from src.core.i18n import tr
 from src.services.music_service import MusicService, SongInfo
 from src.services.extended_music_service import get_music_data_dir
 from src.services.global_music_player import GlobalMusicPlayer
@@ -141,9 +142,9 @@ class SongListPopup(QFrame):
         self._main_layout.setContentsMargins(8, 8, 8, 8)
         self._main_layout.setSpacing(4)
         
-        title = QLabel("歌曲列表")
-        title.setStyleSheet("font-size: 13px; font-weight: bold; color: #333; padding: 4px;")
-        self._main_layout.addWidget(title)
+        self.title_label = QLabel(tr("music.song_list", default="歌曲列表"))
+        self.title_label.setStyleSheet("font-size: 13px; font-weight: bold; color: #333; padding: 4px;")
+        self._main_layout.addWidget(self.title_label)
         
         self._scroll_area = QScrollArea()
         self._setup_scroll_area()
@@ -336,6 +337,9 @@ class SongListPopup(QFrame):
         self._current_index = current_index
         for i, item in enumerate(self._song_items):
             item.set_current(i == current_index)
+
+    def refresh_ui(self):
+        self.title_label.setText(tr("music.song_list", default="歌曲列表"))
     
     def _on_item_clicked(self, index: int):
         self.song_selected.emit(index)
@@ -357,10 +361,7 @@ class SongListPopup(QFrame):
         for item in self._song_items:
             item.update_theme(is_dark)
         
-        for child in self.findChildren(QLabel):
-            if child.text() == "歌曲列表":
-                child.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {title_color}; padding: 4px;")
-                break
+        self.title_label.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {title_color}; padding: 4px;")
 
 
 class OnlineSearchPopup(QFrame):
@@ -485,6 +486,26 @@ class OnlineSearchPopup(QFrame):
         
         self.setGeometry(geom)
     
+    def _populate_platform_combo(self):
+        current_data = self.platform_combo.currentData() if self.platform_combo.count() else None
+        platforms = [
+            (tr("music.platform.all", default="全部平台"), ["NeteaseMusicClient", "QQMusicClient", "KuwoMusicClient"]),
+            (tr("music.platform.netease", default="奈缇斯"), ["NeteaseMusicClient"]),
+            (tr("music.platform.qq", default="咕嘎"), ["QQMusicClient"]),
+            (tr("music.platform.kuwo", default="酷me"), ["KuwoMusicClient"]),
+            (tr("music.platform.kugou", default="酷汪"), ["KugouMusicClient"]),
+            (tr("music.platform.migu", default="咪咕"), ["MiguMusicClient"]),
+        ]
+        self.platform_combo.blockSignals(True)
+        self.platform_combo.clear()
+        selected_index = 0
+        for index, (label, data) in enumerate(platforms):
+            self.platform_combo.addItem(label, data)
+            if current_data == data:
+                selected_index = index
+        self.platform_combo.setCurrentIndex(selected_index)
+        self.platform_combo.blockSignals(False)
+
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(16, 16, 16, 16)
@@ -493,16 +514,16 @@ class OnlineSearchPopup(QFrame):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
         
-        title = QLabel("🔍 在线搜索")
-        title.setStyleSheet("font-size: 14px; font-weight: bold; color: #333;")
+        self.title_label = QLabel("🔍 " + tr("music.online_search", default="在线搜索"))
+        self.title_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #333;")
         
         self.close_btn = TransparentToolButton(FIF.CLOSE, self)
         self.close_btn.setFixedSize(20, 20)
         self.close_btn.setIconSize(self.close_btn.size())
-        self.close_btn.setToolTip("关闭")
+        self.close_btn.setToolTip(tr("common.close", default="关闭"))
         self.close_btn.clicked.connect(self.hide)
         
-        header_layout.addWidget(title, 1)
+        header_layout.addWidget(self.title_label, 1)
         header_layout.addWidget(self.close_btn)
         
         main_layout.addLayout(header_layout)
@@ -511,12 +532,7 @@ class OnlineSearchPopup(QFrame):
         search_layout.setSpacing(8)
         
         self.platform_combo = QComboBox()
-        self.platform_combo.addItem("全部平台", ["NeteaseMusicClient", "QQMusicClient", "KuwoMusicClient"])
-        self.platform_combo.addItem("奈缇斯", ["NeteaseMusicClient"])
-        self.platform_combo.addItem("咕嘎", ["QQMusicClient"])
-        self.platform_combo.addItem("酷me", ["KuwoMusicClient"])
-        self.platform_combo.addItem("酷汪", ["KugouMusicClient"])
-        self.platform_combo.addItem("咪咕", ["MiguMusicClient"])
+        self._populate_platform_combo()
         self.platform_combo.setFixedWidth(90)
         self.platform_combo.setStyleSheet("""
             QComboBox {
@@ -535,7 +551,7 @@ class OnlineSearchPopup(QFrame):
         """)
         
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("输入歌曲名或歌手名...")
+        self.search_input.setPlaceholderText(tr("music.search_placeholder", default="输入歌曲名或歌手名..."))
         self.search_input.setStyleSheet("""
             QLineEdit {
                 padding: 8px 12px;
@@ -549,7 +565,7 @@ class OnlineSearchPopup(QFrame):
         """)
         self.search_input.returnPressed.connect(self._on_search)
         
-        self.search_btn = QPushButton("搜索")
+        self.search_btn = QPushButton(tr("music.search", default="搜索"))
         self.search_btn.setFixedWidth(60)
         self.search_btn.setStyleSheet("""
             QPushButton {
@@ -571,7 +587,7 @@ class OnlineSearchPopup(QFrame):
         
         main_layout.addLayout(search_layout)
         
-        self.status_label = QLabel("输入关键词搜索在线音乐")
+        self.status_label = QLabel(tr("music.search_hint", default="输入关键词搜索在线音乐"))
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setStyleSheet("color: #888; font-size: 12px; padding: 20px;")
         main_layout.addWidget(self.status_label)
@@ -625,7 +641,7 @@ class OnlineSearchPopup(QFrame):
         keyword = self.search_input.text().strip()
         if keyword:
             platforms = self.platform_combo.currentData()
-            self.status_label.setText("正在搜索...")
+            self.status_label.setText(tr("music.searching", default="正在搜索..."))
             self.status_label.show()
             self._scroll_area.hide()
             self.search_requested.emit(keyword, platforms)
@@ -636,7 +652,7 @@ class OnlineSearchPopup(QFrame):
         self._song_items.clear()
         
         if not songs:
-            self.status_label.setText("未找到相关歌曲")
+            self.status_label.setText(tr("music.no_results", default="未找到相关歌曲"))
             self.status_label.show()
             self._scroll_area.hide()
             return
@@ -657,7 +673,7 @@ class OnlineSearchPopup(QFrame):
     
     def set_loading(self, is_loading: bool):
         if is_loading:
-            self.status_label.setText("正在搜索...")
+            self.status_label.setText(tr("music.searching", default="正在搜索..."))
             self.search_btn.setEnabled(False)
             self.search_input.setEnabled(False)
         else:
@@ -665,9 +681,18 @@ class OnlineSearchPopup(QFrame):
             self.search_input.setEnabled(True)
     
     def set_error(self, error_msg: str):
-        self.status_label.setText(f"搜索失败: {error_msg}")
+        self.status_label.setText(tr("music.search_failed", default="搜索失败: {error}").format(error=error_msg))
         self.status_label.show()
         self._scroll_area.hide()
+
+    def refresh_ui(self):
+        self.title_label.setText("🔍 " + tr("music.online_search", default="在线搜索"))
+        self.close_btn.setToolTip(tr("common.close", default="关闭"))
+        self.search_input.setPlaceholderText(tr("music.search_placeholder", default="输入歌曲名或歌手名..."))
+        self.search_btn.setText(tr("music.search", default="搜索"))
+        if not self._scroll_area.isVisible():
+            self.status_label.setText(tr("music.search_hint", default="输入关键词搜索在线音乐"))
+        self._populate_platform_combo()
     
     def update_theme(self, is_dark: bool):
         self._is_dark = is_dark
@@ -686,9 +711,7 @@ class OnlineSearchPopup(QFrame):
         for item in self._song_items:
             item.update_theme(is_dark)
         
-        for child in self.findChildren(QLabel):
-            if child.text() == "🔍 在线搜索":
-                child.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {title_color};")
+        self.title_label.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {title_color};")
         
         self.status_label.setStyleSheet(f"color: {status_color}; font-size: 12px; padding: 20px;")
         
@@ -843,7 +866,7 @@ class OnlineSongItem(QFrame):
         self.play_btn = TransparentToolButton(FIF.PLAY, self)
         self.play_btn.setFixedSize(28, 28)
         self.play_btn.setIconSize(self.play_btn.size())
-        self.play_btn.setToolTip("播放")
+        self.play_btn.setToolTip(tr("music.play", default="播放"))
         self.play_btn.clicked.connect(lambda: self.play_clicked.emit(self.song_info))
         
         layout.addWidget(self.index_label)
@@ -855,12 +878,12 @@ class OnlineSongItem(QFrame):
     
     def _get_source_name(self, source: str) -> str:
         source_names = {
-            'NeteaseMusicClient': '奈缇斯',
-            'QQMusicClient': '咕嘎',
-            'KugouMusicClient': '酷汪',
-            'KuwoMusicClient': '酷me',
-            'MiguMusicClient': '咪咕',
-            'local': '本地'
+            'NeteaseMusicClient': tr('music.platform.netease', default='奈缇斯'),
+            'QQMusicClient': tr('music.platform.qq', default='咕嘎'),
+            'KugouMusicClient': tr('music.platform.kugou', default='酷汪'),
+            'KuwoMusicClient': tr('music.platform.kuwo', default='酷me'),
+            'MiguMusicClient': tr('music.platform.migu', default='咪咕'),
+            'local': tr('music.platform.local', default='本地')
         }
         return source_names.get(source, source[:4] if len(source) > 4 else source)
     
@@ -972,10 +995,10 @@ class MusicPlayerCard(CardWidget):
     def _on_global_state_changed(self, is_playing: bool):
         if is_playing:
             self.play_btn.setIcon(FIF.PAUSE)
-            self.play_btn.setToolTip("暂停")
+            self.play_btn.setToolTip(tr("music.pause", default="暂停"))
         else:
             self.play_btn.setIcon(FIF.PLAY)
-            self.play_btn.setToolTip("播放")
+            self.play_btn.setToolTip(tr("music.play", default="播放"))
         self.playback_state_changed.emit(is_playing)
     
     def _on_global_position_changed(self, position: int):
@@ -994,7 +1017,7 @@ class MusicPlayerCard(CardWidget):
                 track_name = track_name[:20] + "..."
             self.track_label.setText(track_name)
         else:
-            self.track_label.setText("未加载音乐")
+            self.track_label.setText(tr("music.no_music", default="未加载音乐"))
     
     def _init_ui(self):
         self.setMinimumHeight(120)
@@ -1010,7 +1033,7 @@ class MusicPlayerCard(CardWidget):
         self.music_icon = QLabel("🎵")
         self.music_icon.setStyleSheet("font-size: 18px; background: transparent;")
         
-        self.title_label = QLabel("音乐播放")
+        self.title_label = QLabel(tr("music.player_card.title", default="音乐播放"))
         self.title_label.setStyleSheet("""
             QLabel {
                 font-size: 14px;
@@ -1021,7 +1044,7 @@ class MusicPlayerCard(CardWidget):
         self.title_label.setCursor(Qt.PointingHandCursor)
         self.title_label.mousePressEvent = lambda e: self.switch_to_music_interface.emit()
         
-        self.track_label = QLabel("未加载音乐")
+        self.track_label = QLabel(tr("music.no_music", default="未加载音乐"))
         self.track_label.setStyleSheet("font-size: 12px; color: #888;")
         
         header_layout.addWidget(self.music_icon)
@@ -1062,19 +1085,19 @@ class MusicPlayerCard(CardWidget):
         self.prev_btn = TransparentToolButton(FIF.CARE_LEFT_SOLID, self)
         self.prev_btn.setFixedSize(16, 16)
         self.prev_btn.setIconSize(self.prev_btn.size())
-        self.prev_btn.setToolTip("上一首")
+        self.prev_btn.setToolTip(tr("music.prev", default="上一首"))
         self.prev_btn.clicked.connect(self._play_previous)
         
         self.play_btn = TransparentToolButton(FIF.PLAY, self)
         self.play_btn.setFixedSize(16, 16)
         self.play_btn.setIconSize(self.play_btn.size())
-        self.play_btn.setToolTip("播放")
+        self.play_btn.setToolTip(tr("music.play", default="播放"))
         self.play_btn.clicked.connect(self._toggle_play)
         
         self.next_btn = TransparentToolButton(FIF.CARE_RIGHT_SOLID, self)
         self.next_btn.setFixedSize(16, 16)
         self.next_btn.setIconSize(self.next_btn.size())
-        self.next_btn.setToolTip("下一首")
+        self.next_btn.setToolTip(tr("music.next", default="下一首"))
         self.next_btn.clicked.connect(self._play_next)
         
         controls_layout.addStretch()
@@ -1094,7 +1117,7 @@ class MusicPlayerCard(CardWidget):
         self.volume_slider.setValue(100)
         self.volume_slider.setFixedWidth(80)
         self.volume_slider.setFixedHeight(20)
-        self.volume_slider.setToolTip("音量")
+        self.volume_slider.setToolTip(tr("music.volume", default="音量"))
         self.volume_slider.valueChanged.connect(self._on_volume_changed)
         self._apply_volume_slider_style(self.volume_slider)
         
@@ -1110,19 +1133,19 @@ class MusicPlayerCard(CardWidget):
         self.song_list_btn = TransparentToolButton(FIF.MUSIC, self)
         self.song_list_btn.setFixedSize(16, 16)
         self.song_list_btn.setIconSize(self.song_list_btn.size())
-        self.song_list_btn.setToolTip("本地歌曲列表")
+        self.song_list_btn.setToolTip(tr("music.player_card.song_list_tip", default="本地歌曲列表"))
         self.song_list_btn.clicked.connect(self._toggle_song_list)
 
         self.mini_btn = TransparentToolButton(FIF.FIT_PAGE, self)
         self.mini_btn.setFixedSize(16, 16)
         self.mini_btn.setIconSize(self.mini_btn.size())
-        self.mini_btn.setToolTip("迷你播放窗")
+        self.mini_btn.setToolTip(tr("music.player_card.mini_mode_tip", default="迷你播放窗"))
         self.mini_btn.clicked.connect(self._toggle_mini_window)
         
         self.mode_btn = TransparentToolButton(FIF.SYNC, self)
         self.mode_btn.setFixedSize(16, 16)
         self.mode_btn.setIconSize(self.mode_btn.size())
-        self.mode_btn.setToolTip("列表循环")
+        self.mode_btn.setToolTip(tr("music.player_card.mode_tip", default="列表循环"))
         self.mode_btn.clicked.connect(self._toggle_play_mode)
         
         volume_layout.addWidget(self.mode_btn)
@@ -1286,10 +1309,10 @@ class MusicPlayerCard(CardWidget):
     
     def _update_mode_button(self):
         mode_config = {
-            PlayMode.SEQUENCE: (FIF.RIGHT_ARROW, "顺序播放"),
-            PlayMode.LIST_LOOP: (FIF.SYNC, "列表循环"),
-            PlayMode.SINGLE_LOOP: (FIF.UPDATE, "单曲循环"),
-            PlayMode.SHUFFLE: (FIF.TILES, "随机播放"),
+            PlayMode.SEQUENCE: (FIF.RIGHT_ARROW, tr("music.player_card.mode_sequential", default="顺序播放")),
+            PlayMode.LIST_LOOP: (FIF.SYNC, tr("music.player_card.mode_loop", default="列表循环")),
+            PlayMode.SINGLE_LOOP: (FIF.UPDATE, tr("music.player_card.mode_single", default="单曲循环")),
+            PlayMode.SHUFFLE: (FIF.TILES, tr("music.player_card.mode_shuffle", default="随机播放")),
         }
         icon, tooltip = mode_config[self._play_mode]
         self.mode_btn.setIcon(icon)
@@ -1360,13 +1383,13 @@ class MusicPlayerCard(CardWidget):
     def _on_state_changed(self, state):
         if state == QMediaPlayer.PlayingState:
             self.play_btn.setIcon(FIF.PAUSE)
-            self.play_btn.setToolTip("暂停")
+            self.play_btn.setToolTip(tr("music.pause", default="暂停"))
             self._position_timer.start()
             self.playback_state_changed.emit(True)
             self._retry_count = 0
         else:
             self.play_btn.setIcon(FIF.PLAY)
-            self.play_btn.setToolTip("播放")
+            self.play_btn.setToolTip(tr("music.play", default="播放"))
             self._position_timer.stop()
             self.playback_state_changed.emit(False)
             
@@ -1385,12 +1408,12 @@ class MusicPlayerCard(CardWidget):
             self._retry_count += 1
             logger.info(f"[MusicPlayer] 尝试重新加载 ({self._retry_count}/{self._max_retry})")
             
-            self.track_label.setText(f"加载失败，重试中... ({self._retry_count}/{self._max_retry})")
+            self.track_label.setText(tr("music.player_card.loading_retry", default="加载失败，重试中... ({retry}/{max})").format(retry=self._retry_count, max=self._max_retry))
             
             QTimer.singleShot(1000, self._retry_current_track)
         else:
             logger.error(f"[MusicPlayer] 重试失败，停止播放")
-            self.track_label.setText("播放失败")
+            self.track_label.setText(tr("music.player_card.play_failed", default="播放失败"))
             self._retry_count = 0
     
     def _retry_current_track(self):
@@ -1433,6 +1456,21 @@ class MusicPlayerCard(CardWidget):
     
     def pause(self):
         self.player.pause()
+
+    def refresh_ui(self, lang_code: str = ""):
+        self.title_label.setText(tr("music.player_card.title", default="音乐播放"))
+        if not self.global_player.get_current_song():
+            self.track_label.setText(tr("music.no_music", default="未加载音乐"))
+        self.prev_btn.setToolTip(tr("music.prev", default="上一首"))
+        self.play_btn.setToolTip(tr("music.pause", default="暂停") if self.global_player.is_playing() else tr("music.play", default="播放"))
+        self.next_btn.setToolTip(tr("music.next", default="下一首"))
+        self.volume_slider.setToolTip(tr("music.volume", default="音量"))
+        self.song_list_btn.setToolTip(tr("music.player_card.song_list_tip", default="本地歌曲列表"))
+        self.mini_btn.setToolTip(tr("music.player_card.mini_mode_tip", default="迷你播放窗"))
+        self._update_mode_button()
+        self._song_popup.refresh_ui()
+        if self._mini_window:
+            self._mini_window.refresh_ui(lang_code)
     
     def update_theme(self, is_dark: bool):
         title_color = "#e0e0e0" if is_dark else "#333"

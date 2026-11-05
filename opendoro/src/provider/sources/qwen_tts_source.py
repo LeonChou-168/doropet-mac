@@ -3,7 +3,7 @@ import tempfile
 from typing import Optional, List, Dict
 from ..provider import TTSProvider
 from ..entities import TTSResponse, ProviderConfig, ProviderType
-from ..register import register_provider_adapter, TTS_CONFIG_FIELDS
+from ..register import register_provider_adapter, QWEN_TTS_CONFIG_FIELDS
 from src.core.logger import logger
 
 try:
@@ -25,7 +25,7 @@ except ImportError:
         "voice": "Cherry",
     },
     provider_display_name="千问 TTS",
-    config_fields=TTS_CONFIG_FIELDS
+    config_fields=QWEN_TTS_CONFIG_FIELDS
 )
 class ProviderQwenTTS(TTSProvider):
     DEFAULT_VOICES = [

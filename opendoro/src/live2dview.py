@@ -25,7 +25,8 @@ from src.core.random_wanderer import RandomWanderer
 
 class SpeechBubble(QLabel):
     """
-    自定义的气泡控件，用于显示对话文本
+    自定义的气泡控件，用于显示对话文本。
+    支持深色/浅色主题自适应。
     """
     def __init__(self, parent=None):
         super().__init__(None)
@@ -41,7 +42,7 @@ class SpeechBubble(QLabel):
         
         self.setContentsMargins(15, 15, 15, 30)
         
-        self.setStyleSheet("color: black; font-family: 'Microsoft YaHei'; font-size: 14px; font-weight: bold;")
+        self._update_style()
         
         self.hide()
         
@@ -49,7 +50,19 @@ class SpeechBubble(QLabel):
         self.hide_timer.setSingleShot(True)
         self.hide_timer.timeout.connect(self.fade_out)
 
+    def _update_style(self):
+        """根据当前主题更新文字颜色。"""
+        from src.ui.design_tokens import get_token
+        text_color = get_token("text_primary")
+        if not text_color:
+            text_color = "rgba(235, 240, 250, 235)" if isDarkTheme() else "rgba(30, 30, 40, 220)"
+        self.setStyleSheet(
+            f"color: {text_color}; font-family: 'Microsoft YaHei'; "
+            "font-size: 14px; font-weight: bold;"
+        )
+
     def show_text(self, text, duration=3000):
+        self._update_style()
         self.setText(text)
         self.adjustSize()
         
@@ -66,14 +79,19 @@ class SpeechBubble(QLabel):
 
     def paintEvent(self, event):
         """
-        绘制漫画风格的气泡
+        绘制漫画风格的气泡，使用主题感知颜色。
         """
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         
-        bg_color = QColor(255, 255, 255)
-        border_color = QColor(0, 0, 0)
-        border_width = 3
+        dark = isDarkTheme()
+        if dark:
+            bg_color = QColor(45, 50, 60)
+            border_color = QColor(100, 105, 115)
+        else:
+            bg_color = QColor(255, 255, 255)
+            border_color = QColor(60, 60, 70)
+        border_width = 2.5
         
         rect = self.rect()
         w = rect.width()
@@ -89,13 +107,9 @@ class SpeechBubble(QLabel):
         r = 10
         
         path.moveTo(margin + r, margin)
-        
         path.lineTo(w - margin - r, margin)
-        
         path.quadTo(w - margin, margin, w - margin, margin + r)
-        
         path.lineTo(w - margin, body_h - margin - r)
-        
         path.quadTo(w - margin, body_h - margin, w - margin - r, body_h - margin)
         
         tail_width = 20
@@ -106,11 +120,8 @@ class SpeechBubble(QLabel):
         path.lineTo(tail_x_center - tail_width / 2, body_h - margin)
         
         path.lineTo(margin + r, body_h - margin)
-        
         path.quadTo(margin, body_h - margin, margin, body_h - margin - r)
-        
         path.lineTo(margin, margin + r)
-        
         path.quadTo(margin, margin, margin + r, margin)
         
         path.closeSubpath()
@@ -124,9 +135,18 @@ class SpeechBubble(QLabel):
 
 class Live2DWidget(QOpenGLWidget):
     def __init__(self, *args, path: str, parent=None, **kwargs) -> None:
+        self.settings = QSettings("DoroPet", "Settings")
+
+        # --- 从数据库加载 Live2D 模型配置 ---
         self.path = path
-        if not os.path.exists(path):
+        self._db_config_loaded = False
+        self._load_config_from_db()
+
+        # 模型路径验证：文件不存在则回退到 Doro 默认模型
+        if not os.path.exists(self.path):
             self.path = resource_path("models/Doro/Doro.model3.json")
+            self._save_config_to_db()  # 更新数据库中的模型路径
+
         self._live2d_ready = False
         self._live2d_error = None
         self.model = None
@@ -138,21 +158,12 @@ class Live2DWidget(QOpenGLWidget):
         super().__init__(parent)
         
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Window)
-        if is_macos():
-            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-            self.setAutoFillBackground(False)
-        else:
-            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setMouseTracking(True)
-	        
-        format = QSurfaceFormat()
-        format.setVersion(2, 1)
-        format.setProfile(QSurfaceFormat.NoProfile)
+        
+        format = self.format()
         format.setAlphaBufferSize(8)
-        format.setDepthBufferSize(24)
-        format.setStencilBufferSize(8)
         self.setFormat(format)
         
         self.bubble = SpeechBubble(self)
@@ -164,7 +175,7 @@ class Live2DWidget(QOpenGLWidget):
         self.is_locked = False
 
         self.is_mirrored = False
-        self.edge_docking_enabled = True
+        self.edge_docking_enabled = self.settings.value("edge_docking_enabled", True, type=bool)
         
         self._border_overlay = QWidget(self)
         self._border_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
@@ -183,12 +194,19 @@ class Live2DWidget(QOpenGLWidget):
         
         self.attr_manager.start_decay_timer(60000)
 
-        self.settings = QSettings("DoroPet", "Settings")
-        
-        scale_val = self.settings.value("scale", 100, type=int)
-        aspect_ratio_index = self.settings.value("aspect_ratio_index", 0, type=int)
-        custom_width = self.settings.value("custom_aspect_width", 550, type=int)
-        custom_height = self.settings.value("custom_aspect_height", 500, type=int)
+        # 优先使用数据库配置，否则从 QSettings 读取（首次迁移）
+        if self._db_config_loaded:
+            scale_val = self._scale
+            aspect_ratio_index = self._aspect_ratio_index
+            custom_width = self._custom_width
+            custom_height = self._custom_height
+        else:
+            scale_val = self.settings.value("scale", 100, type=int)
+            aspect_ratio_index = self.settings.value("aspect_ratio_index", 0, type=int)
+            custom_width = self.settings.value("custom_aspect_width", 550, type=int)
+            custom_height = self.settings.value("custom_aspect_height", 500, type=int)
+            # 迁移到数据库
+            self._save_config_to_db()
         
         ASPECT_RATIOS = [
             1.0,
@@ -283,6 +301,62 @@ class Live2DWidget(QOpenGLWidget):
             self._live2d_error = e
             logger.exception(f"Live2D OpenGL initialization failed: {e}")
 
+    # ------------------------------------------------------------------
+    # 数据库配置读写
+    # ------------------------------------------------------------------
+
+    def _load_config_from_db(self) -> None:
+        """从数据库加载 Live2D 配置，失败则从 QSettings 回退。"""
+        try:
+            from src.core.database import ChatDatabase
+            db = ChatDatabase()
+            config = db.get_live2d_config()
+            db.close()
+        except Exception as e:
+            print(f"[Live2D] 读取数据库配置失败: {e}")
+            config = None
+
+        if config and config.get("model_path"):
+            self.path = config["model_path"]
+            self._scale = config.get("scale", 100)
+            self._aspect_ratio_index = config.get("aspect_ratio_index", 0)
+            self._custom_width = config.get("custom_width", 550)
+            self._custom_height = config.get("custom_height", 500)
+            self._db_config_loaded = True
+        else:
+            self._scale = 100
+            self._aspect_ratio_index = 0
+            self._custom_width = 550
+            self._custom_height = 500
+            self._db_config_loaded = False
+
+    def _save_config_to_db(self) -> None:
+        """将当前配置写入数据库。"""
+        try:
+            from src.core.database import ChatDatabase
+            db = ChatDatabase()
+            db.save_live2d_config(
+                model_path=self.path,
+                scale=getattr(self, '_scale', 100),
+                aspect_ratio_index=getattr(self, '_aspect_ratio_index', 0),
+                custom_width=getattr(self, '_custom_width', 550),
+                custom_height=getattr(self, '_custom_height', 500),
+            )
+            db.close()
+        except Exception as e:
+            print(f"[Live2D] 保存配置到数据库失败: {e}")
+
+    def save_size_to_db(self, scale: int, aspect_index: int,
+                        custom_w: int, custom_h: int) -> None:
+        """供设置页面调用：保存缩放/宽高比例到数据库。"""
+        self._scale = scale
+        self._aspect_ratio_index = aspect_index
+        self._custom_width = custom_w
+        self._custom_height = custom_h
+        self._save_config_to_db()
+
+    # ------------------------------------------------------------------
+
     def reload_model(self, model_path: str) -> bool:
         """
         重新加载 Live2D 模型
@@ -319,6 +393,7 @@ class Live2DWidget(QOpenGLWidget):
                 self.canvas.SetOutputOpacity(self.model_opacity / 100.0)
             
             self.path = model_path
+            self._save_config_to_db()
             
             self.expression_ids = self.model.GetExpressionIds()
             self.motion_groups = self.model.GetMotionGroups()
@@ -654,11 +729,28 @@ class Live2DWidget(QOpenGLWidget):
     def toggle_edge_docking(self, checked: bool):
         """切换边缘吸附状态"""
         self.edge_docking_enabled = checked
+        self.settings.setValue("edge_docking_enabled", checked)
         if not checked and hasattr(self, "is_docked") and self.is_docked:
             if hasattr(self, "normal_geometry"):
                 self.animate_move(self.normal_geometry.x(), self.normal_geometry.y())
             self.is_docked = None
             self._apply_dock_rotation(None)
+
+    def reset_model_size(self):
+        self.resize(550, 500)
+        self._scale = 100
+        self._aspect_ratio_index = 7
+        self._custom_width = 550
+        self._custom_height = 500
+        self.settings.setValue("scale", 100)
+        self.settings.setValue("aspect_ratio_index", 7)
+        self.settings.setValue("custom_aspect_width", 550)
+        self.settings.setValue("custom_aspect_height", 500)
+        self.settings.setValue("window_width", 550)
+        self.settings.setValue("window_height", 500)
+        self._save_config_to_db()
+        if hasattr(self, 'flash_border'):
+            self.flash_border()
 
     def timerEvent(self, event: QTimerEvent | None):
         if event.timerId() == self.refresh:
@@ -948,7 +1040,7 @@ class Live2DWidget(QOpenGLWidget):
         display_menu = QMenu("📺 显示设置", menu)
         
         action_reset = QAction("🔄 重置大小", self)
-        action_reset.triggered.connect(lambda: self.resize(550, 500))
+        action_reset.triggered.connect(self.reset_model_size)
         display_menu.addAction(action_reset)
         
         action_show_status = QAction("隐藏属性栏" if self.status_overlay.isVisible() else "显示属性栏", self)
@@ -984,8 +1076,11 @@ class Live2DWidget(QOpenGLWidget):
             self.status_overlay._fade_in()
 
     def open_main_window(self):
+        """显示主界面（已在启动时预初始化）。"""
         try:
             if self.main_window is None:
+                # 兜底：如果启动时未初始化，则在此处创建
+                from src.ui.main_window import MainWindow
                 version_manager = None
                 if hasattr(self, '_startup_checker') and self._startup_checker:
                     version_manager = self._startup_checker.get_version_manager()

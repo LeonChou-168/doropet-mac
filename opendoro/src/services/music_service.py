@@ -5,7 +5,9 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal, QUrl
 from PyQt5.QtMultimedia import QMediaContent
 
 from src.core.logger import logger
-from src.core.platform_paths import get_user_data_dir
+
+
+from src.core.database import get_user_data_dir
 
 
 @dataclass

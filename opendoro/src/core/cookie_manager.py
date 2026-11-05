@@ -16,6 +16,7 @@ class CookieManager:
 
     def __init__(self):
         self._cookies: Dict[str, Dict] = {}
+        from src.core.database import get_user_data_dir
         self._cookie_dir = os.path.join(get_user_data_dir(), 'cookies')
         self._load_cookies()
 

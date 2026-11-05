@@ -18,7 +18,14 @@ logger = logging.getLogger("DoroPet.Agent")
 BASE_DIR = get_app_root()
 
 BUILTIN_SKILLS_DIR = os.path.join(BASE_DIR, "src", "skills")
-USER_SKILLS_DIR = get_user_skills_dir()
+
+
+def _get_user_data_dir():
+    from src.core.database import get_user_data_dir as _gud
+    return _gud()
+
+
+USER_SKILLS_DIR = os.path.join(_get_user_data_dir(), "skills")
 
 
 class SkillType(Enum):

@@ -11,6 +11,7 @@ datas = [
     (str(ROOT / "config"), "config"),
     (str(ROOT / "plugin"), "plugin"),
     (str(ROOT / "src" / "skills"), "src/skills"),
+    (str(ROOT / "src" / "agent" / "prompts"), "src/agent/prompts"),
 ]
 datas += collect_data_files("live2d", includes=["v3/FrameworkShaders/*"])
 
@@ -33,6 +34,9 @@ a = Analysis(
         "sherpa_onnx",
         "sentencepiece",
         "pygame",
+        "pydantic_ai",
+        "pydantic_ai_slim",
+        "playwright.async_api",
     ],
     hookspath=[],
     hooksconfig={},
@@ -81,8 +85,8 @@ app = BUNDLE(
     info_plist={
         "CFBundleName": "DoroPet",
         "CFBundleDisplayName": "DoroPet",
-        "CFBundleShortVersionString": "3.5.1-macos",
-        "CFBundleVersion": "3.5.1",
+        "CFBundleShortVersionString": "3.6.8-macos",
+        "CFBundleVersion": "3.6.8",
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "NSMicrophoneUsageDescription": "DoroPet needs microphone access for wake-word detection and speech recognition.",

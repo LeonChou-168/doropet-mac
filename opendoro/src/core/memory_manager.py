@@ -9,7 +9,7 @@ from src.core.database import ChatDatabase
 
 
 class MemoryAnalyzeWorker(QThread):
-    """后台异步分析消息记忆的 Worker 线程"""
+    """后台异步分析消息记忆的 Worker 线程 — 使用 pydantic-ai 进行 AI 提炼"""
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
 
@@ -21,41 +21,33 @@ class MemoryAnalyzeWorker(QThread):
         self._messages = messages
 
     def run(self):
+        """使用 pydantic-ai 快速 Agent 进行 AI 记忆分析，替代规则提取"""
         try:
-            from src.services.llm_service import LLMWorker
+            from src.agent.pydantic_agent import create_quick_agent
 
-            loop = QEventLoop()
-            result = [None]
+            content = self._messages[0]["content"] if self._messages else ""
 
-            worker = LLMWorker(
-                api_key=self._api_key,
-                base_url=self._base_url,
-                messages=self._messages,
+            agent = create_quick_agent(
                 model=self._model,
-                db=None,
-                is_thinking=0,
-                enabled_plugins=[],
-                skip_tools_and_max_tokens=True,
+                base_url=self._base_url,
+                api_key=self._api_key,
             )
 
-            def on_finished(content, reasoning, tool_calls, images):
-                result[0] = content
-                loop.quit()
+            result = agent.run_sync(content)
+            response_text = result.output.strip()
 
-            def on_error(error_msg):
-                loop.quit()
-
-            worker.finished.connect(on_finished)
-            worker.error.connect(on_error)
-            worker.start()
-
-            loop.exec_()
-
-            if result[0]:
-                analysis = json.loads(result[0].strip())
-                self.finished.emit(analysis)
-            else:
-                self.error.emit("analysis returned empty")
+            analysis = json.loads(response_text)
+            self.finished.emit(analysis)
+        except json.JSONDecodeError:
+            # JSON 解析失败 — 返回规则兜底
+            self.finished.emit({
+                "importance": 1,
+                "category": "normal",
+                "should_remember": False,
+                "summary": "",
+                "keywords": [],
+                "reason": "AI 分析返回格式异常"
+            })
         except Exception as e:
             self.error.emit(str(e))
 
@@ -129,23 +121,28 @@ class MemoryManager:
         api_key, base_url, model_name = model_config
 
         prompt = f"""
-你是一个智能记忆分析助手。请分析以下对话内容，判断其重要性和类型。
+你是一个记忆分析助手。判断以下对话内容是否包含值得长期记住的用户信息。
 
-【分析标准】
-- 事实信息（5 分）：用户的个人信息、名字、年龄、职业、住址等
-- 偏好设定（4 分）：用户的喜好、厌恶、习惯、偏好等
-- 重要事件（3 分）：用户提到的重要事情、计划、决定等
-- 情绪表达（2 分）：用户的情绪状态、感受等
-- 日常对话（1 分）：普通问候、闲聊等
+【需要记住的信息（should_remember=true）】
+- 事实信息：姓名、年龄、职业、住址等个人信息
+- 偏好设定：喜好、厌恶、习惯（"我喜欢喝咖啡"、"我不吃辣"）
+- 重要事件：计划、经历、约定（"下个月去日本"、"我今天去了新公司"）
+- 生活日常：用户分享的今天做了什么、吃了什么、去了哪里（"今天吃了火锅"、"去看了电影"）
+- 情绪表达：明显的情绪状态（"最近加班很烦"）
+
+【不需要记住的信息（should_remember=false）】
+- 单纯问候和告别（"你好"、"晚安"）
+- 反问 AI 的问题（"你知道我是谁吗"、"你会什么"）
+- 对 AI 的指令（"帮我查一下"、"写个代码"）
+- 简单的附和回应（"好的"、"谢谢"、"原来如此"）
 
 【输出格式】
-请严格按照以下 JSON 格式输出：
 {{
-    "importance": 数字 (1-5),
-    "category": "fact|preference|event|emotion|normal",
+    "importance": 数字 1-5（5=最重要，3=一般，1=日常），
+    "category": "fact（事实）|preference（偏好）|event（事件）|emotion（情绪）|normal（日常）",
     "should_remember": true/false,
-    "summary": "如果是重要信息，用一句话概括（20 字以内）",
-    "keywords": ["关键词 1", "关键词 2"],
+    "summary": "用一句话概括需要记住的内容（20字以内）；不需记住则留空",
+    "keywords": ["关键词1", "关键词2"],
     "reason": "简要说明判断理由"
 }}
 
@@ -153,7 +150,7 @@ class MemoryManager:
 角色：{role}
 内容：{content}
 
-请分析："""
+请判断："""
 
         self._analysis_worker = MemoryAnalyzeWorker(
             api_key=api_key,
@@ -250,28 +247,17 @@ class MemoryManager:
     
     def add_message(self, role: str, content: str, session_id: int):
         """
-        添加消息并智能处理
+        添加消息到短期记忆。
         
-        注意：为了避免阻塞主线程，这里只做简单的同步操作
-        AI 分析和压缩应该在后台线程中进行
+        注意：记忆提取由 AI 驱动的 analyze_async 负责，
+        add_message 仅管理短期对话缓存，不做规则匹配。
         """
         self.short_term_messages.append({
             "role": role,
             "content": content,
             "timestamp": datetime.now().isoformat()
         })
-        
-        analysis = self.simple_analyze(content, role)
-        
-        if analysis.get("should_remember", False):
-            self.save_to_long_term_memory(
-                category=analysis.get("category", "normal"),
-                content=analysis.get("summary", content),
-                importance=analysis.get("importance", 3),
-                keywords=analysis.get("keywords", []),
-                original_content=content
-            )
-        
+
         if len(self.short_term_messages) > self.max_short_term:
             to_remove = len(self.short_term_messages) - self.max_short_term
             self.short_term_messages = self.short_term_messages[to_remove:]
@@ -476,7 +462,106 @@ class MemoryManager:
         
         summaries = [row[0] for row in cursor.fetchall()]
         return "\n".join(reversed(summaries))
-    
+
+    def search_by_keywords(self, query: str, limit: int = 5) -> List[Dict]:
+        """智能搜索记忆 — 分词匹配 + 多字段搜索。
+
+        将查询拆分为有意义的词条，分别匹配 content/keywords/original_content。
+        例如搜索"我住哪里"会匹配到"住在"、"地址"等相关内容。
+
+        Args:
+            query: 搜索关键词
+            limit: 最大返回条数
+
+        Returns:
+            [{"id": int, "category": str, "content": str, "importance": int, "keywords": list, "created_at": str}]
+        """
+        terms = self._extract_search_terms(query)
+        if not terms:
+            return []
+
+        cursor = self.db.conn.cursor()
+        conditions = []
+        params = []
+        for term in terms:
+            like = f"%{term}%"
+            conditions.append("(content LIKE ? OR keywords LIKE ? OR original_content LIKE ?)")
+            params.extend([like, like, like])
+
+        sql = f"""
+            SELECT id, category, content, importance, keywords, created_at
+            FROM user_memories
+            WHERE {' OR '.join(conditions)}
+            ORDER BY importance DESC, last_accessed DESC
+            LIMIT ?
+        """
+        params.append(limit)
+        cursor.execute(sql, params)
+
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "id": row[0],
+                "category": row[1],
+                "content": row[2],
+                "importance": row[3],
+                "keywords": json.loads(row[4]) if row[4] else [],
+                "created_at": row[5],
+            })
+        return results
+
+    def _extract_search_terms(self, query: str) -> list[str]:
+        """将中文查询拆分为有意义的搜索词条。
+
+        例如 "我住在哪" → ["住在", "在哪"]
+                 "用户喜欢喝什么" → ["喜欢", "喜欢喝", "喝什么"]
+        """
+        if not query or not query.strip():
+            return []
+
+        # 常见中文停用词
+        stops = {'的', '了', '是', '在', '我', '你', '他', '她', '它',
+                 '吗', '呢', '啊', '吧', '呀', '哦', '嗯', '嘛', '啦',
+                 '？', '！', '，', '。', '、', ' ', '?', '!', ',', '.'}
+
+        # 提取有效字符
+        chars = [c for c in query if c not in stops and c.strip()]
+
+        terms = set()
+
+        # 1. 保留原始完整查询（>=2 字）
+        q = query.strip()
+        if len(q) >= 2:
+            terms.add(q)
+
+        if not chars:
+            return list(terms) if terms else []
+
+        # 2. 如果有效字符 <= 3 个，直接用它们
+        if len(chars) <= 3:
+            for c in chars:
+                terms.add(c)
+            return list(terms)
+
+        # 3. 滑窗提取 2-4 字片段
+        for i in range(len(chars)):
+            for j in range(i + 2, min(i + 5, len(chars) + 1)):
+                segment = ''.join(chars[i:j])
+                if len(segment) >= 2:
+                    terms.add(segment)
+
+        return list(terms)
+
+    def delete_memory(self, memory_id: int) -> bool:
+        """删除指定 ID 的记忆。"""
+        cursor = self.db.conn.cursor()
+        cursor.execute("DELETE FROM user_memories WHERE id=?", (memory_id,))
+        self.db.conn.commit()
+        deleted = cursor.rowcount > 0
+        if deleted:
+            print(f"[MemoryManager] 删除了记忆 ID={memory_id}")
+        return deleted
+
     def format_long_term_memories(self, memories: List[Dict]) -> str:
         """格式化长期记忆"""
         lines = []

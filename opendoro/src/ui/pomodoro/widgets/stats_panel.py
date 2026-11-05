@@ -1,6 +1,7 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout
 from qfluentwidgets import CardWidget, isDarkTheme
+from src.core.i18n import tr
 
 
 class StatsPanel(CardWidget):
@@ -12,11 +13,11 @@ class StatsPanel(CardWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(8)
 
-        self._today_widget = self._create_stat_group("📅 今日统计", [
-            ("pomodoro", "🍅 番茄", "0"),
-            ("focus", "⏱️ 专注", "0min"),
-            ("chat", "💬 对话", "0"),
-            ("interaction", "🎮 互动", "0"),
+        self._today_widget = self._create_stat_group("📅 " + tr("pomodoro.today_stats"), [
+            ("pomodoro", "🍅 " + tr("pomodoro.tomato"), "0"),
+            ("focus", "⏱️ " + tr("pomodoro.focus_time"), "0min"),
+            ("chat", "💬 " + tr("pomodoro.chat_count"), "0"),
+            ("interaction", "🎮 " + tr("pomodoro.interaction_count"), "0"),
         ])
         layout.addWidget(self._today_widget)
 
@@ -25,10 +26,10 @@ class StatsPanel(CardWidget):
         divider.setStyleSheet("background-color: #e0e0e0;")
         layout.addWidget(divider)
 
-        self._total_widget = self._create_stat_group("🏆 累计统计", [
-            ("total_pomodoros", "🍅 总番茄", "0"),
-            ("best_streak", "🔥 最佳连胜", "0天"),
-            ("total_focus", "⏱️ 总专注", "0h"),
+        self._total_widget = self._create_stat_group("🏆 " + tr("pomodoro.total_stats"), [
+            ("total_pomodoros", "🍅 " + tr("pomodoro.total_tomato"), "0"),
+            ("best_streak", "🔥 " + tr("pomodoro.best_streak"), "0天"),
+            ("total_focus", "⏱️ " + tr("pomodoro.total_focus"), "0h"),
         ])
         layout.addWidget(self._total_widget)
 
@@ -69,7 +70,7 @@ class StatsPanel(CardWidget):
 
     def update_total(self, total_pomodoros: int, best_streak: int, total_focus_seconds: int):
         self._set_label("total_pomodoros", str(total_pomodoros))
-        self._set_label("best_streak", f"{best_streak}天")
+        self._set_label("best_streak", tr("pomodoro.streak_days").format(days=best_streak))
         if total_focus_seconds >= 3600:
             self._set_label("total_focus", f"{total_focus_seconds / 3600:.1f}h")
         else:
@@ -86,7 +87,8 @@ class StatsPanel(CardWidget):
         for label in self.findChildren(QLabel):
             if hasattr(label, 'objectName') and label.objectName() and label.objectName().startswith("stat_"):
                 label.setStyleSheet(f"font-size: 12px; font-weight: bold; color: {text_color};")
-            elif label.text() and ("统计" in label.text()):
+            elif label.font().bold():
+                # Title labels use bold font
                 label.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {title_color};")
-            elif label.text() and any(k in label.text() for k in ["🍅", "⏱️", "💬", "🎮", "🔥"]):
+            else:
                 label.setStyleSheet(f"font-size: 12px; color: {dim_text};")

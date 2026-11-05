@@ -34,5 +34,8 @@ class GreetingBanner(CardWidget):
             greeting = self.quotes_manager.get_greeting()
             self.greeting_label.setText(greeting)
 
+    def refresh_ui(self, lang_code: str = ""):
+        self._update_greeting()
+
     def update_theme(self, is_dark: bool):
         pass

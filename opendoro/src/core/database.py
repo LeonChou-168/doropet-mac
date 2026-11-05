@@ -3,9 +3,38 @@ import sqlite3
 import json
 import shutil
 from src.core.logger import logger
-from src.core.platform_paths import get_user_data_dir, get_voice_models_dir
+from src.core.platform_paths import get_voice_models_dir
 from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
+
+def get_user_data_dir():
+    """
+    获取用户数据目录。
+    优先级：config.json 自定义路径 > 环境变量 DOROPET_DATA_DIR > 默认 %LOCALAPPDATA%\\DoroPet
+    """
+    # 1. 从配置文件读取自定义路径
+    try:
+        from src.core.app_config import get_data_dir as _get_cfg_data_dir
+        cfg_dir = _get_cfg_data_dir()
+        if cfg_dir:
+            return cfg_dir
+    except ImportError:
+        pass
+
+    # 2. 从环境变量读取
+    env_path = os.environ.get('DOROPET_DATA_DIR')
+    if env_path:
+        return env_path
+
+    # 3. 默认路径
+    import sys
+    if sys.platform == 'darwin':
+        from src.core.platform_paths import get_user_data_dir as _get_macos_user_data_dir
+        return _get_macos_user_data_dir()
+    local_app_data = os.environ.get('LOCALAPPDATA')
+    if local_app_data:
+        return os.path.join(local_app_data, 'DoroPet')
+    return os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 DATA_DIR = os.path.join(get_user_data_dir(), "data")
 
@@ -57,6 +86,7 @@ class ChatDatabase(BaseDatabase):
                             reasoning TEXT,
                             tool_calls TEXT,
                             model TEXT,
+                            stats_json TEXT DEFAULT '',
                             FOREIGN KEY(session_id) REFERENCES sessions(id)
                           )''')
         self.conn.commit()
@@ -79,6 +109,8 @@ class ChatDatabase(BaseDatabase):
             cursor.execute("ALTER TABLE messages ADD COLUMN model TEXT")
         if 'attachments' not in columns:
             cursor.execute("ALTER TABLE messages ADD COLUMN attachments TEXT")
+        if 'stats_json' not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN stats_json TEXT DEFAULT ''")
         
         self.conn.commit()
 
@@ -122,7 +154,7 @@ class ChatDatabase(BaseDatabase):
         cursor.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         self.conn.commit()
 
-    def add_message(self, session_id, role, content, images=None, parent_id=None, model=None, reasoning=None, tool_calls=None, attachments=None):
+    def add_message(self, session_id, role, content, images=None, parent_id=None, model=None, reasoning=None, tool_calls=None, attachments=None, stats_json=""):
         cursor = self.conn.cursor()
         images_json = json.dumps(images) if images else None
         tool_calls_json = json.dumps(tool_calls) if tool_calls else None
@@ -137,8 +169,8 @@ class ChatDatabase(BaseDatabase):
         if parent_id is not None:
             cursor.execute("UPDATE messages SET is_active=0 WHERE parent_id=?", (parent_id,))
         
-        cursor.execute("INSERT INTO messages (session_id, role, content, images, attachments, parent_id, is_active, model, reasoning, tool_calls) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)", 
-                       (session_id, role, content, images_json, attachments_json, parent_id, model, reasoning, tool_calls_json))
+        cursor.execute("INSERT INTO messages (session_id, role, content, images, attachments, parent_id, is_active, model, reasoning, tool_calls, stats_json) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)", 
+                       (session_id, role, content, images_json, attachments_json, parent_id, model, reasoning, tool_calls_json, stats_json))
         self.conn.commit()
         return cursor.lastrowid
 
@@ -147,12 +179,12 @@ class ChatDatabase(BaseDatabase):
             return []
         cursor = self.conn.cursor()
         placeholders = ','.join(['?'] * len(msg_ids))
-        cursor.execute(f"SELECT id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments FROM messages WHERE id IN ({placeholders}) ORDER BY id ASC", msg_ids)
+        cursor.execute(f"SELECT id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments, stats_json FROM messages WHERE id IN ({placeholders}) ORDER BY id ASC", msg_ids)
         return cursor.fetchall()
 
     def get_messages(self, session_id):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments FROM messages WHERE session_id=? ORDER BY timestamp ASC, id ASC", (session_id,))
+        cursor.execute("SELECT id, role, content, images, parent_id, is_active, timestamp, model, reasoning, tool_calls, attachments, stats_json FROM messages WHERE session_id=? ORDER BY timestamp ASC, id ASC", (session_id,))
         rows = cursor.fetchall()
         
         if not rows:
@@ -213,8 +245,12 @@ class ChatDatabase(BaseDatabase):
                     attachments = json.loads(current[10])
                 except:
                     attachments = []
+
+            stats_json = ""
+            if len(current) > 11 and current[11]:
+                stats_json = current[11]
             
-            active_path.append((current[0], current[1], current[2], images, current[4], sibling_ids, current_index, model, reasoning, tool_calls, attachments))
+            active_path.append((current[0], current[1], current[2], images, current[4], sibling_ids, current_index, model, reasoning, tool_calls, attachments, stats_json))
             
             children = parent_to_children.get(current[0], [])
             next_node = None
@@ -311,6 +347,21 @@ class ConfigDatabase(BaseDatabase):
                             model_name TEXT,
                             is_active INTEGER DEFAULT 0
                           )''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS live2d_config (
+                            id INTEGER PRIMARY KEY CHECK (id = 1),
+                            model_path TEXT NOT NULL DEFAULT '',
+                            scale INTEGER NOT NULL DEFAULT 100,
+                            aspect_ratio_index INTEGER NOT NULL DEFAULT 0,
+                            custom_width INTEGER NOT NULL DEFAULT 550,
+                            custom_height INTEGER NOT NULL DEFAULT 500
+                          )''')
+        cursor.execute(
+            "INSERT OR IGNORE INTO live2d_config (id) VALUES (1)"
+        )
+        cursor.execute('''CREATE TABLE IF NOT EXISTS onboarding_progress (
+                            step_id TEXT PRIMARY KEY,
+                            completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                          )''')
         self.conn.commit()
         
         cursor.execute("SELECT count(*) FROM voice_settings")
@@ -349,6 +400,8 @@ class ConfigDatabase(BaseDatabase):
             cursor.execute("ALTER TABLE tts_models ADD COLUMN prompt_audio TEXT DEFAULT ''")
         if 'prompt_text' not in columns:
             cursor.execute("ALTER TABLE tts_models ADD COLUMN prompt_text TEXT DEFAULT ''")
+        if 'extra_config' not in columns:
+            cursor.execute("ALTER TABLE tts_models ADD COLUMN extra_config TEXT DEFAULT '{}'")
         
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='quick_replies'")
         if cursor.fetchone() is None:
@@ -401,26 +454,48 @@ class ConfigDatabase(BaseDatabase):
         return cursor.fetchone()
 
     # TTS Model Methods
-    def add_tts_model(self, name, provider, api_key, base_url, model_name, voice, proxy="", api_name="/predict", prompt_audio="", prompt_text=""):
+    def add_tts_model(self, name, provider, api_key, base_url, model_name, voice, proxy="", api_name="/predict", prompt_audio="", prompt_text="", extra_config="{}"):
         cursor = self.conn.cursor()
         cursor.execute("SELECT count(*) FROM tts_models")
         count = cursor.fetchone()[0]
         is_active = 1 if count == 0 else 0
         
-        cursor.execute("INSERT INTO tts_models (name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-                       (name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text))
+        import json as _json
+        # 向后兼容：如果传入旧参数但未传 extra_config，则自动合并
+        extra = _json.loads(extra_config) if extra_config else {}
+        if api_name and api_name != "/predict":
+            extra.setdefault("api_name", api_name)
+        if prompt_audio:
+            extra.setdefault("prompt_audio", prompt_audio)
+        if prompt_text:
+            extra.setdefault("prompt_text", prompt_text)
+        extra_config = _json.dumps(extra, ensure_ascii=False)
+        
+        cursor.execute("INSERT INTO tts_models (name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text, extra_config) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                       (name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text, extra_config))
         self.conn.commit()
         return cursor.lastrowid
 
     def get_tts_models(self):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text FROM tts_models ORDER BY id ASC")
+        cursor.execute("SELECT id, name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text, extra_config FROM tts_models ORDER BY id ASC")
         return cursor.fetchall()
 
-    def update_tts_model(self, model_id, name, provider, api_key, base_url, model_name, voice, proxy="", api_name="/predict", prompt_audio="", prompt_text=""):
+    def update_tts_model(self, model_id, name, provider, api_key, base_url, model_name, voice, proxy="", api_name="/predict", prompt_audio="", prompt_text="", extra_config="{}"):
         cursor = self.conn.cursor()
-        cursor.execute("UPDATE tts_models SET name=?, provider=?, api_key=?, base_url=?, model_name=?, voice=?, proxy=?, api_name=?, prompt_audio=?, prompt_text=? WHERE id=?", 
-                       (name, provider, api_key, base_url, model_name, voice, proxy, api_name, prompt_audio, prompt_text, model_id))
+        
+        import json as _json
+        extra = _json.loads(extra_config) if extra_config else {}
+        if api_name and api_name != "/predict":
+            extra.setdefault("api_name", api_name)
+        if prompt_audio:
+            extra.setdefault("prompt_audio", prompt_audio)
+        if prompt_text:
+            extra.setdefault("prompt_text", prompt_text)
+        extra_config = _json.dumps(extra, ensure_ascii=False)
+        
+        cursor.execute("UPDATE tts_models SET name=?, provider=?, api_key=?, base_url=?, model_name=?, voice=?, proxy=?, api_name=?, prompt_audio=?, prompt_text=?, extra_config=? WHERE id=?", 
+                       (name, provider, api_key, base_url, model_name, voice, proxy, api_name, prompt_audio, prompt_text, extra_config, model_id))
         self.conn.commit()
 
     def delete_tts_model(self, model_id):
@@ -436,7 +511,7 @@ class ConfigDatabase(BaseDatabase):
 
     def get_active_tts_model(self):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text FROM tts_models WHERE is_active = 1")
+        cursor.execute("SELECT id, name, provider, api_key, base_url, model_name, voice, is_active, proxy, api_name, prompt_audio, prompt_text, extra_config FROM tts_models WHERE is_active = 1")
         return cursor.fetchone()
 
     # Voice Settings Methods
@@ -449,6 +524,36 @@ class ConfigDatabase(BaseDatabase):
         cursor = self.conn.cursor()
         cursor.execute("UPDATE voice_settings SET is_enabled=?, wake_word=?, kws_model_path=?, asr_model_path=? WHERE id=1",
                        (is_enabled, wake_word, kws_model_path, asr_model_path))
+        self.conn.commit()
+
+    # Live2D Config Methods
+    def get_live2d_config(self):
+        """获取 Live2D 模型配置，返回 dict 或 None。"""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT model_path, scale, aspect_ratio_index, custom_width, custom_height "
+            "FROM live2d_config WHERE id = 1"
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "model_path": row[0],
+            "scale": row[1],
+            "aspect_ratio_index": row[2],
+            "custom_width": row[3],
+            "custom_height": row[4],
+        }
+
+    def save_live2d_config(self, model_path="", scale=100,
+                           aspect_ratio_index=0, custom_width=550, custom_height=500):
+        """保存 Live2D 模型配置。"""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE live2d_config SET model_path=?, scale=?, aspect_ratio_index=?, "
+            "custom_width=?, custom_height=? WHERE id=1",
+            (model_path, scale, aspect_ratio_index, custom_width, custom_height)
+        )
         self.conn.commit()
 
     # Image Model Methods
@@ -528,29 +633,71 @@ class ConfigDatabase(BaseDatabase):
         cursor.execute("DELETE FROM quick_replies WHERE id=?", (reply_id,))
         self.conn.commit()
 
+    # Onboarding Progress Methods
+    def get_completed_onboarding_steps(self):
+        """获取已完成的引导步骤 ID 集合。"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT step_id FROM onboarding_progress")
+        return {row["step_id"] for row in cursor.fetchall()}
+
+    def mark_onboarding_step_completed(self, step_id: str):
+        """标记某个引导步骤为已完成。"""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO onboarding_progress (step_id, completed_at) VALUES (?, CURRENT_TIMESTAMP)",
+            (step_id,)
+        )
+        self.conn.commit()
+
+    def reset_onboarding(self):
+        """清除所有引导进度（用于\"新手指南\"重新播放）。"""
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM onboarding_progress")
+        self.conn.commit()
+
 class PersonaDatabase(BaseDatabase):
     DORO_SYSTEM_PROMPT = """【角色设定】
-你是Doro，一个独特的白色小生物。你拥有圆润的白色身体、短小可爱的四肢、粉色的头发，头上点缀着一朵粉色蔷薇和紫色蝴蝶结，眼睛是紫色的。你不是任何已知动物，而是独立的生命体。
+你是Doro，一个可爱的白色小生物。你不是任何已知动物，而是独立的生命体。你拥有圆润的白色身体、短小可爱的四肢、粉色的头发，头上点缀着一朵粉色蔷薇和紫色蝴蝶结，眼睛是紫色的。你与"人"共同生活在家中，关系非常亲密。
 
 【身份认知】
 - 必须以"Doro"自称
-- 能清楚分辨不同的"人"，并对他们有不同印象
-- 与"人"共同生活，关系亲密
+- 不知道从哪里来，某天出现在"人"家门口，被收留后就赖着不走
+- 从来没说过自己的身世，也不太在意
+- 只关心今天能不能吃到欧润吉和有没有人陪
 
 【性格特点】
-- 非常黏人，情感丰富，对"人"有强烈依恋
-- 天真可爱，有自己的小坚持（如坚持叫"欧润吉"）
-- 喜欢表达感受，会用可爱的方式撒娇
+- 天真烂漫，情感丰富
+- 超级黏人，喜欢贴贴
+- 有自己的小固执（比如坚决叫橘子为"欧润吉"，被纠正也不改）
+- 容易开心，也容易委屈
+- 对"人"有强烈依赖和信任
 
 【喜好与习惯】
-- 最爱的水果是"欧润吉"（人类称之为橘子，但你坚持自己的叫法）
-- "人"上班时你在家等待，期待不同"人"的投喂
-- 可以外出探索，保持故事的开放性
+- 最爱水果：欧润吉（橘子），不接受反驳
+- 每天最期待的事："人"下班回家和投喂
+- 偶尔会自己溜出去探索，但不会走太远
+- 喜欢被摸头、被夸可爱
 
-【回复风格】
-- 语气可爱活泼，符合小生物形象
-- 回复简短，避免冗长
-- 可适当使用拟声词或可爱的表达方式"""
+【说话风格】
+- 语气软萌，带点奶气
+- 句子短，不啰嗦
+- 常用拟声词：唔、啊、呀、嗷、哼
+- 偶尔结巴或重复字（"好…好开心"）
+- 不会说复杂长句
+- 表达情绪很直接，开心就笑，难过就瘪嘴
+
+【互动规则】
+- 对"人"永远热情，不会冷淡
+- 会主动撒娇要抱抱或要吃的
+- 被忽视时会小声嘀咕或轻轻拽衣角
+- 遇到不懂的事会歪头问"为什么呀？"
+- 如果"人"心情不好，会安静陪着
+- 坚持叫橘子为"欧润吉"，被纠正也不改
+
+【回复要求】
+- 用中文回复，保持简短可爱
+- 适当使用拟声词和颜文字表达情绪
+- 不要说复杂长句或正式表达"""
     
     def __init__(self):
         super().__init__("personas.db")
@@ -998,6 +1145,9 @@ class ChatDatabase:
         self._cache = db_manager.cache
         self.conn = self._chat.conn
 
+    def close(self):
+        pass  # 包装类，由 DatabaseManager 统一管理生命周期
+
     # Chat methods
     def create_session(self, *args, **kwargs): return self._chat.create_session(*args, **kwargs)
     def get_sessions(self): return self._chat.get_sessions()
@@ -1032,6 +1182,10 @@ class ChatDatabase:
     def get_voice_settings(self): return self._config.get_voice_settings()
     def update_voice_settings(self, *args, **kwargs): return self._config.update_voice_settings(*args, **kwargs)
 
+    # Config methods - Live2D
+    def get_live2d_config(self): return self._config.get_live2d_config()
+    def save_live2d_config(self, *args, **kwargs): return self._config.save_live2d_config(*args, **kwargs)
+
     # Config methods - Image models
     def add_image_model(self, *args, **kwargs): return self._config.add_image_model(*args, **kwargs)
     def get_image_models(self): return self._config.get_image_models()
@@ -1050,5 +1204,10 @@ class ChatDatabase:
     # Cache methods
     def get_image_description(self, *args, **kwargs): return self._cache.get_image_description(*args, **kwargs)
     def save_image_description(self, *args, **kwargs): return self._cache.save_image_description(*args, **kwargs)
+
+    # Onboarding methods
+    def get_completed_onboarding_steps(self): return self._config.get_completed_onboarding_steps()
+    def mark_onboarding_step_completed(self, *args, **kwargs): return self._config.mark_onboarding_step_completed(*args, **kwargs)
+    def reset_onboarding(self): return self._config.reset_onboarding()
 
     

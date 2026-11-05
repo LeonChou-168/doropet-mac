@@ -1,12 +1,15 @@
 # DoroPet macOS Apple Silicon
 
 This macOS port targets Apple Silicon (`arm64`) and keeps the original PyQt5 + Live2D architecture.
+It is synced with upstream [DoroPet_V3](https://gitee.com/waterfeet/DoroPet_V3) **3.6.8**
+(the 3.6.x agent runtime uses `pydantic-ai`, see dependencies below).
 
 ## Requirements
 
 - macOS on Apple Silicon
 - Python 3.12 or 3.11 for arm64
 - Optional: VLC in `/Applications/VLC.app` or Homebrew if you prefer the VLC music backend
+- Optional: `playwright install chromium` if you want the built-in browser agent tools
 
 The system `python3` may be too new for native packages. Use Homebrew Python 3.12 when possible:
 
@@ -61,3 +64,6 @@ The generated app is unsigned and intended for local use. For distribution, sign
 - This port is Apple Silicon-only.
 - Windows `.bat` launchers are kept for Windows users.
 - `pyaudiowpatch` is intentionally excluded from macOS dependencies because it targets Windows WASAPI loopback.
+- The 3.6.x code base adds `pydantic-ai` and `playwright` dependencies; `requirements-macos.txt` includes them.
+- Auto-update from the upstream Gitee releases replaces the source with the Windows build, which is **not** recommended
+  for this port. Update manually by syncing `upstream` and re-applying the macOS patches.

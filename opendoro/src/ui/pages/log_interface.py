@@ -11,6 +11,7 @@ from qfluentwidgets import (
     StrongBodyLabel, ComboBox, BodyLabel,
     ToolButton, isDarkTheme,
 )
+from src.core.i18n import I18nManager, tr
 from src.core.logger import (
     logger, set_log_level, get_log_level_name,
     _LEVEL_NAMES, _LEVEL_ICONS,
@@ -153,16 +154,19 @@ class LogInterface(QWidget):
         self.init_ui()
         self.init_logger_handler()
 
+        self._i18n = I18nManager.get_instance()
+        self._i18n.languageChanged.connect(self.refresh_ui)
+
     def init_ui(self):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(16, 16, 16, 16)
         self.layout.setSpacing(8)
 
         header_layout = QHBoxLayout()
-        self.title_label = StrongBodyLabel("运行日志", self)
+        self.title_label = StrongBodyLabel(tr("log.title"), self)
         self.title_label.setObjectName("logTitleLabel")
 
-        self.clear_btn = PrimaryPushButton(FluentIcon.DELETE, "清空", self)
+        self.clear_btn = PrimaryPushButton(FluentIcon.DELETE, tr("log.clear"), self)
         self.clear_btn.clicked.connect(self.clear_logs)
 
         header_layout.addWidget(self.title_label)
@@ -176,12 +180,12 @@ class LogInterface(QWidget):
         self.auto_scroll_btn = ToolButton(FluentIcon.SCROLL, self)
         self.auto_scroll_btn.setCheckable(True)
         self.auto_scroll_btn.setChecked(True)
-        self.auto_scroll_btn.setToolTip("自动滚动")
+        self.auto_scroll_btn.setToolTip(tr("log.auto_scroll"))
         self.auto_scroll_btn.toggled.connect(self._on_auto_scroll_toggled)
         toolbar.addWidget(self.auto_scroll_btn)
 
         self.search_input = QLineEdit(self)
-        self.search_input.setPlaceholderText("搜索日志...")
+        self.search_input.setPlaceholderText(tr("log.search_placeholder"))
         self.search_input.setClearButtonEnabled(True)
         self.search_input.setFixedWidth(200)
         self.search_input.textChanged.connect(self._on_search_changed)
@@ -191,19 +195,19 @@ class LogInterface(QWidget):
 
         self.font_minus_btn = ToolButton(FluentIcon.REMOVE, self)
         self.font_minus_btn.setFixedSize(28, 28)
-        self.font_minus_btn.setToolTip("缩小字体")
+        self.font_minus_btn.setToolTip(tr("log.font_smaller"))
         self.font_minus_btn.clicked.connect(self._on_font_decrease)
         toolbar.addWidget(self.font_minus_btn)
 
         self.font_size_label = BodyLabel(str(self._font_size), self)
         self.font_size_label.setFixedWidth(24)
         self.font_size_label.setAlignment(Qt.AlignCenter)
-        self.font_size_label.setToolTip("当前字体大小")
+        self.font_size_label.setToolTip(tr("log.font_size"))
         toolbar.addWidget(self.font_size_label)
 
         self.font_plus_btn = ToolButton(FluentIcon.ADD, self)
         self.font_plus_btn.setFixedSize(28, 28)
-        self.font_plus_btn.setToolTip("放大字体")
+        self.font_plus_btn.setToolTip(tr("log.font_larger"))
         self.font_plus_btn.clicked.connect(self._on_font_increase)
         toolbar.addWidget(self.font_plus_btn)
 
@@ -227,7 +231,7 @@ class LogInterface(QWidget):
         self.log_view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.layout.addWidget(self.log_view)
 
-        self._count_label = BodyLabel("共 0 条", self)
+        self._count_label = BodyLabel(tr("log.total_lines").format(total=0), self)
         self._count_label.setObjectName("logCountLabel")
         self.layout.addWidget(self._count_label)
 
@@ -311,9 +315,9 @@ class LogInterface(QWidget):
         total = len(self._all_entries)
         visible = sum(1 for v in self._visible_entries if v)
         if total == visible:
-            self._count_label.setText(f"共 {total} 条")
+            self._count_label.setText(tr("log.total_lines").format(total=total))
         else:
-            self._count_label.setText(f"共 {total} 条 | 显示 {visible} 条")
+            self._count_label.setText(tr("log.total_visible").format(total=total, visible=visible))
 
     def _on_auto_scroll_toggled(self, checked):
         self._auto_scroll = checked
@@ -349,7 +353,7 @@ class LogInterface(QWidget):
         self._all_entries.clear()
         self._visible_entries.clear()
         self.log_view.clear()
-        self._count_label.setText("共 0 条")
+        self._count_label.setText(tr("log.total_lines").format(total=0))
 
     def on_level_changed(self, level_name):
         if level_name in self._LEVEL_MAP:
@@ -361,6 +365,17 @@ class LogInterface(QWidget):
     def update_theme(self):
         self._is_dark = isDarkTheme()
         self._rebuild_view()
+
+    def refresh_ui(self):
+        """语言切换时刷新所有 UI 文本。"""
+        self.title_label.setText(tr("log.title"))
+        self.clear_btn.setText(tr("log.clear"))
+        self.auto_scroll_btn.setToolTip(tr("log.auto_scroll"))
+        self.search_input.setPlaceholderText(tr("log.search_placeholder"))
+        self.font_minus_btn.setToolTip(tr("log.font_smaller"))
+        self.font_size_label.setToolTip(tr("log.font_size"))
+        self.font_plus_btn.setToolTip(tr("log.font_larger"))
+        self._update_count()
 
     def closeEvent(self, event):
         super().closeEvent(event)

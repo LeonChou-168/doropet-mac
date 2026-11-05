@@ -4,28 +4,14 @@ import threading
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.core.dependency_checker import check_and_exit_on_failure
-check_and_exit_on_failure()
-
-from src.live2dview import Live2DWidget
-from src.resource_utils import resource_path
-from src.core.logger import setup_logger
-from src.core.platform_paths import is_macos, is_windows
-from src.splash_screen import SplashScreen
-from src.provider.manager import ProviderManager
-from src.core.database import DatabaseManager
-from src.core.startup_update_checker import StartupUpdateChecker
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtCore import QSettings, QTimer
-from PyQt5.QtGui import *
-
-# Initialize Logger
-logger = setup_logger()
+logger = None
 
 
 def configure_opengl_surface():
-    """Request the legacy OpenGL profile used by the Live2D native renderer."""
+    """Request the legacy OpenGL profile used by the Live2D native renderer (macOS)."""
     try:
+        from PyQt5.QtGui import QSurfaceFormat
+
         fmt = QSurfaceFormat()
         fmt.setVersion(2, 1)
         fmt.setProfile(QSurfaceFormat.NoProfile)
@@ -34,11 +20,78 @@ def configure_opengl_surface():
         fmt.setStencilBufferSize(8)
         fmt.setSwapBehavior(QSurfaceFormat.DoubleBuffer)
         QSurfaceFormat.setDefaultFormat(fmt)
-        logger.info("Requested OpenGL 2.1 compatibility context for Live2D rendering")
+        if logger:
+            logger.info("Requested OpenGL 2.1 compatibility context for Live2D rendering")
     except Exception as e:
-        logger.warning(f"Failed to configure OpenGL surface format: {e}")
+        print(f"Failed to configure OpenGL surface format: {e}")
+
+
+def setup_macos_dock_reopen_handler(app, widget):
+    """Open the main window when the macOS Dock icon is clicked."""
+    from src.core.platform_paths import is_macos
+
+    if not is_macos():
+        return None
+
+    try:
+        import objc
+        from AppKit import NSApplication
+        from Foundation import NSObject
+        from PyQt5.QtCore import QTimer
+
+        class DockReopenDelegate(NSObject):
+            def initWithCallback_previousDelegate_(self, callback, previous_delegate):
+                self = objc.super(DockReopenDelegate, self).init()
+                if self is None:
+                    return None
+                self._callback = callback
+                self._previous_delegate = previous_delegate
+                return self
+
+            def respondsToSelector_(self, selector):
+                if objc.super(DockReopenDelegate, self).respondsToSelector_(selector):
+                    return True
+                previous_delegate = getattr(self, "_previous_delegate", None)
+                return bool(previous_delegate and previous_delegate.respondsToSelector_(selector))
+
+            def forwardingTargetForSelector_(self, selector):
+                previous_delegate = getattr(self, "_previous_delegate", None)
+                if previous_delegate and previous_delegate.respondsToSelector_(selector):
+                    return previous_delegate
+                return objc.super(DockReopenDelegate, self).forwardingTargetForSelector_(selector)
+
+            def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, has_visible_windows):
+                QTimer.singleShot(0, self._callback)
+                return True
+
+        def handle_reopen():
+            try:
+                if logger:
+                    logger.info("macOS Dock reopen requested; showing main window")
+                widget.open_main_window()
+            except Exception as e:
+                if logger:
+                    logger.exception(f"Failed to handle macOS Dock reopen: {e}")
+
+        ns_app = NSApplication.sharedApplication()
+        previous_delegate = ns_app.delegate()
+        delegate = DockReopenDelegate.alloc().initWithCallback_previousDelegate_(handle_reopen, previous_delegate)
+        ns_app.setDelegate_(delegate)
+
+        # Keep the Obj-C delegate alive for the lifetime of QApplication.
+        app._macos_dock_reopen_delegate = delegate
+        if logger:
+            logger.info("Installed macOS Dock reopen handler")
+        return delegate
+    except Exception as e:
+        if logger:
+            logger.warning(f"Failed to install macOS Dock reopen handler: {e}")
+        return None
 
 def init_provider_framework():
+    from src.core.database import DatabaseManager
+    from src.provider.manager import ProviderManager
+
     try:
         from src.provider.sources import (
             ProviderOpenAI, ProviderDeepSeek, ProviderAnthropic,
@@ -58,28 +111,22 @@ def init_provider_framework():
 
 
 def init_agent_framework():
-    try:
-        from src.agent.tools import register_all_tools
-        from src.agent.skills.registry import SkillRegistry
-        from src.agent.skills.state import SkillEnabledState, SkillCategory
-        from src.agent.doropet_agent import AgentBridge
-        from src.agent.core.sandbox import SandboxManager
+    """初始化 pydantic-ai Agent 框架。
 
+    预加载 SkillManager 和 SkillEnabledState，确保技能在首次对话时可用。
+    pydantic-ai 的 Agent 实例在每次 LLMWorker 运行时按需创建。
+    """
+    try:
+        from src.agent.skills.state import SkillEnabledState
+        from src.core.skill_manager import SkillManager
+
+        # 加载技能启用状态
         state = SkillEnabledState.get_instance()
         state.load_from_settings()
 
-        bridge = AgentBridge.instance()
-        bridge.init_default_tools()
-        skill_registry = bridge.get_skill_registry()
-        count = skill_registry.discover_skills()
-        logger.info(f"[AgentFW] Initialized: {len(bridge.get_tool_registry().list_tool_names())} tools, {count} skills")
-
-        sandbox = SandboxManager.get_instance()
-        sandbox.update_config(
-            max_execution_time_sec=30.0,
-            max_output_bytes=1024 * 1024,
-        )
-        logger.info("[AgentFW] Sandbox configured")
+        # 预加载技能管理器（触发技能发现）
+        skill_manager = SkillManager()
+        logger.info(f"[AgentFW] pydantic-ai ready: {len(skill_manager.skills)} skills discovered")
     except ImportError as e:
         logger.warning(f"[AgentFW] Not available: {e}")
     except Exception as e:
@@ -87,6 +134,10 @@ def init_agent_framework():
 
 def setup_tray_icon(app, widget):
     """设置系统托盘"""
+    from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction
+    from PyQt5.QtGui import QIcon
+    from src.resource_utils import resource_path
+
     tray_icon = QSystemTrayIcon(app)
     
     # 尝试加载图标
@@ -140,7 +191,7 @@ def setup_tray_icon(app, widget):
     pet_menu.addAction(action_toggle)
     
     # 锁定/解锁
-    action_lock = QAction("锁定/解锁", app)
+    action_lock = QAction(tr("tray.lock_unlock"), app)
     action_lock.setCheckable(True)
     action_lock.setChecked(False)
     def toggle_lock(checked):
@@ -156,10 +207,10 @@ def setup_tray_icon(app, widget):
     tray_menu.addMenu(pet_menu)
     
     # === 界面管理区 ===
-    view_menu = QMenu("🖥️ 界面管理", tray_menu)
+    view_menu = QMenu(tr("tray.view_management"), tray_menu)
     
     # 打开主界面
-    action_settings = QAction("打开主界面", app)
+    action_settings = QAction(tr("tray.open_main"), app)
     action_settings.triggered.connect(widget.open_main_window)
     view_menu.addAction(action_settings)
     
@@ -169,7 +220,7 @@ def setup_tray_icon(app, widget):
     
     # === 系统区 ===
     # 退出程序
-    action_quit = QAction("❌ 退出", app)
+    action_quit = QAction(tr("tray.quit"), app)
     action_quit.triggered.connect(app.quit)
     tray_menu.addAction(action_quit)
     
@@ -185,63 +236,9 @@ def setup_tray_icon(app, widget):
     
     return tray_icon
 
-
-def setup_macos_dock_reopen_handler(app, widget):
-    """Open the main window when the macOS Dock icon is clicked."""
-    if not is_macos():
-        return None
-
-    try:
-        import objc
-        from AppKit import NSApplication
-        from Foundation import NSObject
-
-        class DockReopenDelegate(NSObject):
-            def initWithCallback_previousDelegate_(self, callback, previous_delegate):
-                self = objc.super(DockReopenDelegate, self).init()
-                if self is None:
-                    return None
-                self._callback = callback
-                self._previous_delegate = previous_delegate
-                return self
-
-            def respondsToSelector_(self, selector):
-                if objc.super(DockReopenDelegate, self).respondsToSelector_(selector):
-                    return True
-                previous_delegate = getattr(self, "_previous_delegate", None)
-                return bool(previous_delegate and previous_delegate.respondsToSelector_(selector))
-
-            def forwardingTargetForSelector_(self, selector):
-                previous_delegate = getattr(self, "_previous_delegate", None)
-                if previous_delegate and previous_delegate.respondsToSelector_(selector):
-                    return previous_delegate
-                return objc.super(DockReopenDelegate, self).forwardingTargetForSelector_(selector)
-
-            def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, has_visible_windows):
-                QTimer.singleShot(0, self._callback)
-                return True
-
-        def handle_reopen():
-            try:
-                logger.info("macOS Dock reopen requested; showing main window")
-                widget.open_main_window()
-            except Exception as e:
-                logger.exception(f"Failed to handle macOS Dock reopen: {e}")
-
-        ns_app = NSApplication.sharedApplication()
-        previous_delegate = ns_app.delegate()
-        delegate = DockReopenDelegate.alloc().initWithCallback_previousDelegate_(handle_reopen, previous_delegate)
-        ns_app.setDelegate_(delegate)
-
-        # Keep the Obj-C delegate alive for the lifetime of QApplication.
-        app._macos_dock_reopen_delegate = delegate
-        logger.info("Installed macOS Dock reopen handler")
-        return delegate
-    except Exception as e:
-        logger.warning(f"Failed to install macOS Dock reopen handler: {e}")
-        return None
-
 def setup_startup_update_checker(widget):
+    from src.core.startup_update_checker import StartupUpdateChecker
+
     update_checker = StartupUpdateChecker(widget)
     
     def on_update_available(version_info):
@@ -270,6 +267,8 @@ def show_update_dialog(widget, version_info, update_checker):
     
     def on_update_now():
         main_window.switchTo(main_window.update_interface)
+        main_window.raise_()
+        main_window.activateWindow()
         
         update_widget = main_window.update_interface.update_widget
         if update_widget:
@@ -294,17 +293,41 @@ def check_and_create_shortcut_async():
     threading.Thread(target=_worker, daemon=True).start()
 
 def main():
+    global logger, tr
+
+    from PyQt5.QtWidgets import QApplication
+    from PyQt5.QtGui import QIcon
+    from PyQt5.QtCore import QSettings
+    from src.splash_screen import SplashScreen
+    from src.core.i18n import I18nManager, tr
+    from src.core.logger import setup_logger
+    from src.core.platform_paths import is_macos, is_windows
+    from src.resource_utils import resource_path
+
     configure_opengl_surface()
     app = QApplication(sys.argv)
-    from qfluentwidgets import setThemeColor
-    from src.core.app_theme import THEME_COLOR
-    setThemeColor(THEME_COLOR)
     # 显示启动画面（立即显示，让用户知道程序正在启动）
     splash = SplashScreen()
     splash.show()
     app.processEvents()
 
+    logger = setup_logger()
+
+    from qfluentwidgets import setThemeColor
+    from src.core.app_theme import THEME_COLOR
+    setThemeColor(THEME_COLOR)
+
+    splash.set_status(tr("splash.checking_dependencies", default="正在检查运行环境..."), 5)
+    app.processEvents()
+    from src.core.dependency_checker import check_and_exit_on_failure
+    check_and_exit_on_failure()
+
     logger.info("Application started.")
+
+    # 初始化多语言模块
+    i18n = I18nManager.get_instance()
+    i18n.initialize()
+    logger.info(f"Language: {i18n.current_language}")
 
     icon_path = resource_path("data/icons/app.png")
     if os.path.exists(icon_path):
@@ -320,10 +343,12 @@ def main():
 
     app.setQuitOnLastWindowClosed(False)
 
-    splash.set_status("正在初始化 Provider 框架...")
+    splash.set_status(tr("splash.loading_provider"), 20)
+    app.processEvents()
     init_provider_framework()
 
-    splash.set_status("正在初始化 Agent 框架...")
+    splash.set_status(tr("splash.loading_agent"), 35)
+    app.processEvents()
     init_agent_framework()
 
     qss_path = resource_path("themes/light.qss")
@@ -338,9 +363,12 @@ def main():
         logger.warning(f"Stylesheet not found: {qss_path}")
 
     logger.info("Initializing Live2DWidget...")
-    splash.set_status("正在加载Live2D模型...")
+    splash.set_status(tr("splash.loading_live2d", default="正在加载 Live2D 模型..."), 50)
+    app.processEvents()
 
     from src.core.database import DatabaseManager
+    from src.live2dview import Live2DWidget
+    from src.ui.main_window import MainWindow
     db_manager = DatabaseManager()
     default_model_path = resource_path("models/Doro/Doro.model3.json")
 
@@ -361,9 +389,17 @@ def main():
     settings = QSettings("DoroPet", "Settings")
     hide_pet_on_startup = settings.value("hide_pet_on_startup", False, type=bool)
 
+    # ---- 提前初始化主界面（避免首次打开时的创建延迟）----
+    splash.set_status(tr("splash.loading_live2d", default="正在准备主界面..."), 75)
+    app.processEvents()
+    w.main_window = MainWindow(version_manager=None)
+    w.main_window.set_live2d_widget(w)
+    w.main_window.hide()  # 隐藏，等用户点击时才显示
+    logger.info("MainWindow pre-initialized")
+
     if hide_pet_on_startup:
         w.hide()
-        w.open_main_window()
+        w.main_window.show()
         logger.info("Pet hidden on startup, showing main window instead.")
     else:
         w.show()
@@ -372,7 +408,10 @@ def main():
     setup_macos_dock_reopen_handler(app, w)
 
     if not hide_pet_on_startup:
-        w.talk("欢迎回来！")
+        w.talk(tr("pet.welcome_back"))
+
+    splash.set_status(tr("splash.loading_live2d", default="即将完成..."), 92)
+    app.processEvents()
 
     splash.close_splash()
     logger.info("Splash screen closed")
@@ -382,6 +421,10 @@ def main():
 
     update_checker = setup_startup_update_checker(w)
     w._startup_checker = update_checker
+    # 将更新检查器的 version_manager 同步到主窗口
+    if hasattr(w, 'main_window') and w.main_window:
+        version_mgr = update_checker.get_version_manager()
+        w.main_window.set_version_manager(version_mgr)
     update_checker.start_check(delay_ms=3000)
 
     sys.exit(app.exec())

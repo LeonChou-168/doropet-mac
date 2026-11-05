@@ -4,7 +4,7 @@ import time
 from typing import Dict, List, Tuple
 from dataclasses import dataclass
 from src.core.logger import logger
-from src.core.platform_paths import get_cache_dir, get_user_data_dir
+from src.core.database import get_user_data_dir
 
 
 @dataclass
@@ -112,7 +112,9 @@ class CacheManager:
         )
 
     def get_image_cache_info(self) -> CacheInfo:
-        path = os.path.join(get_cache_dir(), "cached_images")
+        from src.core.image_cache_manager import get_image_cache_manager
+        cache_mgr = get_image_cache_manager()
+        path = cache_mgr.cache_dir
         size, count = self._get_dir_size(path)
         return CacheInfo(
             name="网络图片缓存",

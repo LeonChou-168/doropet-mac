@@ -20,7 +20,7 @@ from src.core.logger import logger
 from src.core.platform_paths import is_macos, is_windows
 
 
-__version__ = "3.5.1"
+__version__ = "3.6.8"
 __app_name__ = "DoroPet"
 
 GITEE_API_BASE = "https://gitee.com/api/v5"
@@ -885,7 +885,6 @@ class UpdateInstallWorker(QThread):
         self._is_cancelled = False
         
         self.app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.project_root = os.path.dirname(self.app_dir)
         self.temp_dir = tempfile.gettempdir()
     
     def run(self):
@@ -913,29 +912,44 @@ class UpdateInstallWorker(QThread):
             else:
                 source_dir = extract_dir
             
+            # If the source_dir contains a nested opendoro folder (e.g. DoroPet_V3/opendoro/),
+            # enter it so that xcopy copies the actual app files into TARGET, not a subfolder.
+            nested_opendoro = os.path.join(source_dir, "opendoro")
+            if os.path.isdir(nested_opendoro):
+                source_dir = nested_opendoro
+            
             self.progress.emit("正在复制文件...", self.STEP_COPY)
             
-            if is_windows():
-                script_path = _create_windows_updater_script(
-                    self.temp_dir,
-                    source_dir,
-                    self.project_root,
-                    _windows_restart_command(self.app_dir, silent=True),
-                    silent=True,
-                    delay_seconds=3,
-                )
-            elif is_macos():
-                script_path = _create_macos_updater_script(
-                    self.temp_dir,
-                    source_dir,
-                    self.project_root,
-                    _macos_restart_command(self.app_dir),
-                    silent=True,
-                    delay_seconds=3,
-                )
-            else:
-                self.error.emit("当前平台暂不支持自动安装更新")
-                return
+            python_exe = sys.executable
+            pythonw_exe = python_exe.replace('python.exe', 'pythonw.exe')
+            if not os.path.exists(pythonw_exe):
+                pythonw_exe = python_exe
+            main_script = os.path.join(self.app_dir, "main.py")
+            restart_cmd = f'start "" "{pythonw_exe}" "{main_script}"'
+            
+            script_content = f'''@echo off
+chcp 65001 >nul
+set "SOURCE={source_dir}"
+set "TARGET={self.app_dir}"
+
+timeout /t 3 /nobreak >nul
+
+if exist "%TARGET%\\src\\skills" rmdir /s /q "%TARGET%\\src\\skills" >nul 2>&1
+
+xcopy "%SOURCE%\\*" "%TARGET%\\" /E /Y /I /Q >nul 2>&1
+
+if %errorlevel% neq 0 (
+    exit /b 1
+)
+
+{restart_cmd}
+
+exit /b 0
+'''
+            
+            script_path = os.path.join(self.temp_dir, "DoroPet_Updater.bat")
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(script_content)
             
             if self._is_cancelled:
                 os.remove(script_path)
@@ -965,7 +979,6 @@ class UpdateInstallWorker(QThread):
 class UpdateInstaller:
     def __init__(self):
         self.app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.project_root = os.path.dirname(self.app_dir)
         self.temp_dir = tempfile.gettempdir()
     
     def prepare_installation(self, zip_path: str, version: str) -> str:
@@ -982,6 +995,12 @@ class UpdateInstaller:
             source_dir = os.path.join(extract_dir, items[0])
         else:
             source_dir = extract_dir
+        
+        # If the source_dir contains a nested opendoro folder (e.g. DoroPet_V3/opendoro/),
+        # enter it so that xcopy copies the actual app files into TARGET, not a subfolder.
+        nested_opendoro = os.path.join(source_dir, "opendoro")
+        if os.path.isdir(nested_opendoro):
+            source_dir = nested_opendoro
         
         return source_dir
     
@@ -1006,20 +1025,27 @@ class UpdateInstaller:
     
     def execute_update(self, zip_path: str, version: str, silent: bool = True) -> bool:
         try:
+            if is_macos():
+                logger.warning(
+                    "macOS 版本不支持自动安装上游更新包：上游发布的是 Windows 源码，"
+                    "安装后会覆盖 macOS 适配补丁。请手动同步 upstream 并重新构建。"
+                )
+                return False
+
             source_dir = self.prepare_installation(zip_path, version)
-            
+
             if is_windows():
                 restart_cmd = _windows_restart_command(self.app_dir, silent=silent)
             elif is_macos():
                 restart_cmd = _macos_restart_command(self.app_dir)
             else:
                 raise RuntimeError("当前平台暂不支持自动安装更新")
-            
-            script_path = self.create_updater_script(source_dir, self.project_root, restart_cmd, silent)
+
+            script_path = self.create_updater_script(source_dir, self.app_dir, restart_cmd, silent)
             _launch_updater_script(script_path, silent=silent)
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to prepare update: {e}")
             return False

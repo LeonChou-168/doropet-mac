@@ -7,11 +7,16 @@ from src.core.logger import logger
 from src.core.platform_paths import get_cache_dir
 
 
+def _get_cache_dir():
+    from src.core.database import get_user_data_dir
+    return os.path.join(get_user_data_dir(), "cache", "images")
+
+
 class ImageCacheManager:
     _instance = None
     _initialized = False
 
-    CACHE_DIR_NAME = "cached_images"
+    CACHE_DIR_NAME = _get_cache_dir()
     MAX_CACHE_SIZE_MB = 500
     MAX_CACHE_AGE_DAYS = 7
     CLEANUP_THRESHOLD_RATIO = 0.8
@@ -25,7 +30,7 @@ class ImageCacheManager:
         if ImageCacheManager._initialized:
             return
 
-        self._cache_dir = os.path.join(get_cache_dir(), self.CACHE_DIR_NAME)
+        self._cache_dir = self.CACHE_DIR_NAME
         self._memory_cache: Dict[str, str] = {}
         self._ensure_cache_dir()
         ImageCacheManager._initialized = True

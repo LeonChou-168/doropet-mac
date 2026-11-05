@@ -19,6 +19,20 @@ def sh_quote(value: str) -> str:
     return "'" + value.replace("'", "'\\''") + "'"
 
 
+def open_path(path: str) -> bool:
+    """Open a file or directory with the platform default application."""
+    try:
+        if is_macos():
+            subprocess.Popen(["open", path])
+        elif is_windows():
+            os.startfile(path)  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["xdg-open", path])
+        return True
+    except Exception:
+        return False
+
+
 def _launch_agent_path() -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"{BUNDLE_ID}.plist"
 

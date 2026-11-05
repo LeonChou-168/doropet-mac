@@ -6,6 +6,7 @@ from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkRepl
 from PyQt5.QtCore import QUrl
 from qfluentwidgets import TransparentToolButton, FluentIcon as FIF
 
+from src.core.i18n import tr
 from src.services.extended_music_service import SongInfo, MUSIC_SOURCES
 from ..network_manager import NetworkManager
 
@@ -53,7 +54,7 @@ class PlaylistItemWidget(QFrame):
         self.name_label = QLabel(self.playlist.name)
         self.name_label.setStyleSheet("font-size: 14px; font-weight: bold;")
         
-        self.count_label = QLabel(f"{len(self.playlist.songs)} 首歌曲")
+        self.count_label = QLabel(tr("music.song_list.song_count", default="{count} 首歌曲").format(count=len(self.playlist.songs)))
         self.count_label.setStyleSheet("font-size: 12px; color: #888;")
         
         info_layout.addWidget(self.name_label)
@@ -64,17 +65,17 @@ class PlaylistItemWidget(QFrame):
         
         self.play_btn = TransparentToolButton(FIF.PLAY, self)
         self.play_btn.setFixedSize(28, 28)
-        self.play_btn.setToolTip("播放全部")
+        self.play_btn.setToolTip(tr("music.song_list.play_all_tip", default="播放全部"))
         self.play_btn.clicked.connect(lambda: self.play_clicked.emit())
         
         self.add_queue_btn = TransparentToolButton(FIF.ADD_TO, self)
         self.add_queue_btn.setFixedSize(28, 28)
-        self.add_queue_btn.setToolTip("添加到播放列表")
+        self.add_queue_btn.setToolTip(tr("music.song_list.add_to_queue_tip", default="添加到播放列表"))
         self.add_queue_btn.clicked.connect(lambda: self.add_to_queue_clicked.emit())
         
         self.remove_btn = TransparentToolButton(FIF.DELETE, self)
         self.remove_btn.setFixedSize(28, 28)
-        self.remove_btn.setToolTip("删除歌单")
+        self.remove_btn.setToolTip(tr("music.song_list.delete_playlist_tip", default="删除歌单"))
         self.remove_btn.clicked.connect(lambda: self.remove_clicked.emit())
         
         actions_layout.addWidget(self.play_btn)
@@ -218,39 +219,39 @@ class SongListItemWidget(QFrame):
         
         self.play_btn = TransparentToolButton(FIF.PLAY, self)
         self.play_btn.setFixedSize(24, 24)
-        self.play_btn.setToolTip("播放")
+        self.play_btn.setToolTip(tr("music.song_list.play_tip", default="播放"))
         self.play_btn.clicked.connect(lambda: self.double_clicked.emit(self.index))
         
         if self.show_playqueue_actions:
             self.remove_queue_btn = TransparentToolButton(FIF.DELETE, self)
             self.remove_queue_btn.setFixedSize(24, 24)
-            self.remove_queue_btn.setToolTip("从播放列表移除")
+            self.remove_queue_btn.setToolTip(tr("music.song_list.remove_from_queue_tip", default="从播放列表移除"))
             self.remove_queue_btn.clicked.connect(lambda: self.remove_from_playqueue_clicked.emit(self.index))
             self.actions_layout.addWidget(self.remove_queue_btn)
         else:
             self.add_queue_btn = TransparentToolButton(FIF.ADD, self)
             self.add_queue_btn.setFixedSize(24, 24)
-            self.add_queue_btn.setToolTip("添加到播放列表")
+            self.add_queue_btn.setToolTip(tr("music.song_list.add_to_queue_tip", default="添加到播放列表"))
             self.add_queue_btn.clicked.connect(lambda: self.add_to_playqueue_clicked.emit(self.index))
             self.actions_layout.addWidget(self.add_queue_btn)
         
         if self.show_remove:
             self.remove_btn = TransparentToolButton(FIF.DELETE, self)
             self.remove_btn.setFixedSize(24, 24)
-            self.remove_btn.setToolTip("移除")
+            self.remove_btn.setToolTip(tr("music.song_list.remove_tip", default="移除"))
             self.remove_btn.clicked.connect(lambda: self.remove_from_playlist_clicked.emit(self.index))
             self.actions_layout.addWidget(self.remove_btn)
         elif not self.show_playqueue_actions:
             self.add_btn = TransparentToolButton(FIF.FOLDER_ADD, self)
             self.add_btn.setFixedSize(24, 24)
-            self.add_btn.setToolTip("添加到歌单")
+            self.add_btn.setToolTip(tr("music.song_list.add_to_playlist_tip", default="添加到歌单"))
             self.add_btn.clicked.connect(lambda: self.add_to_playlist_clicked.emit(self.index))
             self.actions_layout.addWidget(self.add_btn)
         
         if self.show_download and self.song_info.source != "local":
             self.download_btn = TransparentToolButton(FIF.DOWNLOAD, self)
             self.download_btn.setFixedSize(24, 24)
-            self.download_btn.setToolTip("下载到本地")
+            self.download_btn.setToolTip(tr("music.song_list.download_tip", default="下载到本地"))
             self.download_btn.clicked.connect(lambda: self.download_clicked.emit(self.index))
             self.actions_layout.addWidget(self.download_btn)
         
@@ -348,21 +349,21 @@ class SongListItemWidget(QFrame):
     def contextMenuEvent(self, event):
         menu = QMenu(self)
         
-        play_action = QAction("播放", self)
+        play_action = QAction(tr("music.song_list.play_action", default="播放"), self)
         play_action.triggered.connect(lambda: self.double_clicked.emit(self.index))
         menu.addAction(play_action)
         
-        add_queue_action = QAction("添加到播放列表", self)
+        add_queue_action = QAction(tr("music.song_list.add_to_queue_action", default="添加到播放列表"), self)
         add_queue_action.triggered.connect(lambda: self.add_to_playqueue_clicked.emit(self.index))
         menu.addAction(add_queue_action)
         
-        add_playlist_action = QAction("添加到歌单", self)
+        add_playlist_action = QAction(tr("music.song_list.add_to_playlist_action", default="添加到歌单"), self)
         add_playlist_action.triggered.connect(lambda: self.add_to_playlist_clicked.emit(self.index))
         menu.addAction(add_playlist_action)
         
         if self.show_playqueue_actions:
             menu.addSeparator()
-            remove_queue_action = QAction("从播放列表移除", self)
+            remove_queue_action = QAction(tr("music.song_list.remove_from_queue_action", default="从播放列表移除"), self)
             remove_queue_action.triggered.connect(lambda: self.remove_from_playqueue_clicked.emit(self.index))
             menu.addAction(remove_queue_action)
         

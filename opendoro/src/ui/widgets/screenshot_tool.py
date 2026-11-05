@@ -7,6 +7,8 @@ from PyQt5.QtWidgets import QWidget, QApplication, QPushButton, QHBoxLayout, QLa
 from PyQt5.QtCore import Qt, QRect, pyqtSignal, QPoint, QSize
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QPixmap, QFont, QCursor
 
+from src.core.i18n import I18nManager, tr
+
 
 class State(Enum):
     SELECTING = 1
@@ -351,11 +353,11 @@ class ScreenCaptureTool(QWidget):
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(8)
 
-        ok_btn = QPushButton("确认 (Enter)")
+        ok_btn = QPushButton(tr("widget.screenshot.confirm", default="确认 (Enter)"))
         ok_btn.clicked.connect(self.finish_screenshot)
         layout.addWidget(ok_btn)
 
-        cancel_btn = QPushButton("取消 (ESC)")
+        cancel_btn = QPushButton(tr("widget.screenshot.cancel", default="取消 (ESC)"))
         cancel_btn.setObjectName("cancelBtn")
         cancel_btn.clicked.connect(self.cancel_screenshot)
         layout.addWidget(cancel_btn)
