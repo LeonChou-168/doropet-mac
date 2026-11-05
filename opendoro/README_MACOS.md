@@ -21,8 +21,8 @@ brew install python@3.12
 
 ```bash
 cd /path/to/opendoro
-scripts/setup_macos.sh
-scripts/run_macos.sh
+./scripts/setup_macos.sh
+./scripts/run_macos.sh
 ```
 
 You can also double-click `DoroPet.command` after setup.
@@ -53,7 +53,7 @@ The spectrum analyzer uses input-device capture on macOS. Capturing system outpu
 ## Build `.app`
 
 ```bash
-scripts/build_macos_app.sh
+./scripts/build_macos_app.sh
 open dist/DoroPet.app
 ```
 
