@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 
 ROOT = Path.cwd()
 
@@ -14,6 +14,22 @@ datas = [
     (str(ROOT / "src" / "agent" / "prompts"), "src/agent/prompts"),
 ]
 datas += collect_data_files("live2d", includes=["v3/FrameworkShaders/*"])
+
+# pydantic-ai / genai-prices / logfire etc. call importlib.metadata.version()
+# at import time, so their distribution metadata must ship inside the bundle.
+try:
+    from importlib.metadata import distributions
+
+    _dist_names = sorted(
+        {(dist.metadata["Name"] or "").strip() for dist in distributions() if dist.metadata["Name"]}
+    )
+    for _name in _dist_names:
+        try:
+            datas += copy_metadata(_name)
+        except Exception:
+            pass
+except Exception:
+    pass
 
 block_cipher = None
 

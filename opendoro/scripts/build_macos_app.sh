@@ -14,8 +14,7 @@ if [[ ! -x ".venv-macos/bin/python" ]]; then
   exit 1
 fi
 
-source .venv-macos/bin/activate
-python -m PyInstaller --clean --noconfirm packaging/macos/DoroPet.spec
+.venv-macos/bin/python -m PyInstaller --clean --noconfirm packaging/macos/DoroPet.spec
 
 echo "Built dist/DoroPet.app"
 echo "Unsigned local app bundle. For distribution, sign and notarize it separately."
