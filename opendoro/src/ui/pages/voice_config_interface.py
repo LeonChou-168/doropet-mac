@@ -7,6 +7,7 @@ from qfluentwidgets import (ScrollArea, LineEdit, StrongBodyLabel,
                             CardWidget, IconWidget, HyperlinkButton, InfoBar, InfoBarPosition, isDarkTheme)
 import os
 from src.core.downloader import ModelDownloader
+from src.core.platform_paths import get_voice_models_dir
 
 class VoiceConfigInterface(QWidget):
     settingsChanged = pyqtSignal()
@@ -168,7 +169,7 @@ class VoiceConfigInterface(QWidget):
         pass
 
     def download_default_models(self):
-        models_dir = os.path.join(os.getcwd(), "models", "voice")
+        models_dir = get_voice_models_dir()
         if not os.path.exists(models_dir):
             os.makedirs(models_dir)
 
@@ -240,12 +241,12 @@ class VoiceConfigInterface(QWidget):
             InfoBar.success("下载完成", "模型下载并解压成功！", parent=self)
             
             # Auto-fill paths
-            cwd = os.getcwd()
             kws_model = "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
             asr_model = "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"
             
-            kws_path = os.path.join(cwd, "models", "voice", kws_model)
-            asr_path = os.path.join(cwd, "models", "voice", asr_model)
+            voice_models_dir = get_voice_models_dir()
+            kws_path = os.path.join(voice_models_dir, kws_model)
+            asr_path = os.path.join(voice_models_dir, asr_model)
             
             self.kws_input.setText(kws_path)
             self.asr_input.setText(asr_path)

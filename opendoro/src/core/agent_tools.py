@@ -8,6 +8,7 @@ import sys
 from datetime import datetime
 from bs4 import BeautifulSoup
 from src.core.skill_manager import SkillManager
+from src.core.platform_paths import get_app_root, get_generated_images_dir
 
 
 def _get_similar_files_suggestion(file_path, project_dir):
@@ -712,15 +713,7 @@ def generate_image(client, prompt, base_url=None, api_key=None, model=None):
 
         img_data = requests.get(image_url).content
 
-        # Ensure a directory exists for generated images
-        # Use AppData\Local\DoroPet\generated_images for unified storage
-        appdata_local = os.getenv('LOCALAPPDATA')
-        if appdata_local:
-            save_dir = os.path.join(appdata_local, "DoroPet", "generated_images")
-        else:
-            save_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "DoroPet", "generated_images")
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
+        save_dir = get_generated_images_dir()
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"gen_{timestamp}.png"
@@ -768,7 +761,7 @@ def edit_file(client=None, file_path="", search="", replace="", replace_all=Fals
             return json.dumps({"status": "error", "message": "Search content is required."})
         
         abs_path = os.path.abspath(file_path)
-        project_dir = os.getcwd()
+        project_dir = get_app_root()
         
         if not os.path.exists(abs_path):
             return _format_file_not_found_error(file_path, project_dir)
@@ -910,7 +903,7 @@ def insert_at_line(client=None, file_path="", line_number=0, content="", **kwarg
             return json.dumps({"status": "error", "message": "File path is required."})
         
         abs_path = os.path.abspath(file_path)
-        project_dir = os.getcwd()
+        project_dir = get_app_root()
         
         if not os.path.exists(abs_path):
             return _format_file_not_found_error(file_path, project_dir)
@@ -958,7 +951,7 @@ def delete_lines(client=None, file_path="", start_line=1, end_line=None, **kwarg
             return json.dumps({"status": "error", "message": "Start line must be 1 or greater."})
         
         abs_path = os.path.abspath(file_path)
-        project_dir = os.getcwd()
+        project_dir = get_app_root()
         
         if not os.path.exists(abs_path):
             return _format_file_not_found_error(file_path, project_dir)
@@ -1008,7 +1001,7 @@ def find_in_file(client=None, file_path="", pattern="", context_lines=2, **kwarg
         if not pattern:
             return json.dumps({"status": "error", "message": "Pattern is required."})
         
-        project_dir = os.getcwd()
+        project_dir = get_app_root()
         abs_path = os.path.abspath(file_path)
         
         if not os.path.exists(abs_path):
@@ -1074,7 +1067,7 @@ def write_file(client=None, file_path="", content="", **kwargs):
              return json.dumps({"status": "error", "message": "File path is required."})
 
         abs_path = os.path.abspath(file_path)
-        project_dir = os.getcwd()
+        project_dir = get_app_root()
         
         if not abs_path.startswith(project_dir):
             return _format_permission_error(abs_path, project_dir)
@@ -1117,7 +1110,7 @@ def run_python_script(client=None, file_path="", **kwargs):
                  file_path = plugin_path
         
         abs_path = os.path.abspath(file_path)
-        project_dir = os.getcwd()
+        project_dir = get_app_root()
 
         if not abs_path.startswith(project_dir):
             return _format_permission_error(abs_path, project_dir)
@@ -1173,7 +1166,7 @@ def read_file(client=None, file_path="", **kwargs):
         if not file_path:
             return json.dumps({"status": "error", "message": "File path is required."})
 
-        project_dir = os.getcwd()
+        project_dir = get_app_root()
         abs_path = os.path.abspath(file_path)
         
         if not os.path.exists(abs_path):

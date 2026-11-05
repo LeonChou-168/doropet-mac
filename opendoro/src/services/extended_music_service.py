@@ -7,13 +7,7 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal, QUrl
 from PyQt5.QtMultimedia import QMediaContent
 
 from src.core.logger import logger
-
-
-def get_user_data_dir():
-    local_app_data = os.environ.get('LOCALAPPDATA')
-    if local_app_data:
-        return os.path.join(local_app_data, 'DoroPet')
-    return os.getcwd()
+from src.core.platform_paths import get_user_data_dir
 
 
 def get_music_data_dir():

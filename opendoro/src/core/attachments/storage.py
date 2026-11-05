@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from .models import AttachmentInfo, FileCategory, get_file_config
 from .pipeline import get_pipeline
+from src.core.platform_paths import get_attachments_dir
 
 
 class AttachmentStorage:
@@ -23,8 +24,7 @@ class AttachmentStorage:
         if self._initialized:
             return
         self._initialized = True
-        base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        self.root = os.path.join(base, "DoroPet", "attachments")
+        self.root = get_attachments_dir()
         os.makedirs(self.root, exist_ok=True)
 
     @classmethod

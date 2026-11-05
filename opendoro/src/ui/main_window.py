@@ -1,5 +1,6 @@
 import os
 import ctypes
+import sys
 from ctypes import wintypes
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt, QUrl, QSettings
@@ -155,29 +156,32 @@ class MainWindow(FluentWindow):
         self.titleBar.layout().insertSpacing(self.titleBar.layout().count() - 3, 10)
 
     def toggle_pinning(self):
-        hwnd = int(self.winId())
-        
-        # Windows Constants
-        HWND_TOPMOST = -1
-        HWND_NOTOPMOST = -2
-        SWP_NOMOVE = 0x0002
-        SWP_NOSIZE = 0x0001
-        SWP_SHOWWINDOW = 0x0040
-        
-        # Ensure correct argument types for 64-bit compatibility
-        SetWindowPos = ctypes.windll.user32.SetWindowPos
-        SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
-        SetWindowPos.restype = wintypes.BOOL
-        
-        flags = SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
-        
-        if self.pin_btn.isChecked():
-            # Set Always on Top
-            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
+        checked = self.pin_btn.isChecked()
+
+        if sys.platform == "win32":
+            hwnd = int(self.winId())
+            
+            # Windows Constants
+            HWND_TOPMOST = -1
+            HWND_NOTOPMOST = -2
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_SHOWWINDOW = 0x0040
+            
+            # Ensure correct argument types for 64-bit compatibility
+            SetWindowPos = ctypes.windll.user32.SetWindowPos
+            SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+            SetWindowPos.restype = wintypes.BOOL
+            
+            flags = SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+            SetWindowPos(hwnd, HWND_TOPMOST if checked else HWND_NOTOPMOST, 0, 0, 0, 0, flags)
+        else:
+            self.setWindowFlag(Qt.WindowStaysOnTopHint, checked)
+            self.show()
+
+        if checked:
             self.pin_btn.setToolTip("取消置顶")
         else:
-            # Remove Always on Top
-            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags)
             self.pin_btn.setToolTip("置顶窗口")
 
     def _switch_to_chat(self):

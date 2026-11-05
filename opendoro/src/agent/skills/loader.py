@@ -11,22 +11,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.agent.skills.validator import SkillValidator, SkillValidationResult, compute_skill_hash
+from src.core.platform_paths import get_app_root, get_user_skills_dir, is_windows
 
 logger = logging.getLogger("DoroPet.Agent")
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+BASE_DIR = get_app_root()
 
 BUILTIN_SKILLS_DIR = os.path.join(BASE_DIR, "src", "skills")
-
-
-def _get_user_data_dir():
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        return os.path.join(local_app_data, "DoroPet")
-    return os.path.join(os.path.expanduser("~"), "AppData", "Local", "DoroPet")
-
-
-USER_SKILLS_DIR = os.path.join(_get_user_data_dir(), "skills")
+USER_SKILLS_DIR = get_user_skills_dir()
 
 
 class SkillType(Enum):
@@ -296,7 +288,10 @@ class SecureSkillLoader:
         scripts_dir = os.path.join(skill_path, "scripts")
         scripts = []
         if os.path.exists(scripts_dir):
-            for ext in ["*.py", "*.sh", "*.js", "*.bat"]:
+            script_patterns = ["*.py", "*.sh", "*.js"]
+            if is_windows():
+                script_patterns.append("*.bat")
+            for ext in script_patterns:
                 for script in glob.glob(os.path.join(scripts_dir, ext)):
                     if not os.path.basename(script).startswith("_"):
                         scripts.append(script)

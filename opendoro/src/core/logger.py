@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 from datetime import datetime
+from src.core.platform_paths import get_log_dir
 
 LOG_COLORS = {
     logging.DEBUG:    "\033[36m",
@@ -29,13 +30,6 @@ _LEVEL_NAMES = {
     logging.ERROR:    "ERROR",
     logging.CRITICAL: "CRITICAL",
 }
-
-def get_user_data_dir():
-    local_app_data = os.environ.get('LOCALAPPDATA')
-    if local_app_data:
-        return os.path.join(local_app_data, 'DoroPet')
-    return os.getcwd()
-
 
 class ColoredConsoleFormatter(logging.Formatter):
     def format(self, record):
@@ -126,9 +120,7 @@ def setup_logger():
 
     logger.setLevel(logging.INFO)
 
-    log_dir = os.path.join(get_user_data_dir(), "log")
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    log_dir = get_log_dir()
 
     _cleanup_old_logs(log_dir, keep_count=10)
 

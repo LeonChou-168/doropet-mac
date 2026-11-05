@@ -1,19 +1,22 @@
 import os
 import random
+import sys
 import time
 import live2d.v3 as live2d
 from live2d.v3 import clearBuffer
-from live2d.utils.canvas import Canvas
 try:
     import psutil
 except ImportError:
     psutil = None
 from PyQt5.QtCore import QTimerEvent, Qt, QTimer, QSettings, QPoint, QSize
-from PyQt5.QtGui import QMouseEvent, QWheelEvent, QCursor, QPixmap, QPainter, QPainterPath, QColor, QPen, QBrush
+from PyQt5.QtGui import QMouseEvent, QWheelEvent, QCursor, QPixmap, QPainter, QPainterPath, QColor, QPen, QBrush, QSurfaceFormat
 from PyQt5.QtWidgets import QOpenGLWidget, QLabel, QMenu, QAction, QApplication, QStyleOption, QStyle, QProgressBar, QWidget
 from src.ui.main_window import MainWindow
 from src.resource_utils import resource_path
 from qfluentwidgets import isDarkTheme
+from src.core.logger import logger
+from src.core.live2d_canvas import CompatibleCanvas
+from src.core.platform_paths import is_macos
 from src.core.pet_attributes_manager import PetAttributesManager
 from src.core.pet_constants import ATTR_HUNGER, ATTR_MOOD, ATTR_CLEANLINESS
 from src.ui.windows.pet_status_overlay import PetStatusOverlay
@@ -124,16 +127,32 @@ class Live2DWidget(QOpenGLWidget):
         self.path = path
         if not os.path.exists(path):
             self.path = resource_path("models/Doro/Doro.model3.json")
+        self._live2d_ready = False
+        self._live2d_error = None
+        self.model = None
+        self.canvas = None
+        self._paint_count = 0
+        self._macos_probe_scheduled = False
+        self._logged_macos_framebuffer = False
 
         super().__init__(parent)
         
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Window)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        if is_macos():
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+            self.setAutoFillBackground(False)
+        else:
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setMouseTracking(True)
-        
-        format = self.format()
+	        
+        format = QSurfaceFormat()
+        format.setVersion(2, 1)
+        format.setProfile(QSurfaceFormat.NoProfile)
         format.setAlphaBufferSize(8)
+        format.setDepthBufferSize(24)
+        format.setStencilBufferSize(8)
         self.setFormat(format)
         
         self.bubble = SpeechBubble(self)
@@ -212,6 +231,8 @@ class Live2DWidget(QOpenGLWidget):
         self._last_mem_alert_time = 0
         
         self.model_opacity = self.settings.value("window_opacity", 100, type=int)
+        if is_macos():
+            self.setWindowOpacity(max(0.0, min(1.0, self.model_opacity / 100.0)))
         
         if self.is_locked:
             self.setMouseTracking(False)
@@ -222,28 +243,45 @@ class Live2DWidget(QOpenGLWidget):
             self.init_custom_cursor(resource_path("data/icons/orange.ico"))
 
     def initializeGL(self) -> None:
-        self.makeCurrent()
-        
-        live2d.init()
-        live2d.glInit()
-        
-        self.model = live2d.LAppModel()
-        self.model.LoadModelJson(self.path)
-        self.model.Resize(self.width(), self.height())
-        
-        self.canvas = Canvas()
-        self.canvas.SetSize(self.width(), self.height())
-        self.canvas.SetOutputOpacity(self.model_opacity / 100.0)
-        
-        self.expression_ids = self.model.GetExpressionIds()
-        self.motion_groups = self.model.GetMotionGroups()
-        
-        self.refresh = self.startTimer(15)
-        
-        self._init_mouse_chaser()
-        self._init_random_wanderer()
-        
-        self.init_system_monitor()
+        try:
+            self.makeCurrent()
+
+            ctx = self.context()
+            if ctx:
+                logger.info(
+                    f"Live2D OpenGL context: {ctx.format().majorVersion()}.{ctx.format().minorVersion()}"
+                )
+
+            self._init_live2d_framework()
+            live2d.glInit()
+
+            self.model = live2d.LAppModel()
+            self.model.LoadModelJson(self.path)
+            self.model.Resize(self.width(), self.height())
+
+            if is_macos():
+                self.canvas = None
+                logger.info("Live2D opacity canvas disabled on macOS; using transparent native Live2D drawing")
+            else:
+                self.canvas = CompatibleCanvas()
+                self.canvas.SetSize(self.width(), self.height())
+                self.canvas.SetOutputOpacity(self.model_opacity / 100.0)
+
+            self.expression_ids = self.model.GetExpressionIds()
+            self.motion_groups = self.model.GetMotionGroups()
+
+            self.refresh = self.startTimer(15)
+
+            self._init_mouse_chaser()
+            self._init_random_wanderer()
+
+            self.init_system_monitor()
+            self._live2d_ready = True
+            self._live2d_error = None
+        except Exception as e:
+            self._live2d_ready = False
+            self._live2d_error = e
+            logger.exception(f"Live2D OpenGL initialization failed: {e}")
 
     def reload_model(self, model_path: str) -> bool:
         """
@@ -273,9 +311,12 @@ class Live2DWidget(QOpenGLWidget):
             self.model.LoadModelJson(model_path)
             self.model.Resize(self.width(), self.height())
             
-            self.canvas = Canvas()
-            self.canvas.SetSize(self.width(), self.height())
-            self.canvas.SetOutputOpacity(self.model_opacity / 100.0)
+            if is_macos():
+                self.canvas = None
+            else:
+                self.canvas = CompatibleCanvas()
+                self.canvas.SetSize(self.width(), self.height())
+                self.canvas.SetOutputOpacity(self.model_opacity / 100.0)
             
             self.path = model_path
             
@@ -434,29 +475,147 @@ class Live2DWidget(QOpenGLWidget):
         return False
 
     def paintGL(self) -> None:
-        self.model.Update()
-        
-        def on_draw():
-            clearBuffer()
-            self.model.Draw()
-        
-        # 清除帧缓冲区为透明
-        clearBuffer(0.0, 0.0, 0.0, 0.0)
-        
-        if hasattr(self, 'canvas'):
-            self.canvas.Draw(on_draw)
-        else:
-            on_draw()
+        if not self._live2d_ready or not self.model:
+            return
+
+        try:
+            self.model.Update()
+
+            def on_draw(clear_color=(0.0, 0.0, 0.0, 0.0)):
+                clearBuffer(*clear_color)
+                self.model.Draw()
+
+            if self.canvas:
+                self.canvas.Draw(on_draw)
+            else:
+                if is_macos():
+                    on_draw((0.0, 0.0, 0.0, 0.0))
+                    self._schedule_macos_framebuffer_probe()
+                else:
+                    on_draw()
+
+            self._paint_count += 1
+            if self._paint_count == 1:
+                logger.info(
+                    f"Live2D first paint completed: size={self.width()}x{self.height()}, "
+                    f"canvas={bool(self.canvas)}, macos={is_macos()}"
+                )
+        except Exception as e:
+            logger.exception(f"Live2D paint failed: {e}")
+
+    def _init_live2d_framework(self) -> None:
+        candidates = []
+
+        live2d_dir = os.path.dirname(getattr(live2d, "__file__", ""))
+        if live2d_dir:
+            candidates.append(live2d_dir)
+
+        frozen_root = getattr(sys, "_MEIPASS", "")
+        if frozen_root:
+            candidates.extend([
+                os.path.join(frozen_root, "live2d", "v3"),
+                os.path.join(os.path.dirname(frozen_root), "Resources", "live2d", "v3"),
+                os.path.join(os.path.dirname(frozen_root), "Frameworks", "live2d", "v3"),
+            ])
+
+        candidates.append(resource_path("live2d/v3"))
+
+        init_internal = getattr(live2d, "init_internal", None)
+        if init_internal:
+            for candidate in candidates:
+                shader_dir = os.path.join(candidate, "FrameworkShaders")
+                if os.path.isdir(shader_dir):
+                    init_internal(candidate)
+                    logger.info(f"Live2D framework initialized from: {candidate}")
+                    return
+
+        logger.warning("Live2D FrameworkShaders directory not found; falling back to package init")
+        live2d.init()
+
+    def _schedule_macos_framebuffer_probe(self) -> None:
+        if self._logged_macos_framebuffer or self._macos_probe_scheduled:
+            return
+        self._macos_probe_scheduled = True
+        QTimer.singleShot(0, self._probe_macos_framebuffer)
+
+    def _probe_macos_framebuffer(self) -> None:
+        try:
+            image = self.grabFramebuffer()
+        finally:
+            self._macos_probe_scheduled = False
+
+        if image.isNull():
+            return
+
+        self._logged_macos_framebuffer = True
+        sample_colors = self._count_sampled_image_colors(image)
+        alpha_stats = self._sample_image_alpha_stats(image)
+        logger.info(
+            f"Live2D macOS framebuffer probe: "
+            f"image={image.width()}x{image.height()}, widget={self.width()}x{self.height()}, "
+            f"sample_colors={sample_colors}, alpha={alpha_stats}"
+        )
+
+    def _count_sampled_image_colors(self, image) -> int:
+        width = max(1, image.width())
+        height = max(1, image.height())
+        colors = set()
+        for x in range(0, width, max(1, width // 20)):
+            for y in range(0, height, max(1, height // 20)):
+                colors.add(image.pixelColor(x, y).rgba())
+        return len(colors)
+
+    def _sample_image_alpha_stats(self, image) -> str:
+        width = max(1, image.width())
+        height = max(1, image.height())
+        alphas = []
+
+        points = [
+            (0, 0),
+            (width - 1, 0),
+            (0, height - 1),
+            (width - 1, height - 1),
+            (width // 2, height // 2),
+        ]
+        for x in range(0, width, max(1, width // 20)):
+            for y in range(0, height, max(1, height // 20)):
+                points.append((x, y))
+
+        seen = set()
+        for x, y in points:
+            point = (max(0, min(width - 1, x)), max(0, min(height - 1, y)))
+            if point in seen:
+                continue
+            seen.add(point)
+            alphas.append(image.pixelColor(*point).alpha())
+
+        if not alphas:
+            return "no samples"
+
+        transparent = sum(1 for value in alphas if value == 0)
+        partial = sum(1 for value in alphas if 0 < value < 255)
+        opaque = sum(1 for value in alphas if value == 255)
+        return (
+            f"min={min(alphas)}, max={max(alphas)}, "
+            f"transparent={transparent}, partial={partial}, opaque={opaque}, samples={len(alphas)}"
+        )
 
     def resizeGL(self, w: int, h: int) -> None:
-        if hasattr(self, 'model'):
-            self.model.Resize(w, h)
-        if hasattr(self, 'canvas'):
-            self.canvas.SetSize(w, h)
+        try:
+            if self.model:
+                self.model.Resize(w, h)
+            if self.canvas:
+                self.canvas.SetSize(w, h)
+        except Exception as e:
+            logger.exception(f"Live2D resize failed: {e}")
     
     def set_model_opacity(self, opacity: float) -> None:
         """设置模型透明度"""
-        if hasattr(self, 'canvas'):
+        opacity = max(0.0, min(1.0, float(opacity)))
+        if is_macos():
+            self.setWindowOpacity(opacity)
+            return
+        if self.canvas:
             self.canvas.SetOutputOpacity(opacity)
 
     def set_locked(self, locked: bool, silent: bool = False):

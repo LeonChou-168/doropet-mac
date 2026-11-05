@@ -10,6 +10,7 @@ import requests
 
 from src.agent.core.tool import Tool, ToolSchema, ToolCategory, ToolResult
 from src.agent.core.context import ToolCallContext, ToolPermission
+from src.core.platform_paths import get_generated_images_dir
 
 logger = logging.getLogger("DoroPet.Agent")
 
@@ -271,10 +272,7 @@ class ModifyPetAttributeTool(Tool):
 
 
 def _get_images_dir() -> str:
-    appdata_local = os.getenv("LOCALAPPDATA")
-    if appdata_local:
-        return os.path.join(appdata_local, "DoroPet", "generated_images")
-    return os.path.join(os.path.expanduser("~"), "AppData", "Local", "DoroPet", "generated_images")
+    return get_generated_images_dir()
 
 
 _image_pet_tools = [GenerateImageTool(), SetExpressionTool(), ModifyPetAttributeTool()]

@@ -1,3 +1,4 @@
+# ---- Windows ----
 # Windows thumbnail cache files
 Thumbs.db
 Thumbs.db:encryptable
@@ -23,9 +24,38 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-# Python cache files
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ---- Python ----
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
-*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Virtual environments ----
+.venv/
+.venv-*/
+venv/
+env/
+
+# ---- Build artifacts / packaged app ----
+opendoro/build/
+opendoro/dist/
+build/
+dist/
+*.app/
+*.dmg
+
+# ---- Logs / runtime data ----
+*.log
+logs/

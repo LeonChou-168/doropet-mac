@@ -15,19 +15,11 @@ from pathlib import Path
 import requests
 
 from src.core.logger import logger
+from src.core.platform_paths import get_app_root, get_user_skills_dir, is_windows
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = get_app_root()
 BUILTIN_SKILLS_DIR = os.path.join(BASE_DIR, "src", "skills")
-
-
-def _get_user_data_dir():
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        return os.path.join(local_app_data, "DoroPet")
-    return os.path.join(os.path.expanduser("~"), "AppData", "Local", "DoroPet")
-
-
-USER_SKILLS_DIR = os.path.join(_get_user_data_dir(), "skills")
+USER_SKILLS_DIR = get_user_skills_dir()
 
 
 class SkillType(Enum):
@@ -165,7 +157,10 @@ class SkillManager:
         scripts = []
 
         if os.path.exists(scripts_dir):
-            for ext in ["*.sh", "*.py", "*.js", "*.bat"]:
+            script_patterns = ["*.sh", "*.py", "*.js"]
+            if is_windows():
+                script_patterns.append("*.bat")
+            for ext in script_patterns:
                 for script in glob.glob(os.path.join(scripts_dir, ext)):
                     if not os.path.basename(script).startswith("_"):
                         scripts.append(script)
@@ -522,8 +517,13 @@ class SkillManager:
                 cmd = [sys.executable, script_path] + list(args)
             elif script_path.endswith(".sh"):
                 cmd = ["bash", script_path] + list(args)
-            elif script_path.endswith(".bat"):
+            elif script_path.endswith(".bat") and is_windows():
                 cmd = ["cmd", "/c", script_path] + list(args)
+            elif script_path.endswith(".bat"):
+                return json.dumps({
+                    "status": "error",
+                    "message": "Windows batch scripts are not supported on this platform",
+                })
             elif script_path.endswith(".js"):
                 cmd = ["node", script_path] + list(args)
             else:

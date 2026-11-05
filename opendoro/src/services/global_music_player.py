@@ -6,6 +6,7 @@ from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 
 from src.services.extended_music_service import SongInfo, ExtendedMusicService
 from src.core.logger import logger
+from src.core.platform_paths import is_macos, is_windows
 
 VLC_AVAILABLE = False
 vlc = None
@@ -29,29 +30,41 @@ def _get_vlc_paths():
     project_root = os.path.dirname(src_dir)
     paths.append(os.path.join(project_root, 'vlc'))
     
-    if sys.platform == 'win32':
+    if is_windows():
         paths.extend([
             r'C:\Program Files\VideoLAN\VLC',
             r'C:\Program Files (x86)\VideoLAN\VLC',
             os.path.join(os.environ.get('PROGRAMFILES', ''), 'VideoLAN', 'VLC'),
             os.path.join(os.environ.get('PROGRAMFILES(X86)', ''), 'VideoLAN', 'VLC'),
         ])
+    elif is_macos():
+        paths.extend([
+            '/Applications/VLC.app/Contents/MacOS/lib',
+            '/Applications/VLC.app/Contents/MacOS',
+            '/opt/homebrew/lib',
+            '/usr/local/lib',
+        ])
     
     return paths
 
 def _setup_vlc_path():
-    """设置 VLC DLL 路径（必须在 import vlc 之前调用）"""
-    if sys.platform != 'win32':
+    """设置 VLC 动态库路径（必须在 import vlc 之前调用）"""
+    if not (is_windows() or is_macos()):
         return None
     
     vlc_paths = _get_vlc_paths()
     
     for vlc_path in vlc_paths:
         if os.path.exists(vlc_path):
-            libvlc = os.path.join(vlc_path, 'libvlc.dll')
+            lib_name = 'libvlc.dll' if is_windows() else 'libvlc.dylib'
+            libvlc = os.path.join(vlc_path, lib_name)
             if os.path.exists(libvlc):
                 os.environ['PYTHON_VLC_MODULE_PATH'] = vlc_path
-                if vlc_path not in os.environ.get('PATH', ''):
+                if is_macos():
+                    existing = os.environ.get('DYLD_LIBRARY_PATH', '')
+                    if vlc_path not in existing:
+                        os.environ['DYLD_LIBRARY_PATH'] = f"{vlc_path}:{existing}" if existing else vlc_path
+                elif vlc_path not in os.environ.get('PATH', ''):
                     try:
                         os.add_dll_directory(vlc_path)
                     except (OSError, AttributeError):

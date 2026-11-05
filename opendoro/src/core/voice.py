@@ -6,6 +6,7 @@ import sounddevice as sd
 import sherpa_onnx
 import sentencepiece as spm
 from PyQt5.QtCore import QThread, pyqtSignal, QObject
+from src.core.platform_paths import get_voice_models_dir, is_macos
 
 class VoiceAssistant(QThread):
     wake_detected = pyqtSignal()
@@ -21,8 +22,9 @@ class VoiceAssistant(QThread):
         self.sample_rate = 16000
         
         # Default paths
-        self.kws_model_dir = os.path.join(os.getcwd(), "models", "voice", "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01")
-        self.asr_model_dir = os.path.join(os.getcwd(), "models", "voice", "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20")
+        voice_models_dir = get_voice_models_dir()
+        self.kws_model_dir = os.path.join(voice_models_dir, "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01")
+        self.asr_model_dir = os.path.join(voice_models_dir, "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20")
         self.wake_word = "Hey Doro"
 
         # State
@@ -160,7 +162,13 @@ class VoiceAssistant(QThread):
                     except Exception as e:
                         print(f"Error processing audio: {e}")
         except Exception as e:
-            self.error_occurred.emit(f"Microphone error: {e}")
+            if is_macos():
+                self.error_occurred.emit(
+                    "Microphone error: 请在 macOS 系统设置 > 隐私与安全性 > 麦克风 中允许 DoroPet 或当前终端访问麦克风。"
+                    f" 原始错误: {e}"
+                )
+            else:
+                self.error_occurred.emit(f"Microphone error: {e}")
             self.running = False
 
     def sd_callback(self, indata, frames, time, status):

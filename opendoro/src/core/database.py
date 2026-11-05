@@ -3,18 +3,9 @@ import sqlite3
 import json
 import shutil
 from src.core.logger import logger
+from src.core.platform_paths import get_user_data_dir, get_voice_models_dir
 from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
-
-def get_user_data_dir():
-    """
-    Get user data directory for DoroPet.
-    On Windows, this is %LOCALAPPDATA%\\DoroPet
-    """
-    local_app_data = os.environ.get('LOCALAPPDATA')
-    if local_app_data:
-        return os.path.join(local_app_data, 'DoroPet')
-    return os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 DATA_DIR = os.path.join(get_user_data_dir(), "data")
 
@@ -324,9 +315,9 @@ class ConfigDatabase(BaseDatabase):
         
         cursor.execute("SELECT count(*) FROM voice_settings")
         if cursor.fetchone()[0] == 0:
-            cwd = os.getcwd()
-            default_kws = os.path.join(cwd, "models", "voice", "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01")
-            default_asr = os.path.join(cwd, "models", "voice", "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20")
+            voice_models_dir = get_voice_models_dir()
+            default_kws = os.path.join(voice_models_dir, "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01")
+            default_asr = os.path.join(voice_models_dir, "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20")
             cursor.execute("INSERT INTO voice_settings (id, is_enabled, wake_word, kws_model_path, asr_model_path) VALUES (1, 0, 'Hey Doro', ?, ?)", (default_kws, default_asr))
             self.conn.commit()
 

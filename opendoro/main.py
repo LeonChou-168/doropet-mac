@@ -10,16 +10,33 @@ check_and_exit_on_failure()
 from src.live2dview import Live2DWidget
 from src.resource_utils import resource_path
 from src.core.logger import setup_logger
+from src.core.platform_paths import is_macos, is_windows
 from src.splash_screen import SplashScreen
 from src.provider.manager import ProviderManager
 from src.core.database import DatabaseManager
 from src.core.startup_update_checker import StartupUpdateChecker
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtCore import QSettings
+from PyQt5.QtCore import QSettings, QTimer
 from PyQt5.QtGui import *
 
 # Initialize Logger
 logger = setup_logger()
+
+
+def configure_opengl_surface():
+    """Request the legacy OpenGL profile used by the Live2D native renderer."""
+    try:
+        fmt = QSurfaceFormat()
+        fmt.setVersion(2, 1)
+        fmt.setProfile(QSurfaceFormat.NoProfile)
+        fmt.setAlphaBufferSize(8)
+        fmt.setDepthBufferSize(24)
+        fmt.setStencilBufferSize(8)
+        fmt.setSwapBehavior(QSurfaceFormat.DoubleBuffer)
+        QSurfaceFormat.setDefaultFormat(fmt)
+        logger.info("Requested OpenGL 2.1 compatibility context for Live2D rendering")
+    except Exception as e:
+        logger.warning(f"Failed to configure OpenGL surface format: {e}")
 
 def init_provider_framework():
     try:
@@ -168,6 +185,62 @@ def setup_tray_icon(app, widget):
     
     return tray_icon
 
+
+def setup_macos_dock_reopen_handler(app, widget):
+    """Open the main window when the macOS Dock icon is clicked."""
+    if not is_macos():
+        return None
+
+    try:
+        import objc
+        from AppKit import NSApplication
+        from Foundation import NSObject
+
+        class DockReopenDelegate(NSObject):
+            def initWithCallback_previousDelegate_(self, callback, previous_delegate):
+                self = objc.super(DockReopenDelegate, self).init()
+                if self is None:
+                    return None
+                self._callback = callback
+                self._previous_delegate = previous_delegate
+                return self
+
+            def respondsToSelector_(self, selector):
+                if objc.super(DockReopenDelegate, self).respondsToSelector_(selector):
+                    return True
+                previous_delegate = getattr(self, "_previous_delegate", None)
+                return bool(previous_delegate and previous_delegate.respondsToSelector_(selector))
+
+            def forwardingTargetForSelector_(self, selector):
+                previous_delegate = getattr(self, "_previous_delegate", None)
+                if previous_delegate and previous_delegate.respondsToSelector_(selector):
+                    return previous_delegate
+                return objc.super(DockReopenDelegate, self).forwardingTargetForSelector_(selector)
+
+            def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, has_visible_windows):
+                QTimer.singleShot(0, self._callback)
+                return True
+
+        def handle_reopen():
+            try:
+                logger.info("macOS Dock reopen requested; showing main window")
+                widget.open_main_window()
+            except Exception as e:
+                logger.exception(f"Failed to handle macOS Dock reopen: {e}")
+
+        ns_app = NSApplication.sharedApplication()
+        previous_delegate = ns_app.delegate()
+        delegate = DockReopenDelegate.alloc().initWithCallback_previousDelegate_(handle_reopen, previous_delegate)
+        ns_app.setDelegate_(delegate)
+
+        # Keep the Obj-C delegate alive for the lifetime of QApplication.
+        app._macos_dock_reopen_delegate = delegate
+        logger.info("Installed macOS Dock reopen handler")
+        return delegate
+    except Exception as e:
+        logger.warning(f"Failed to install macOS Dock reopen handler: {e}")
+        return None
+
 def setup_startup_update_checker(widget):
     update_checker = StartupUpdateChecker(widget)
     
@@ -221,6 +294,7 @@ def check_and_create_shortcut_async():
     threading.Thread(target=_worker, daemon=True).start()
 
 def main():
+    configure_opengl_surface()
     app = QApplication(sys.argv)
     from qfluentwidgets import setThemeColor
     from src.core.app_theme import THEME_COLOR
@@ -236,12 +310,13 @@ def main():
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
-    try:
-        import ctypes
-        app_id = "DoroPet.Application.v3"
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
-    except Exception as e:
-        logger.warning(f"Failed to set AppUserModelID: {e}")
+    if is_windows():
+        try:
+            import ctypes
+            app_id = "DoroPet.Application.v3"
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+        except Exception as e:
+            logger.warning(f"Failed to set AppUserModelID: {e}")
 
     app.setQuitOnLastWindowClosed(False)
 
@@ -294,6 +369,7 @@ def main():
         w.show()
 
     tray_icon = setup_tray_icon(app, w)
+    setup_macos_dock_reopen_handler(app, w)
 
     if not hide_pet_on_startup:
         w.talk("欢迎回来！")

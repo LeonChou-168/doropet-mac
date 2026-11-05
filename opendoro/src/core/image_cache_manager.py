@@ -4,6 +4,7 @@ from typing import Optional, Dict
 from datetime import datetime, timedelta
 
 from src.core.logger import logger
+from src.core.platform_paths import get_cache_dir
 
 
 class ImageCacheManager:
@@ -24,7 +25,7 @@ class ImageCacheManager:
         if ImageCacheManager._initialized:
             return
 
-        self._cache_dir = os.path.join(os.getcwd(), self.CACHE_DIR_NAME)
+        self._cache_dir = os.path.join(get_cache_dir(), self.CACHE_DIR_NAME)
         self._memory_cache: Dict[str, str] = {}
         self._ensure_cache_dir()
         ImageCacheManager._initialized = True

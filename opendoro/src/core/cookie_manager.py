@@ -2,6 +2,7 @@ import os
 import json
 from typing import Dict, Optional
 from src.core.logger import logger
+from src.core.platform_paths import get_user_data_dir
 
 
 class CookieManager:
@@ -15,11 +16,7 @@ class CookieManager:
 
     def __init__(self):
         self._cookies: Dict[str, Dict] = {}
-        self._cookie_dir = os.path.join(
-            os.environ.get('LOCALAPPDATA', os.getcwd()),
-            'DoroPet',
-            'cookies'
-        )
+        self._cookie_dir = os.path.join(get_user_data_dir(), 'cookies')
         self._load_cookies()
 
     def _get_cookie_file(self, platform: str) -> str:

@@ -4,6 +4,7 @@ import re
 import subprocess
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
+from src.core.platform_paths import get_app_root, is_macos, is_windows
 
 
 @dataclass
@@ -115,9 +116,11 @@ def check_dependencies(requirements_path: str = None) -> DependencyCheckResult:
     """
     try:
         if requirements_path is None:
-            main_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(os.path.dirname(main_dir))
-            requirements_path = os.path.join(project_root, 'requirements.txt')
+            project_root = get_app_root()
+            if is_macos() and os.path.exists(os.path.join(project_root, 'requirements-macos.txt')):
+                requirements_path = os.path.join(project_root, 'requirements-macos.txt')
+            else:
+                requirements_path = os.path.join(project_root, 'requirements.txt')
         
         if not os.path.exists(requirements_path):
             return DependencyCheckResult(
@@ -192,10 +195,13 @@ def format_dependency_error(result: DependencyCheckResult) -> str:
     lines.append("解决方案:")
     lines.append("-" * 60)
     lines.append("  请运行以下命令更新依赖库:")
-    lines.append("  pip install -r requirements.txt --upgrade")
+    if is_macos():
+        lines.append("  scripts/setup_macos.sh")
+    else:
+        lines.append("  pip install -r requirements.txt --upgrade")
     lines.append("")
     lines.append("  或者使用项目提供的安装脚本:")
-    lines.append("  install_env.bat")
+    lines.append("  scripts/setup_macos.sh" if is_macos() else "  install_env.bat")
     lines.append("")
     lines.append("=" * 60)
     
@@ -237,20 +243,24 @@ def show_dependency_error_dialog(result: DependencyCheckResult):
         msg_box.exec()
         
         if msg_box.clickedButton() == install_btn:
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            install_script = os.path.join(project_root, "install_env.bat")
+            project_root = get_app_root()
+            install_script = os.path.join(
+                project_root,
+                "scripts",
+                "setup_macos.sh"
+            ) if is_macos() else os.path.join(project_root, "install_env.bat")
             
             if os.path.exists(install_script):
-                subprocess.Popen(
-                    ['cmd', '/c', install_script],
-                    cwd=project_root
-                )
+                if is_windows():
+                    subprocess.Popen(['cmd', '/c', install_script], cwd=project_root)
+                else:
+                    subprocess.Popen([install_script], cwd=project_root)
                 sys.exit(0)
             else:
                 QMessageBox.critical(
                     None,
                     "错误",
-                    f"找不到安装脚本：{install_script}\n请手动运行 install_env.bat"
+                    f"找不到安装脚本：{install_script}\n请手动运行 {install_script}"
                 )
                 sys.exit(1)
         else:

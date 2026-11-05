@@ -834,30 +834,17 @@ class SettingsInterface(ScrollArea):
         self.settings.setValue("memory_max_count", value)
 
     def on_autorun_changed(self, checked):
-        import sys
-        import os
-        import winreg
-        
-        app_name = "DoroPet"
-        bat_path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "start_app_background.bat")
-        
-        key = winreg.HKEY_CURRENT_USER
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        
-        try:
-            registry_key = winreg.OpenKey(key, key_path, 0, winreg.KEY_WRITE)
-            if checked:
-                winreg.SetValueEx(registry_key, app_name, 0, winreg.REG_SZ, bat_path)
-            else:
-                try:
-                    winreg.DeleteValue(registry_key, app_name)
-                except FileNotFoundError:
-                    pass
-            winreg.CloseKey(registry_key)
+        from src.core.platform_integration import set_autorun_enabled
+
+        success, message = set_autorun_enabled(checked)
+        if success:
             self.settings.setValue("autorun", checked)
-            logger.info(f"Autorun set to {checked}, path: {bat_path}")
-        except Exception as e:
-            logger.warning(f"Autorun error: {e}")
+            logger.info(message)
+        else:
+            self.general_page.check_autorun.blockSignals(True)
+            self.general_page.check_autorun.setChecked(not checked)
+            self.general_page.check_autorun.blockSignals(False)
+            logger.warning(message)
 
     def on_hide_pet_on_startup_changed(self, checked):
         self.settings.setValue("hide_pet_on_startup", checked)

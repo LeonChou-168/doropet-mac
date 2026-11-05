@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget,
                              QStackedWidget, QLabel, QMessageBox, QFrame, QListWidgetItem)
 from PyQt5.QtCore import Qt
 from qfluentwidgets import (SubtitleLabel, PrimaryPushButton, FluentIcon)
+from src.core.platform_paths import resource_path
 
 class PluginInterface(QWidget):
     def __init__(self, parent=None):
@@ -116,7 +117,7 @@ class PluginInterface(QWidget):
         # Simple approach: Clear internal cache, let user re-click to re-load.
         self.loaded_plugins = {}
             
-        plugin_dir = os.path.join(os.getcwd(), "plugin")
+        plugin_dir = resource_path("plugin")
         if not os.path.exists(plugin_dir):
             try:
                 os.makedirs(plugin_dir)

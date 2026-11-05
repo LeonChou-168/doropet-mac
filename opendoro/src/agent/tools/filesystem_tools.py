@@ -10,12 +10,13 @@ from src.agent.core.tool import Tool, ToolSchema, ToolCategory, ToolResult
 from src.agent.core.context import ToolCallContext, ExecutionContext, ToolPermission
 from src.agent.core.errors import ToolError
 from src.agent.core.sandbox import SandboxManager
+from src.core.platform_paths import get_app_root
 
 logger = logging.getLogger("DoroPet.Agent")
 
 
 def _resolve_project_dir() -> str:
-    return os.getcwd()
+    return get_app_root()
 
 
 @dataclass

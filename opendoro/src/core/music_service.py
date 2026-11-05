@@ -6,17 +6,7 @@ from PyQt5.QtMultimedia import QMediaContent
 
 from src.core.logger import logger
 from src.core.cookie_manager import CookieManager
-
-
-def get_user_data_dir():
-    """
-    Get user data directory for DoroPet.
-    On Windows, this is %LOCALAPPDATA%\\DoroPet
-    """
-    local_app_data = os.environ.get('LOCALAPPDATA')
-    if local_app_data:
-        return os.path.join(local_app_data, 'DoroPet')
-    return os.getcwd()
+from src.core.platform_paths import get_user_data_dir
 
 
 class SongInfo:

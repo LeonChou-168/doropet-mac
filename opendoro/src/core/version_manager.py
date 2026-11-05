@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,7 @@ from PyQt5.QtCore import QObject, pyqtSignal, QThread
 import requests
 from bs4 import BeautifulSoup
 from src.core.logger import logger
+from src.core.platform_paths import is_macos, is_windows
 
 
 __version__ = "3.5.1"
@@ -30,6 +32,159 @@ GITEE_BASE_URL = "https://gitee.com"
 WEB_CRAWLER_MAX_RETRIES = 3
 WEB_CRAWLER_RETRY_DELAY = 2
 WEB_CRAWLER_TIMEOUT = 30
+
+
+def _shell_quote(value: str) -> str:
+    return shlex.quote(str(value))
+
+
+def _windows_restart_command(app_dir: str, silent: bool = True) -> str:
+    python_exe = sys.executable
+    pythonw_exe = python_exe.replace('python.exe', 'pythonw.exe')
+    if not os.path.exists(pythonw_exe):
+        pythonw_exe = python_exe
+
+    main_script = os.path.join(app_dir, "main.py")
+    if silent:
+        return f'start "" "{pythonw_exe}" "{main_script}"'
+    return f'cd /d "{app_dir}" & "{python_exe}" "{main_script}"'
+
+
+def _macos_restart_command(app_dir: str) -> str:
+    if getattr(sys, "frozen", False):
+        return f"nohup {_shell_quote(sys.executable)} >/dev/null 2>&1 &"
+
+    run_script = os.path.join(app_dir, "scripts", "run_macos.sh")
+    if os.path.exists(run_script):
+        return (
+            f"cd {_shell_quote(app_dir)}\n"
+            f"nohup {_shell_quote(run_script)} >/dev/null 2>&1 &"
+        )
+
+    main_script = os.path.join(app_dir, "main.py")
+    return (
+        f"cd {_shell_quote(app_dir)}\n"
+        f"nohup {_shell_quote(sys.executable)} {_shell_quote(main_script)} >/dev/null 2>&1 &"
+    )
+
+
+def _create_windows_updater_script(
+    temp_dir: str,
+    source_dir: str,
+    target_dir: str,
+    restart_cmd: str,
+    silent: bool = True,
+    delay_seconds: int = 2,
+) -> str:
+    if silent:
+        script_content = f'''@echo off
+chcp 65001 >nul
+set "SOURCE={source_dir}"
+set "TARGET={target_dir}"
+
+timeout /t {delay_seconds} /nobreak >nul
+
+if exist "%TARGET%\\src\\skills" rmdir /s /q "%TARGET%\\src\\skills" >nul 2>&1
+
+xcopy "%SOURCE%\\*" "%TARGET%\\" /E /Y /I /Q >nul 2>&1
+
+if %errorlevel% neq 0 (
+    exit /b 1
+)
+
+{restart_cmd}
+
+exit /b 0
+'''
+    else:
+        script_content = f'''@echo off
+chcp 65001 >nul
+echo ========================================
+echo   DoroPet 自动更新程序
+echo ========================================
+echo.
+
+set "SOURCE={source_dir}"
+set "TARGET={target_dir}"
+
+echo 正在等待程序退出...
+timeout /t {delay_seconds} /nobreak >nul
+
+echo 正在清理旧技能文件...
+if exist "%TARGET%\\src\\skills" rmdir /s /q "%TARGET%\\src\\skills"
+
+echo 正在复制文件...
+xcopy "%SOURCE%\\*" "%TARGET%\\" /E /Y /I
+
+if %errorlevel% neq 0 (
+    echo.
+    echo 更新失败！请手动下载更新包。
+    pause
+    exit /b 1
+)
+
+echo.
+echo 更新完成！
+echo 正在启动程序...
+
+{restart_cmd}
+
+exit /b 0
+'''
+    script_path = os.path.join(temp_dir, "DoroPet_Updater.bat")
+    with open(script_path, 'w', encoding='utf-8') as f:
+        f.write(script_content)
+    return script_path
+
+
+def _create_macos_updater_script(
+    temp_dir: str,
+    source_dir: str,
+    target_dir: str,
+    restart_cmd: str,
+    silent: bool = True,
+    delay_seconds: int = 2,
+) -> str:
+    if silent:
+        log_line = ""
+    else:
+        log_line = 'echo "正在安装 DoroPet 更新..."\n'
+
+    script_content = f'''#!/bin/zsh
+set -e
+SOURCE={_shell_quote(source_dir)}
+TARGET={_shell_quote(target_dir)}
+
+sleep {delay_seconds}
+{log_line}
+rm -rf "$TARGET/src/skills"
+mkdir -p "$TARGET"
+ditto "$SOURCE" "$TARGET"
+
+{restart_cmd}
+
+exit 0
+'''
+    script_path = os.path.join(temp_dir, "DoroPet_Updater.sh")
+    with open(script_path, 'w', encoding='utf-8') as f:
+        f.write(script_content)
+    os.chmod(script_path, 0o755)
+    return script_path
+
+
+def _launch_updater_script(script_path: str, silent: bool = True):
+    if is_windows():
+        creationflags = subprocess.CREATE_NO_WINDOW if silent else subprocess.CREATE_NEW_CONSOLE
+        subprocess.Popen(['cmd', '/c', script_path], creationflags=creationflags)
+        return
+
+    if is_macos():
+        stdout = subprocess.DEVNULL if silent else None
+        stderr = subprocess.DEVNULL if silent else None
+        subprocess.Popen(['/bin/zsh', script_path], stdout=stdout, stderr=stderr, start_new_session=True)
+        return
+
+    raise RuntimeError("当前平台暂不支持自动安装更新")
 
 
 class ReleaseType(Enum):
@@ -760,36 +915,27 @@ class UpdateInstallWorker(QThread):
             
             self.progress.emit("正在复制文件...", self.STEP_COPY)
             
-            python_exe = sys.executable
-            pythonw_exe = python_exe.replace('python.exe', 'pythonw.exe')
-            if not os.path.exists(pythonw_exe):
-                pythonw_exe = python_exe
-            main_script = os.path.join(self.app_dir, "main.py")
-            restart_cmd = f'start "" "{pythonw_exe}" "{main_script}"'
-            
-            script_content = f'''@echo off
-chcp 65001 >nul
-set "SOURCE={source_dir}"
-set "TARGET={self.project_root}"
-
-timeout /t 3 /nobreak >nul
-
-if exist "%TARGET%\\src\\skills" rmdir /s /q "%TARGET%\\src\\skills" >nul 2>&1
-
-xcopy "%SOURCE%\\*" "%TARGET%\\" /E /Y /I /Q >nul 2>&1
-
-if %errorlevel% neq 0 (
-    exit /b 1
-)
-
-{restart_cmd}
-
-exit /b 0
-'''
-            
-            script_path = os.path.join(self.temp_dir, "DoroPet_Updater.bat")
-            with open(script_path, 'w', encoding='utf-8') as f:
-                f.write(script_content)
+            if is_windows():
+                script_path = _create_windows_updater_script(
+                    self.temp_dir,
+                    source_dir,
+                    self.project_root,
+                    _windows_restart_command(self.app_dir, silent=True),
+                    silent=True,
+                    delay_seconds=3,
+                )
+            elif is_macos():
+                script_path = _create_macos_updater_script(
+                    self.temp_dir,
+                    source_dir,
+                    self.project_root,
+                    _macos_restart_command(self.app_dir),
+                    silent=True,
+                    delay_seconds=3,
+                )
+            else:
+                self.error.emit("当前平台暂不支持自动安装更新")
+                return
             
             if self._is_cancelled:
                 os.remove(script_path)
@@ -799,10 +945,7 @@ exit /b 0
             
             self.progress.emit("正在完成安装...", self.STEP_FINALIZE)
             
-            subprocess.Popen(
-                ['cmd', '/c', script_path],
-                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
-            )
+            _launch_updater_script(script_path, silent=True)
             
             self.progress.emit("安装完成，即将重启...", self.STEP_DONE)
             self.completed.emit()
@@ -843,95 +986,37 @@ class UpdateInstaller:
         return source_dir
     
     def create_updater_script(self, source_dir: str, target_dir: str, restart_cmd: str, silent: bool = True) -> str:
-        if silent:
-            script_content = f'''@echo off
-chcp 65001 >nul
-set "SOURCE={source_dir}"
-set "TARGET={target_dir}"
-
-timeout /t 2 /nobreak >nul
-
-if exist "%TARGET%\\src\\skills" rmdir /s /q "%TARGET%\\src\\skills" >nul 2>&1
-
-xcopy "%SOURCE%\\*" "%TARGET%\\" /E /Y /I /Q >nul 2>&1
-
-if %errorlevel% neq 0 (
-    exit /b 1
-)
-
-{restart_cmd}
-
-exit /b 0
-'''
-        else:
-            script_content = f'''@echo off
-chcp 65001 >nul
-echo ========================================
-echo   DoroPet 自动更新程序
-echo ========================================
-echo.
-
-set "SOURCE={source_dir}"
-set "TARGET={target_dir}"
-
-echo 正在等待程序退出...
-timeout /t 2 /nobreak >nul
-
-echo 正在清理旧技能文件...
-if exist "%TARGET%\\src\\skills" rmdir /s /q "%TARGET%\\src\\skills"
-
-echo 正在复制文件...
-xcopy "%SOURCE%\\*" "%TARGET%\\" /E /Y /I
-
-if %errorlevel% neq 0 (
-    echo.
-    echo 更新失败！请手动下载更新包。
-    pause
-    exit /b 1
-)
-
-echo.
-echo 更新完成！
-echo 正在启动程序...
-
-{restart_cmd}
-
-exit /b 0
-'''
-        script_path = os.path.join(self.temp_dir, "DoroPet_Updater.bat")
-        with open(script_path, 'w', encoding='utf-8') as f:
-            f.write(script_content)
-        
-        return script_path
+        if is_windows():
+            return _create_windows_updater_script(
+                self.temp_dir,
+                source_dir,
+                target_dir,
+                restart_cmd,
+                silent=silent,
+            )
+        if is_macos():
+            return _create_macos_updater_script(
+                self.temp_dir,
+                source_dir,
+                target_dir,
+                restart_cmd,
+                silent=silent,
+            )
+        raise RuntimeError("当前平台暂不支持自动安装更新")
     
     def execute_update(self, zip_path: str, version: str, silent: bool = True) -> bool:
         try:
             source_dir = self.prepare_installation(zip_path, version)
             
-            python_exe = sys.executable
-            pythonw_exe = python_exe.replace('python.exe', 'pythonw.exe')
-            if not os.path.exists(pythonw_exe):
-                pythonw_exe = python_exe
-            
-            main_script = os.path.join(self.app_dir, "main.py")
-            
-            if silent:
-                restart_cmd = f'start "" "{pythonw_exe}" "{main_script}"'
+            if is_windows():
+                restart_cmd = _windows_restart_command(self.app_dir, silent=silent)
+            elif is_macos():
+                restart_cmd = _macos_restart_command(self.app_dir)
             else:
-                restart_cmd = f'cd /d "{self.app_dir}" & "{python_exe}" "{main_script}"'
+                raise RuntimeError("当前平台暂不支持自动安装更新")
             
             script_path = self.create_updater_script(source_dir, self.project_root, restart_cmd, silent)
-            
-            if silent:
-                subprocess.Popen(
-                    ['cmd', '/c', script_path],
-                    creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
-                )
-            else:
-                subprocess.Popen(
-                    ['cmd', '/c', script_path],
-                    creationflags=subprocess.CREATE_NEW_CONSOLE
-                )
+            _launch_updater_script(script_path, silent=silent)
             
             return True
             

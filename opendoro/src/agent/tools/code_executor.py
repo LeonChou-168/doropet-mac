@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any
 from src.agent.core.tool import Tool, ToolSchema, ToolCategory, ToolResult
 from src.agent.core.context import ToolCallContext, ToolPermission
 from src.agent.core.sandbox import SandboxManager
+from src.core.platform_paths import get_app_root
 
 logger = logging.getLogger("DoroPet.Agent")
 
@@ -35,7 +36,7 @@ class RunPythonTool(Tool):
         if not file_path:
             return ToolResult(tool_name=self.schema.name, success=False, error="File path is required.")
 
-        project_dir = os.getcwd()
+        project_dir = get_app_root()
         abs_path = os.path.abspath(file_path)
 
         if not os.path.dirname(abs_path) and not os.path.exists(abs_path):

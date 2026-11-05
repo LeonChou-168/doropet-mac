@@ -9,6 +9,7 @@ import wave
 from PyQt5.QtCore import QObject, pyqtSignal, QThread, QUrl, QTimer
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from src.core.logger import logger
+from src.core.platform_paths import get_user_data_dir
 
 try:
     import pygame
@@ -27,16 +28,6 @@ except ImportError:
     HAS_GOOGLE_GENAI = False
     genai = None
     types = None
-
-def get_user_data_dir():
-    """
-    Get user data directory for DoroPet.
-    On Windows, this is %LOCALAPPDATA%\\DoroPet
-    """
-    local_app_data = os.environ.get('LOCALAPPDATA')
-    if local_app_data:
-        return os.path.join(local_app_data, 'DoroPet')
-    return os.getcwd()
 
 class EdgeTTSWorker(QThread):
     finished = pyqtSignal(str)

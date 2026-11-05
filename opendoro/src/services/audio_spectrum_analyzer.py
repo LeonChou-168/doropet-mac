@@ -1,16 +1,31 @@
+import sys
+
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+
 from src.core.logger import logger
 
 PYAUDIOWPATCH_AVAILABLE = False
 pyaudio = None
 
+SOUNDDEVICE_AVAILABLE = False
+sd = None
+
+if sys.platform == "win32":
+    try:
+        import pyaudiowpatch as pyaudio
+
+        PYAUDIOWPATCH_AVAILABLE = True
+        logger.info("[SpectrumAnalyzer] pyaudiowpatch loaded successfully")
+    except ImportError:
+        logger.warning("[SpectrumAnalyzer] pyaudiowpatch not available, spectrum will be simulated")
+
 try:
-    import pyaudiowpatch as pyaudio
-    PYAUDIOWPATCH_AVAILABLE = True
-    logger.info("[SpectrumAnalyzer] pyaudiowpatch loaded successfully")
+    import sounddevice as sd
+
+    SOUNDDEVICE_AVAILABLE = True
 except ImportError:
-    logger.warning("[SpectrumAnalyzer] pyaudiowpatch not available, spectrum will be simulated")
+    logger.warning("[SpectrumAnalyzer] sounddevice not available, non-Windows spectrum will be simulated")
 
 
 class AudioSpectrumAnalyzer(QObject):
@@ -34,7 +49,8 @@ class AudioSpectrumAnalyzer(QObject):
         self._stream = None
         self._pyaudio_instance = None
         self._loopback_device_index = None
-        self._fallback_mode = not PYAUDIOWPATCH_AVAILABLE
+        self._sounddevice_mode = sys.platform != "win32" and SOUNDDEVICE_AVAILABLE
+        self._fallback_mode = not (PYAUDIOWPATCH_AVAILABLE or self._sounddevice_mode)
         self._last_device_name = ""
         self._device_detected_changed = True
 
@@ -50,13 +66,13 @@ class AudioSpectrumAnalyzer(QObject):
             if self._pyaudio_instance:
                 try:
                     self._pyaudio_instance.terminate()
-                except:
+                except Exception:
                     pass
                 self._pyaudio_instance = None
             self._loopback_device_index = None
 
             self._pyaudio_instance = pyaudio.PyAudio()
-            
+
             default_output = self._pyaudio_instance.get_default_output_device_info()
             default_output_name = default_output['name']
 
@@ -72,14 +88,14 @@ class AudioSpectrumAnalyzer(QObject):
                 if 'WASAPI' in api.get('name', ''):
                     wasapi_index = i
                     break
-            
+
             if wasapi_index is None:
                 logger.warning("[SpectrumAnalyzer] WASAPI not found")
                 self._fallback_mode = True
                 self._pyaudio_instance.terminate()
                 self._pyaudio_instance = None
                 return
-            
+
             loopback_devices = []
             for i in range(self._pyaudio_instance.get_device_count()):
                 dev = self._pyaudio_instance.get_device_info_by_index(i)
@@ -102,7 +118,7 @@ class AudioSpectrumAnalyzer(QObject):
                 if device_changed:
                     logger.info(f"[SpectrumAnalyzer] Using first loopback: {dev['name']} @ {self._sample_rate}Hz")
                 return
-            
+
             logger.warning("[SpectrumAnalyzer] No loopback device found")
             self._fallback_mode = True
             self._pyaudio_instance.terminate()
@@ -118,27 +134,43 @@ class AudioSpectrumAnalyzer(QObject):
     def _audio_callback(self, in_data, frame_count, time_info, status):
         if status:
             return (None, pyaudio.paAbort)
-        
+
         try:
-            audio_data = np.frombuffer(in_data, dtype=np.float32)
-            if len(audio_data) > 0:
-                if len(audio_data) >= self._fft_size:
-                    self._audio_buffer = audio_data[-self._fft_size:]
-                else:
-                    self._audio_buffer = np.roll(self._audio_buffer, -len(audio_data))
-                    self._audio_buffer[-len(audio_data):] = audio_data
-        except:
+            self._append_audio(np.frombuffer(in_data, dtype=np.float32))
+        except Exception:
             pass
-        
+
         return (in_data, pyaudio.paContinue)
+
+    def _sounddevice_callback(self, indata, frames, time_info, status):
+        if status:
+            logger.debug(f"[SpectrumAnalyzer] sounddevice status: {status}")
+        try:
+            self._append_audio(indata.astype(np.float32).reshape(-1))
+        except Exception:
+            pass
+
+    def _append_audio(self, audio_data):
+        if len(audio_data) <= 0:
+            return
+        if len(audio_data) >= self._fft_size:
+            self._audio_buffer = audio_data[-self._fft_size:]
+        else:
+            self._audio_buffer = np.roll(self._audio_buffer, -len(audio_data))
+            self._audio_buffer[-len(audio_data):] = audio_data
 
     def start(self):
         if self._is_running:
             return
 
         try:
-            if not self._fallback_mode and PYAUDIOWPATCH_AVAILABLE:
+            if PYAUDIOWPATCH_AVAILABLE:
+                self._fallback_mode = False
                 self._find_loopback_device()
+                self._start_loopback()
+            elif self._sounddevice_mode:
+                self._fallback_mode = False
+                self._start_sounddevice_input()
 
             if self._fallback_mode:
                 if self._device_detected_changed:
@@ -147,7 +179,6 @@ class AudioSpectrumAnalyzer(QObject):
                 self._update_timer.start(30)
                 return
 
-            self._start_loopback()
             self._is_running = True
             self._update_timer.start(30)
             if self._device_detected_changed:
@@ -164,7 +195,7 @@ class AudioSpectrumAnalyzer(QObject):
         if was_running:
             self.stop()
 
-        self._fallback_mode = not PYAUDIOWPATCH_AVAILABLE
+        self._fallback_mode = not (PYAUDIOWPATCH_AVAILABLE or self._sounddevice_mode)
         logger.info(f"[SpectrumAnalyzer] Reconnected, fallback={self._fallback_mode}")
 
         if was_running:
@@ -175,7 +206,7 @@ class AudioSpectrumAnalyzer(QObject):
             try:
                 self._stream.stop_stream()
                 self._stream.close()
-            except:
+            except Exception:
                 pass
             self._stream = None
 
@@ -187,7 +218,7 @@ class AudioSpectrumAnalyzer(QObject):
         try:
             dev_info = self._pyaudio_instance.get_device_info_by_index(self._loopback_device_index)
             channels = min(2, int(dev_info['maxInputChannels']))
-            
+
             self._stream = self._pyaudio_instance.open(
                 format=pyaudio.paFloat32,
                 channels=channels,
@@ -200,9 +231,38 @@ class AudioSpectrumAnalyzer(QObject):
             self._stream.start_stream()
             if self._device_detected_changed:
                 logger.info(f"[SpectrumAnalyzer] Stream started: {dev_info['name']}")
-            
+
         except Exception as e:
             logger.error(f"[SpectrumAnalyzer] Failed to open stream: {e}")
+            self._fallback_mode = True
+
+    def _start_sounddevice_input(self):
+        if self._stream:
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except Exception:
+                pass
+            self._stream = None
+
+        try:
+            default_input = sd.query_devices(kind="input")
+            self._sample_rate = int(default_input.get("default_samplerate") or self._sample_rate)
+            self._last_device_name = default_input.get("name", "")
+            logger.info(f"[SpectrumAnalyzer] Using input device: {self._last_device_name} @ {self._sample_rate}Hz")
+            self._stream = sd.InputStream(
+                channels=1,
+                samplerate=self._sample_rate,
+                blocksize=self._fft_size // 2,
+                dtype="float32",
+                callback=self._sounddevice_callback,
+            )
+            self._stream.start()
+        except Exception as e:
+            logger.warning(
+                "[SpectrumAnalyzer] macOS input capture unavailable. "
+                f"Grant microphone permission or configure an input/virtual audio device. Error: {e}"
+            )
             self._fallback_mode = True
 
     def stop(self):
@@ -214,9 +274,12 @@ class AudioSpectrumAnalyzer(QObject):
 
         if self._stream:
             try:
-                self._stream.stop_stream()
+                if hasattr(self._stream, "stop_stream"):
+                    self._stream.stop_stream()
+                else:
+                    self._stream.stop()
                 self._stream.close()
-            except:
+            except Exception:
                 pass
             self._stream = None
 
@@ -242,9 +305,7 @@ class AudioSpectrumAnalyzer(QObject):
             magnitudes = np.abs(fft_result)
 
             frequencies = np.fft.rfftfreq(len(audio_data), 1.0 / self._sample_rate)
-
             spectrum = self._map_to_bars(magnitudes, frequencies)
-
             self.spectrum_data_ready.emit(spectrum)
 
         except Exception as e:
@@ -277,7 +338,6 @@ class AudioSpectrumAnalyzer(QObject):
 
     def _generate_fallback_data(self):
         import random
-        import math
 
         spectrum = []
         for i in range(self._num_bars):
@@ -298,6 +358,6 @@ class AudioSpectrumAnalyzer(QObject):
         if self._pyaudio_instance:
             try:
                 self._pyaudio_instance.terminate()
-            except:
+            except Exception:
                 pass
             self._pyaudio_instance = None

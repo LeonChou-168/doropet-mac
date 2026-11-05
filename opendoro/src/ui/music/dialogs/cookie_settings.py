@@ -1,4 +1,5 @@
 import os
+from src.core.platform_paths import get_music_outputs_dir
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QScrollArea, QWidget, 
                              QHBoxLayout, QLabel, QMessageBox)
 from qfluentwidgets import (CardWidget, PushButton, PrimaryPushButton, 
@@ -122,11 +123,11 @@ class CookieSettingsDialog(QDialog):
         try:
             from musicdl import musicdl
             
-            os.makedirs(os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'DoroPet', 'musicdl_outputs'), exist_ok=True)
+            work_dir = get_music_outputs_dir()
             
             init_cfg = {
                 music_client_name: {
-                    'work_dir': os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'DoroPet', 'musicdl_outputs'),
+                    'work_dir': work_dir,
                     'default_search_cookies': cookies,
                     'default_parse_cookies': cookies,
                 }
