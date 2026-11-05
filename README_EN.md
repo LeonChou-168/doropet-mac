@@ -8,14 +8,17 @@
 
 [![Version](https://img.shields.io/badge/version-3.6.8-blue.svg)](https://gitee.com/waterfeet/DoroPet_V3/releases)
 [![Python](https://img.shields.io/badge/Python-3.12+-green.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20arm64%20%7C%20Windows-lightgrey.svg)](opendoro/README_MACOS.md)
 
 A desktop app integrating Live2D pet, AI chat, voice interaction, pet simulation, Galgame storytelling, and music player — all in one place
 
 [中文文档](README.md)
 
 </div>
+
+> [!NOTE]
+> **Unofficial macOS Apple Silicon port.** This repository is a community port of [DoroPet_V3](https://gitee.com/waterfeet/DoroPet_V3) by [waterfeet](https://gitee.com/waterfeet). The upstream Python version is no longer maintained; macOS setup and build instructions are in [opendoro/README_MACOS.md](opendoro/README_MACOS.md).
 
 ---
 
@@ -141,4 +144,4 @@ After first launch, go to "Model Config" to add your API Key and start using.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This repository is a community macOS Apple Silicon port of [DoroPet_V3](https://gitee.com/waterfeet/DoroPet_V3), originally created by [waterfeet](https://gitee.com/waterfeet). Both the upstream project and this port are licensed under the [Apache License 2.0](LICENSE).
