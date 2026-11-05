@@ -1,0 +1,1176 @@
+
+/* Global Styles */
+QWidget {
+    font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    font-size: @font_size_m@;
+    outline: none;
+}
+
+QDialog {
+    background-color: #2b2b2b;
+    color: #ffffff;
+}
+
+QDialog QWidget {
+    background-color: #2b2b2b;
+    color: #ffffff;
+}
+
+/* Chat Interface Styles */
+QFrame#chatSeparator {
+    background-color: #333333; /* Dark gray for subtle separation */
+    border: none;
+}
+
+QWidget#chatContentWidget {
+    background-color: #2b2b2b; /* Added dark background */
+    border: none;
+}
+
+/* Scroll Area */
+QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+/* Scroll Bar */
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 0px;
+}
+QScrollBar::handle:vertical {
+    background: #666666;
+    border-radius: 4px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #999999;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 8px;
+    margin: 0px;
+}
+QScrollBar::handle:horizontal {
+    background: #666666;
+    border-radius: 4px;
+    min-width: 30px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #999999;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+/* Text Edit */
+QTextEdit, QPlainTextEdit, QTextBrowser {
+    background-color: #2d2d30;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    color: #ffffff;
+    selection-background-color: #0078d4;
+    selection-color: #ffffff;
+}
+QTextEdit:focus, QPlainTextEdit:focus, QTextBrowser:focus {
+    border: 1px solid #0078d4;
+    background-color: #1e1e1e;
+}
+
+/* Line Edit */
+QLineEdit {
+    background-color: #2d2d30;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    padding: 5px;
+    color: #ffffff;
+    selection-background-color: #0078d4;
+    selection-color: #ffffff;
+}
+QLineEdit:hover {
+    background-color: #333333;
+    border: 1px solid #666666;
+}
+QLineEdit:focus {
+    border: 1px solid #0078d4;
+    background-color: #1e1e1e;
+}
+
+/* List Widget */
+QListWidget {
+    background-color: transparent;
+    border: none;
+    outline: none;
+}
+QListWidget::item {
+    height: 36px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin: 2px 0px;
+    color: #cccccc;
+}
+QListWidget::item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+QListWidget::item:selected {
+    background-color: rgba(0, 120, 212, 0.2);
+    color: #ffffff;
+}
+
+/* Push Button */
+QPushButton {
+    background-color: #333333;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    padding: 5px 12px;
+    color: #cccccc;
+}
+QPushButton:hover {
+    background-color: #3e3e3e;
+}
+QPushButton:pressed {
+    background-color: #2d2d2d;
+    color: #ffffff;
+}
+
+/* Primary Push Button */
+QPushButton[isPrimary="true"] {
+    background-color: #0078d4;
+    border: 1px solid #0078d4;
+    color: #ffffff;
+}
+QPushButton[isPrimary="true"]:hover {
+    background-color: #106ebe;
+    border: 1px solid #106ebe;
+}
+QPushButton[isPrimary="true"]:pressed {
+    background-color: #005a9e;
+    border: 1px solid #005a9e;
+}
+
+/* Labels */
+QLabel {
+    color: #cccccc;
+}
+QLabel#titleLabel {
+    font-size: @font_size_xl@;
+    font-weight: bold;
+    color: #ffffff;
+}
+QLabel#subtitleLabel {
+    font-size: @font_size_m@;
+    color: #999999;
+}
+QLabel#bodyLabel {
+    font-size: @font_size_m@;
+    color: #cccccc;
+}
+
+/* ComboBox */
+QComboBox {
+    background-color: #2d2d30;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #cccccc;
+}
+QComboBox:hover {
+    background-color: #333333;
+    border: 1px solid #666666;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+QComboBox QAbstractItemView {
+    background-color: #2d2d30;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    outline: none;
+    padding: 4px;
+}
+QComboBox QAbstractItemView::item {
+    height: 32px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: #cccccc;
+}
+QComboBox QAbstractItemView::item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+QComboBox QAbstractItemView::item:selected {
+    background-color: rgba(0, 120, 212, 0.2);
+    color: #ffffff;
+}
+
+/* Tool Button */
+QToolButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 4px;
+}
+QToolButton:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+QToolButton:pressed {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Thinking Content (Internal thought) */
+QTextEdit#thinkingContent {
+    color: #999999;
+    font-size: @font_size_s@;
+    font-style: italic;
+    border-left: 2px solid #555555;
+    padding-left: 10px;
+    background-color: transparent;
+    border-top: none;
+    border-right: none;
+    border-bottom: none;
+}
+
+/* ThinkingWidget Header Button */
+QPushButton#toolExecutionHeader {
+    background-color: #2d2d2d;
+    border: 1px solid #404040;
+    border-radius: 14px;
+    color: #888888;
+    padding: 0 12px;
+    font-size: @font_size_xs@;
+    text-align: center;
+    icon-size: 14px;
+}
+QPushButton#toolExecutionHeader:hover {
+    background-color: #3d3d3d;
+}
+
+/* Tool Execution Widget */
+QFrame#toolExecutionContent {
+    background-color: transparent;
+    border: none;
+}
+
+/* Thinking Container */
+QFrame#thinkingContainer {
+    background-color: #2d2d2d;
+    border: 1px solid #404040;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+/* Thinking Title */
+QLabel#thinkingTitle {
+    color: #888888;
+    font-weight: bold;
+    font-size: @font_size_xs@;
+}
+
+/* Thinking Label */
+QLabel#thinkingLabel {
+    color: #cccccc;
+    font-size: @font_size_s@;
+    font-family: 'Segoe UI', 'Microsoft YaHei';
+}
+
+/* Tools Container */
+QFrame#toolsContainer {
+    background-color: transparent;
+    border: none;
+}
+
+/* Tools Title */
+QLabel#toolsTitle {
+    color: #888888;
+    font-weight: bold;
+    font-size: @font_size_xs@;
+}
+
+/* Tool Item Frame */
+QFrame#toolItemFrame {
+    background-color: #2a2a3a;
+    border: 1px solid #404040;
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+}
+
+/* Skill Tool Item Frame */
+QFrame#toolItemFrame[toolType="skill"] {
+    background-color: #1a3a2a;
+}
+
+/* Tool Type Label */
+QLabel#toolTypeLabel {
+    color: #888888;
+    font-size: @font_size_xs@;
+    font-weight: bold;
+}
+
+/* Tool Name Label */
+QLabel#toolNameLabel {
+    color: #cccccc;
+    font-size: @font_size_s@;
+    font-weight: bold;
+}
+
+/* Tool Status Label */
+QLabel#toolStatusLabel {
+    font-size: @font_size_xs@;
+}
+
+/* Tool Status - Running */
+QLabel#toolStatusLabel[running="true"] {
+    color: #2196F3;
+}
+
+/* Tool Status - Success */
+QLabel#toolStatusLabel[success="true"] {
+    color: #4CAF50;
+}
+
+/* Tool Status - Error */
+QLabel#toolStatusLabel[error="true"] {
+    color: #f44336;
+}
+
+/* Tool Args Label */
+QLabel#toolArgsLabel {
+    color: #888888;
+    font-size: @font_size_xs@;
+}
+
+/* Tool Result Label */
+QLabel#toolResultLabel {
+    color: #888888;
+    font-size: @font_size_xs@;
+}
+
+/* Tool Result Label - Error */
+QLabel#toolResultLabel[error="true"] {
+    color: #f44336;
+}
+
+/* Message Bubble - User (Dark Theme) */
+QFrame#messageContainer_user {
+    background-color: #0078d4;
+    color: #ffffff;
+    border: 1px solid #0078d4;
+    border-radius: 8px;
+    border-style: solid;
+}
+QFrame#messageContainer_user QTextBrowser#chatContent,
+QFrame#messageContainer_user QLabel {
+    color: #ffffff;
+}
+
+/* Message Bubble - Assistant (Dark Theme) */
+QFrame#messageContainer_assistant {
+    background-color: #3e3e42;
+    color: #ffffff;
+    border: 1px solid #555555;
+    border-radius: 8px;
+    border-style: solid;
+}
+
+/* Message Bubble - Assistant Inactive (Dark Theme) */
+QFrame#messageContainer_assistant_inactive {
+    background-color: #2d2d30;
+    color: #888888;
+    border: 1px solid #454545;
+    border-radius: 8px;
+    border-style: solid;
+}
+QFrame#messageContainer_assistant_inactive QTextEdit#chatContent,
+QFrame#messageContainer_assistant_inactive QTextBrowser#chatContent {
+    color: #888888;
+}
+
+/* Code Block Styles */
+QFrame#codeBlockWidget {
+    background-color: #282c34;
+    border: 1px solid #181a1f;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+QFrame#codeHeader {
+    background-color: #21252b;
+    border-bottom: 1px solid #181a1f;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+QFrame#codeHeader[collapsed="true"] {
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    border-bottom: none;
+}
+
+QLabel#codeLangLabel {
+    color: #abb2bf;
+    font-weight: bold;
+    font-family: sans-serif;
+    font-size: @font_size_s@;
+    border: none;
+    background: transparent;
+}
+
+QTextBrowser#codeContent {
+    background-color: transparent;
+    border: none;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+/* Chat Input Area */
+QTextEdit#chatInput {
+    border: none;
+    background-color: transparent;
+    font-size: @font_size_m@;
+    padding: 0px;
+    color: #ffffff;
+}
+
+/* Chat Toolbar */
+QFrame#chatToolbar {
+    border-top: 1px solid #333333;
+    background-color: #252526; /* Slightly lighter than chat background */
+}
+
+/* Window Title Label */
+QLabel#windowTitleLabel {
+    font-weight: bold;
+    font-size: @font_size_m@;
+    color: #ffffff;
+}
+
+/* Image Preview */
+QLabel#imagePreviewLabel {
+    border: 1px solid #444444;
+    border-radius: 4px;
+    background-color: #2d2d2d;
+}
+
+/* Configuration Interfaces (Model, Voice, Prompt, Settings) */
+QWidget#ModelConfigInterface,
+QWidget#VoiceConfigInterface,
+QWidget#PromptInterface,
+QScrollArea#SettingsInterface,
+QWidget#configEditWidget,
+QWidget#promptEditWidget,
+QWidget#settings_widget,
+QWidget#settingsView {
+    background-color: #2b2b2b;
+    border: none;
+}
+
+/* Left Panels (Sidebar) */
+QWidget#left_panel,
+QWidget#promptLeftPanel {
+    background-color: #252526;
+    border-right: 1px solid #333333;
+}
+
+QListWidget#personaList {
+    background-color: transparent;
+    border: none;
+}
+
+QLineEdit#promptNameInput, QLineEdit#promptDescInput {
+    margin-bottom: 10px;
+}
+
+QPlainTextEdit#promptContentEdit {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: @font_size_body@;
+    line-height: 1.5;
+}
+
+/* Model Card Styles */
+ModelCard {
+    background-color: #353535;
+    border: 1px solid #404040;
+    border-radius: 8px;
+}
+
+ModelCard:hover {
+    background-color: #3a3a3a;
+    border: 1px solid #505050;
+}
+
+/* Model Preview Card */
+ModelPreviewCard {
+    background-color: #353535;
+    border: 1px solid #404040;
+    border-radius: 8px;
+}
+
+/* Live2D Speech Bubble */
+QLabel#speechBubble {
+    background-color: rgba(43, 43, 43, 240);
+    border: 2px solid #454545;
+    border-radius: 10px;
+    padding: 10px;
+    color: #ffffff;
+    font-size: @font_size_m@;
+}
+
+/* Context Menu */
+QMenu {
+    background-color: #2b2b2b;
+    border: 1px solid #454545;
+    border-radius: 8px;
+    padding: 4px;
+}
+QMenu::item {
+    padding: 6px 24px 6px 12px;
+    border-radius: 4px;
+    color: #ffffff;
+    margin: 2px;
+}
+QMenu::item:selected {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+QMenu::separator {
+    height: 1px;
+    background-color: #454545;
+    margin: 4px;
+}
+
+/* Log Interface */
+QLabel#logTitleLabel {
+    font-size: @font_size_xl@;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+QTextEdit#logView {
+    font-family: "Consolas", monospace;
+    font-size: 10pt;
+}
+
+/* Update Interface */
+QScrollArea#UpdateInterface,
+QWidget#updateView {
+    background-color: #2b2b2b;
+    border: none;
+}
+
+QLabel#currentVersionTextLabel {
+    color: #888888;
+}
+
+QWidget#updateStatusCard {
+    background-color: rgba(33, 150, 243, 0.15);
+    border-radius: 8px;
+}
+
+QWidget#updateStatusCard[status="updateAvailable"] {
+    background-color: rgba(33, 150, 243, 0.15);
+    border: 1px solid rgba(33, 150, 243, 0.4);
+}
+
+QWidget#updateStatusCard[status="upToDate"] {
+    background-color: rgba(76, 175, 80, 0.15);
+    border: 1px solid rgba(76, 175, 80, 0.4);
+}
+
+QWidget#downloadProgressWidget {
+    background-color: rgba(76, 175, 80, 0.15);
+    border: 1px solid rgba(76, 175, 80, 0.4);
+    border-radius: 8px;
+}
+
+QProgressBar#downloadProgressBar {
+    background-color: rgba(76, 175, 80, 0.3);
+    border: none;
+    border-radius: 3px;
+}
+
+QProgressBar#downloadProgressBar::chunk {
+    background-color: #4CAF50;
+    border-radius: 3px;
+}
+
+QListWidget#versionListWidget {
+    border: 1px solid #454545;
+    border-radius: 6px;
+    background: transparent;
+}
+
+QListWidget#versionListWidget::item {
+    padding: 4px;
+    border-radius: 4px;
+}
+
+QListWidget#versionListWidget::item:selected {
+    background-color: rgba(0, 159, 170, 0.3);
+}
+
+QListWidget#versionListWidget::item:hover:!selected {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+QTextEdit#changelogTextEdit {
+    border: 1px solid #454545;
+    border-radius: 6px;
+    background: transparent;
+    padding: 8px;
+    color: #cccccc;
+}
+
+QLabel#versionTypeLabel {
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+QLabel#versionTypeLabel[releaseType="stable"] {
+    color: #81C784;
+    background: rgba(76, 175, 80, 0.2);
+}
+
+QLabel#versionTypeLabel[releaseType="beta"] {
+    color: #FFB74D;
+    background: rgba(255, 152, 0, 0.2);
+}
+
+QLabel#versionTypeLabel[releaseType="alpha"] {
+    color: #E57373;
+    background: rgba(244, 67, 54, 0.2);
+}
+
+QLabel#currentVersionLabel {
+    color: #64B5F6;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(33, 150, 243, 0.2);
+}
+
+QLabel#versionDateLabel,
+QLabel#versionSizeLabel {
+    color: #888888;
+}
+
+QWidget#aboutInfoWidget {
+    background-color: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+}
+
+/* Update Notification Dialog */
+QWidget#updateDialogContainer {
+    background-color: #2b2b2b;
+    border-radius: 12px;
+    border: 1px solid #454545;
+}
+
+QLabel#updateDialogIcon {
+    font-size: @font_size_xxxl@;
+    background: transparent;
+}
+
+QLabel#updateDialogTitle {
+    color: #ffffff;
+    font-size: @font_size_xl@;
+    font-weight: bold;
+}
+
+QWidget#updateVersionInfoWidget {
+    background-color: #363636;
+    border-radius: 8px;
+}
+
+QLabel#updateArrowLabel {
+    font-size: @font_size_xl@;
+    color: #666666;
+    background: transparent;
+}
+
+QLabel#updateNewVersionLabel {
+    color: #64b5f6;
+    font-weight: bold;
+}
+
+QLabel#updateReleaseTypeTag {
+    background-color: #1976d2;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+QLabel#updateChangelogHeader {
+    color: #e0e0e0;
+    font-weight: bold;
+}
+
+QTextEdit#updateChangelogPreview {
+    background-color: #1e1e1e;
+    border: 1px solid #404040;
+    border-radius: 6px;
+    color: #e0e0e0;
+}
+
+QLabel#updateInfoLabel {
+    color: #888888;
+}
+
+/* Pet Status Interface */
+QScrollArea#PetStatusInterface {
+    background-color: transparent;
+    border: none;
+}
+
+QWidget#petStatusContainer {
+    background-color: transparent;
+}
+
+QLabel#petAttrNameLabel {
+    font-size: @font_size_m@;
+    font-weight: bold;
+    color: #e0e0e0;
+    background: transparent;
+}
+
+QLabel#petAttrValueLabel {
+    font-size: @font_size_m@;
+    color: #aaaaaa;
+}
+
+QLabel#petStatusGood {
+    font-size: @font_size_xs@;
+    padding: 2px 10px;
+    border-radius: 11px;
+    background-color: #1c4a2c;
+    color: #66bb6a;
+}
+
+QLabel#petStatusWarning {
+    font-size: @font_size_xs@;
+    padding: 2px 10px;
+    border-radius: 11px;
+    background-color: #4a3a1c;
+    color: #ffa726;
+}
+
+QLabel#petStatusCritical {
+    font-size: @font_size_xs@;
+    padding: 2px 10px;
+    border-radius: 11px;
+    background-color: #4a1c1c;
+    color: #ef5350;
+}
+
+QProgressBar#petAttrProgressBar {
+    border: none;
+    border-radius: 4px;
+    background-color: #2d2d2d;
+}
+
+QProgressBar#petAttrProgressBar::chunk {
+    border-radius: 4px;
+}
+
+QLabel#petSectionTitle {
+    font-size: @font_size_l@;
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+QLabel#petEventIcon {
+    font-size: @font_size_xxl@;
+}
+
+QLabel#petEventText {
+    font-size: @font_size_m@;
+    color: #81c784;
+}
+
+CardWidget#petEventCardPositive {
+    background-color: #1a3a2a;
+    border: 1px solid #2e5a3f;
+    border-radius: 8px;
+}
+
+CardWidget#petEventCardNegative {
+    background-color: #3a2a1a;
+    border: 1px solid #5a4a2e;
+    border-radius: 8px;
+}
+
+QLabel#petEventTextNegative {
+    font-size: @font_size_m@;
+    color: #ffb74d;
+}
+
+/* Prompt Interface Module Styles */
+QWidget#promptModule {
+    background-color: #2d2d30;
+    border: 1px solid #454545;
+    border-radius: 8px;
+}
+
+QWidget#live2dModule {
+    background-color: #2d2d30;
+    border: 1px solid #454545;
+    border-radius: 8px;
+}
+
+QSplitter#modulesSplitter::handle {
+    background-color: #454545;
+}
+
+QSplitter#modulesSplitter::handle:horizontal {
+    width: 1px;
+    margin: 8px 4px;
+}
+
+/* Live2D Config Interface */
+QWidget#Live2DConfigInterface,
+QWidget#live2dConfigEditWidget {
+    background-color: #2b2b2b;
+    border: none;
+}
+
+QWidget#live2dConfigLeftPanel {
+    background-color: #252526;
+    border-right: 1px solid #333333;
+}
+
+QListWidget#live2dModelList {
+    background-color: transparent;
+    border: none;
+}
+
+/* Music Interface */
+QScrollArea#MusicInterface,
+QWidget#musicContainer {
+    background-color: transparent;
+    border: none;
+}
+
+QLabel#musicSongNameLabel {
+    font-size: @font_size_m@;
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+QLabel#musicArtistLabel {
+    font-size: @font_size_s@;
+    color: #aaaaaa;
+}
+
+QLabel#musicCoverLabel {
+    background-color: #3a3a3a;
+    border-radius: 6px;
+}
+
+QLabel#musicTimeLabel {
+    font-size: @font_size_xs@;
+    color: #aaaaaa;
+}
+
+QLabel#musicVolumeLabel {
+    font-size: @font_size_xs@;
+    color: #aaaaaa;
+}
+
+QLabel#musicSourceLabel {
+    font-size: @font_size_xxs@;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(96, 165, 250, 0.15);
+    color: #60a5fa;
+}
+
+QLabel#musicLyricLine {
+    font-size: @font_size_body@;
+    color: #888888;
+    padding: 8px;
+}
+
+QLabel#musicLyricLineActive {
+    font-size: @font_size_l@;
+    font-weight: bold;
+    color: #60a5fa;
+    background: rgba(96, 165, 250, 0.15);
+    border-radius: 4px;
+    padding: 8px;
+}
+
+QListWidget#musicLyricsList {
+    border: none;
+    background: transparent;
+    outline: none;
+}
+
+QListWidget#musicLyricsList::item {
+    padding: 10px 16px;
+    border-radius: 8px;
+    color: #888888;
+    margin: 2px 0px;
+}
+
+QListWidget#musicLyricsList::item:hover {
+    background: rgba(96, 165, 250, 0.15);
+    color: #60a5fa;
+}
+
+QListWidget#musicLyricsList::item:selected {
+    background: rgba(96, 165, 250, 0.2);
+    color: #60a5fa;
+}
+
+CardWidget#musicBottomPlayer {
+    background-color: #353535;
+    border: 1px solid #454545;
+    border-radius: 8px;
+}
+
+CardWidget#musicPlaylistCard,
+CardWidget#musicSongInfoCard {
+    background-color: #353535;
+    border: 1px solid #454545;
+    border-radius: 8px;
+}
+
+CardWidget#musicLyricsCard {
+    background-color: transparent;
+    border: none;
+    border-radius: 8px;
+}
+
+QSlider#musicProgressSlider::groove:horizontal {
+    border: none;
+    height: 4px;
+    background: #3a3a3a;
+    border-radius: 2px;
+}
+
+QSlider#musicProgressSlider::handle:horizontal {
+    background: #60a5fa;
+    border: none;
+    width: 12px;
+    height: 12px;
+    margin: -4px 0;
+    border-radius: 6px;
+}
+
+QSlider#musicProgressSlider::handle:horizontal:hover {
+    background: #93c5fd;
+}
+
+QSlider#musicProgressSlider::sub-page:horizontal {
+    background: #60a5fa;
+    border-radius: 2px;
+}
+
+QSlider#musicVolumeSlider::groove:horizontal {
+    border: none;
+    height: 4px;
+    background: #3a3a3a;
+    border-radius: 2px;
+}
+
+QSlider#musicVolumeSlider::handle:horizontal {
+    background: #aaaaaa;
+    border: none;
+    width: 10px;
+    height: 10px;
+    margin: -3px 0;
+    border-radius: 5px;
+}
+
+QSlider#musicVolumeSlider::sub-page:horizontal {
+    background: #aaaaaa;
+    border-radius: 2px;
+}
+
+QLabel#musicCoverLabel {
+    background-color: #3a3a3a;
+    border-radius: 4px;
+}
+
+QLabel#musicSongNameLabel {
+    font-size: @font_size_body@;
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+QLabel#musicProgressSlider {
+    background: transparent;
+}
+
+QScrollArea#musicPlaylistsScroll {
+    border: none;
+    background: transparent;
+}
+
+QScrollArea#musicPlaylistsScroll QScrollBar:vertical {
+    width: 6px;
+    background: transparent;
+}
+
+QScrollArea#musicPlaylistsScroll QScrollBar::handle:vertical {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    min-height: 20px;
+}
+
+QScrollArea#musicPlaylistsScroll QScrollBar::handle:vertical:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Pet Avatar Card */
+PetAvatarCard {
+    background-color: #2d2d30;
+    border: 1px solid #404040;
+    border-radius: 12px;
+}
+
+QLabel#petAvatarNameLabel {
+    font-size: @font_size_xl@;
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+QWidget#petAvatarQuoteBubble {
+    background-color: #1e3a5f;
+    border-radius: 12px;
+    border: 1px solid #2e5a8f;
+}
+
+QLabel#petAvatarQuoteLabel {
+    font-size: @font_size_m@;
+    color: #90caf9;
+    background: transparent;
+}
+
+QLabel#petAvatarStatusLabel {
+    font-size: @font_size_body@;
+    color: #aaaaaa;
+}
+
+QLabel#petAvatarCpuLabel,
+QLabel#petAvatarMemLabel {
+    font-size: @font_size_s@;
+    color: #aaaaaa;
+}
+
+QLabel#petAvatarCpuValue,
+QLabel#petAvatarMemValue {
+    font-size: @font_size_xs@;
+    color: #aaaaaa;
+}
+
+QProgressBar#petAvatarCpuBar {
+    border: none;
+    border-radius: 4px;
+    background-color: #3a3a3a;
+}
+
+QProgressBar#petAvatarCpuBar::chunk {
+    border-radius: 4px;
+}
+
+QProgressBar#petAvatarMemBar {
+    border: none;
+    border-radius: 4px;
+    background-color: #3a3a3a;
+}
+
+QProgressBar#petAvatarMemBar::chunk {
+    border-radius: 4px;
+}
+
+/* Fortune Widget */
+QLabel#fortuneDateLabel {
+    font-size: @font_size_s@;
+    color: #aaaaaa;
+}
+
+QLabel#fortuneLuckyLabel {
+    font-size: @font_size_xxxl@;
+}
+
+QLabel#fortuneStarsLabel {
+    font-size: @font_size_l@;
+}
+
+QLabel#fortuneTextLabel {
+    font-size: @font_size_body@;
+    padding: 8px;
+    line-height: 1.5;
+}
+
+QLabel#fortuneLuckyItemsLabel {
+    font-size: @font_size_s@;
+    color: #999999;
+}
+
+/* Weather Widget */
+QLabel#weatherLocationLabel {
+    font-size: @font_size_m@;
+    font-weight: bold;
+}
+
+QLabel#weatherTempLabel {
+    font-size: @font_size_display@;
+    font-weight: bold;
+}
+
+QLabel#weatherIconLabel {
+    font-size: @font_size_headline@;
+}
+
+QLabel#weatherDescLabel {
+    font-size: @font_size_body@;
+}
+
+QLabel#weatherLoadingLabel {
+    font-size: @font_size_m@;
+    color: #aaaaaa;
+}
+
+/* Greeting Banner */
+QLabel#greetingLabel {
+    font-size: @font_size_l@;
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+/* Music Navigation SegmentedWidget */
+QWidget#musicSegmentedWidget {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    padding: 2px;
+}
+
+QWidget#musicSegmentedWidget QToolButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14px;
+}
+
+QWidget#musicSegmentedWidget QToolButton:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+QWidget#musicSegmentedWidget QToolButton:checked {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    font-weight: bold;
+}
+
+QWidget#musicSegmentedWidget QLabel {
+    color: rgba(255, 255, 255, 0.9);
+}

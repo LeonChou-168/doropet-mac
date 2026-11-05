@@ -1,0 +1,27 @@
+PyQt5
+PyQt-Fluent-Widgets
+openai
+google-genai
+httpx
+Pillow
+sherpa-onnx
+sounddevice
+pyaudiowpatch; sys_platform == "win32"
+numpy
+requests
+psutil
+sentencepiece
+markdown
+pygments
+beautifulsoup4
+live2d-py
+pyopengl
+packaging
+edge-tts
+musicdl
+gradio_client
+pycryptodomex
+pygame
+python-vlc
+dashscope
+chardet
